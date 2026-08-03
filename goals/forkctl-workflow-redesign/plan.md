@@ -23,12 +23,18 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 - Split Clap adapter definitions out of `main.rs` into `cli.rs`.
 - Replace `ApiRequest`, `CommandResult`, and generic error handling with the new discriminated command graph and stable domain errors.
 - Add execute/plan mode and global `--format`, `--color`, and `--quiet` semantics.
+- Compose leaf parameters from subject, metadata/scope, capture, execution, and presentation `Args` groups; assign collision-audited short aliases.
+- Add a centralized justpath-style width-aware colored help renderer that traverses Clap metadata and uses the existing semantic view stack.
+- Add `usage-lib` Clap conversion, hidden `--usage-spec`, dynamic Clap completion, Nushell completion bridging, and `completion SHELL`.
+- Materialize every request, plan, result, notice, error code/detail, manifest, active-state, and operation schema specified by `api.md`.
 - Replace the manifest structs with the new schema and deterministic export configuration.
 - Delete every compatibility path and old test fixture; rewrite fixtures directly in the new format.
 
 ### Verification
 
-- CLI help snapshots cover the full command tree.
+- CLI help snapshots cover the full command tree, parameter headings, defaults, choices, repeatable flags, and all short aliases at narrow/standard/wide widths with and without color.
+- Direct completion tests cover bash, elvish, fish, Nushell, PowerShell, and zsh; mounted mise completion tests cover its Usage-supported bash, fish, Nushell, PowerShell, and zsh paths, including dynamic patches/refs, file hints, repeated values, and short forms.
+- JSON Schema snapshots cover the bundle plus manifest/invocation/response/active-state/operation selections and reject unknown fields.
 - JSON Schema exposes every request/result/error variant.
 - CLI/API parity tests execute one handler per command.
 - Architecture test keeps adapters/views out of domain modules.
@@ -46,7 +52,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 ### Verification
 
 - Launch forkctl with synthetic `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, and object-directory variables intact.
-- Complete init, nested export reconstruction, verify, rebase, and publish against disposable repositories.
+- Complete init, nested export reconstruction, full check, rebase, and publish against disposable repositories.
 - Prove the checkout running the hook remains byte/ref clean.
 - Test SSH/transport variables remain visible to intended remote Git commands.
 
@@ -55,15 +61,17 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 ### Changes
 
 - Add typed Git-private active state.
-- Implement `patch list`, `show`, `create`, `select`, and `check`.
+- Implement top-level `check` with full-repository default and staged `-s` mode.
+- Implement `patch list`, `show`, `create`, and `select`.
 - Make draft creation metadata-only until the first refresh.
 - Add staged/unstaged/untracked path inventory and ownership diagnostics.
+- A nonempty staged index fails without an active/explicit patch; an empty index succeeds.
 
 ### Verification
 
 - Create/select never changes tracked files or refs.
 - Staged ownership checks accept exact/glob matches and reject overlap/escape cases deterministically.
-- Strict mode fails without active state; permissive mode remains usable by custom hook policies.
+- Staged mode fails without a target only when the index is nonempty; operators customize hook policy by choosing when to call it.
 - Pretty and JSON snapshots show the same active/path data.
 
 ## Phase 5 — Implement Patch Mutation Workflow
@@ -73,10 +81,10 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 - Implement capture planning for staged, all-owned, and explicit pathspec modes.
 - Implement draft materialization and existing lower-patch refresh through StGit.
 - Consume hook-modified index state.
-- Implement metadata/path edits and trailer amendment.
+- Implement metadata/scope edits and trailer amendment.
 - Generate every source export deterministically; remove optional per-patch export fields.
 - Regenerate manifest/ledger/exports and refresh bookkeeping atomically.
-- Implement `patch finish` as verify-plus-clear-active.
+- Implement `patch finish` as full-check-plus-clear-active.
 
 ### Verification
 
@@ -110,9 +118,8 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 
 - Rebuild publish against the new operation journal and error taxonomy.
 - Add typed `publication_rejected` without parsing provider policy into generic logic beyond preserving remote diagnostics.
-- Add exact mise tasks for every routine command.
-- Add `fork:check:staged` and `fork:verify` hook primitives.
-- Document and test concise Lefthook plus mise composition; do not mutate hook manager configuration.
+- Replace shallow wrappers with one `fork` shebang task: `dir = "{{cwd}}"`, mounted `--usage-spec`, `exec forkctl "$@"`, and exact task-local tools.
+- Add optional Lefthook install/validate helpers and document `mise run fork check -s` / `mise run fork check -q` composition without mutating hook manager configuration.
 
 ### Verification
 
@@ -120,6 +127,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 - Successful publication atomically updates branch and recovery tag under the exact lease.
 - Real StGit pre-commit hooks may update staged content during `patch refresh`.
 - Real Lefthook pre-commit and pre-push configurations pass in a disposable consumer and under inherited Git hook variables.
+- A real immutable remote catalog proves mounted help, argument rejection, short/long parity, dynamic completion, cwd preservation, and direct-vs-mise stdout/stderr/exit parity.
 
 ## Phase 8 — Independent Review and Release 0.0.6
 
@@ -145,7 +153,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 - Replace 0.0.5 manifest/task shape directly.
 - Configure local Lefthook/mise checks.
 - Preserve four patch intents and regenerate source evidence.
-- Re-run format, lint, unit, release build, E2E, benchmark, atomic publication, and fresh-clone init/verify.
+- Re-run format, lint, unit, release build, E2E, benchmark, atomic publication, and fresh-clone init/check.
 
 ### Ghostty
 
@@ -166,7 +174,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 
 ### Verification
 
-Each repository must be clean and synchronized, have no old contract files, and pass fresh-clone `forkctl init` plus `forkctl verify` before the next repository starts.
+Each repository must be clean and synchronized, have no old contract files, and pass fresh-clone `forkctl init` plus `forkctl check` before the next repository starts.
 
 ## Done Condition
 
