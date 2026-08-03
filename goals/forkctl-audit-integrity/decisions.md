@@ -11,6 +11,6 @@
 - 2026-08-03 Publish and independently verify forkctl 0.0.5 after source and released-binary lifecycle suites pass.
 - 2026-08-03 Domain handlers return typed protocol data and errors only. Clap and JSON requests are equal adapters over the same handlers; command/domain modules never print, inspect output mode/TTY, or build tables.
 - 2026-08-03 Expose global pretty/JSON output plus a full local JSON API with generated Schemars schema and JSON request execution.
-- 2026-08-03 Use the proven composable Rust CLI stack rather than an immature all-in-one framework: Clap, Serde/Schemars, Tabled, Anstream/Anstyle, Miette, and Insta where each removes concrete boilerplate.
+- 2026-08-03 Use the proven composable Rust CLI stack rather than an immature all-in-one framework: Clap, Serde/Schemars, Comfy Table, Anstream/Anstyle, and Insta where each removes concrete boilerplate. Do not add Miette until diagnostics require source spans or richer structure than the unified semantic renderer provides.
 - 2026-08-03 One centralized semantic theme and renderer owns every human-facing visual element so the CLI remains visually consistent rather than combining crate defaults.
 - 2026-08-03 Keep the protocol/view kernel small; do not add progress, panels, or renderer abstractions that forkctl does not currently need.

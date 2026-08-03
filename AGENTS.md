@@ -9,6 +9,7 @@ Reusable downstream-fork maintenance for StGit patch stacks.
 - A consuming fork owns one JSON manifest and its exported patch files. Generic executable logic stays here.
 - `src/patchexport.tmpl` pins StGit export formatting across StGit upgrades.
 - `templates/*.md` holds Askama-compiled editorial text for generated ledgers and rebase reports; Rust renderers own typed context and format-specific escaping.
+- `src/protocol.rs` is the versioned request/result/error/schema contract. `src/view.rs` is the only terminal renderer and owns one semantic visual theme.
 
 ## Invariants
 
@@ -19,8 +20,11 @@ Reusable downstream-fork maintenance for StGit patch stacks.
 - `verify` must fail closed on dirty worktrees, wrong branch/tracking, missing tools, remote drift, base drift, patch-order drift, unapplied or empty patches, undeclared per-patch paths, trailer/ledger/export drift, missing source contracts, or non-reconstructable exports.
 - Mutating commands never stash. Rebase creates recovery and exact-lease state before replay, never publishes, and preserves normal StGit conflict state.
 - `publish` requires verification and exact pending evidence, uses atomic explicit-ref publication with an exact force-with-lease, and has no non-atomic or plain-force fallback.
-- Keep `main.rs` as wiring; implementation modules stay bounded by responsibility.
-- Keep examples, generated instructions, and the task catalog synchronized with the manifest contract.
+- Keep `main.rs` as adapter wiring; implementation modules stay bounded by responsibility.
+- App/domain modules return typed protocol data only. They never print, construct tables, inspect TTY/color/output mode, or depend on view crates. The architecture test enforces this boundary.
+- Clap and JSON requests execute the same handlers. Pretty and JSON outputs consume the same typed results; Schemars derives the published API schema from those types.
+- All human output goes through the centralized Anstream/Anstyle/Comfy Table renderer. Do not mix library-default themes or command-local visual styles.
+- Keep examples, generated instructions, and the task catalog synchronized with the manifest and protocol contracts.
 - `[workspace.package].version` is the only version source. Never hand-edit task/example version copies; run `mise run version:sync` and let Lefthook stage the result.
 
 ## Checks

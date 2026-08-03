@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use std::ffi::OsStr;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -51,8 +51,9 @@ where
     Ok(Command::new(program)
         .args(args)
         .current_dir(dir)
-        .status()
+        .output()
         .with_context(|| format!("run {program}"))?
+        .status
         .success())
 }
 
@@ -61,19 +62,7 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let args = owned_args(args);
-    let status = Command::new(program)
-        .args(&args)
-        .current_dir(dir)
-        .status()
-        .with_context(|| format!("run {program}"))?;
-    ensure!(
-        status.success(),
-        "{} {} failed with {status}",
-        program,
-        display_args(&args)
-    );
-    Ok(())
+    output(dir, program, args).map(|_| ())
 }
 
 fn owned_args<I, S>(args: I) -> Vec<std::ffi::OsString>

@@ -2,34 +2,34 @@
 description = "Recover StGit metadata for a clean declared downstream clone, then verify"
 dir = "{{ config_root }}"
 run = "forkctl init"
-tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.4" }
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.5" }
 
 ["fork:status"]
 description = "Read downstream stack, verification, lease, and recovery state without mutation"
 dir = "{{ config_root }}"
 run = "forkctl status"
-tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.4" }
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.5" }
 
 ["fork:new"]
 description = "Create a documented empty downstream patch and refresh bookkeeping"
 dir = "{{ config_root }}"
 run = "forkctl new"
-tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.4" }
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.5" }
 
 ["fork:verify"]
 description = "Fail closed on downstream stack, audit, export, or reconstruction drift"
 dir = "{{ config_root }}"
 run = "forkctl verify"
-tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.4" }
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.5" }
 
 ["fork:rebase"]
 description = "Rebase onto --onto REF, preserve recovery state, and generate review evidence"
 dir = "{{ config_root }}"
 run = "forkctl rebase"
-tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.4" }
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.5" }
 
 ["fork:publish"]
 description = "Atomically publish the verified branch and recovery tag under an exact lease"
 dir = "{{ config_root }}"
 run = "forkctl publish"
-tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.4" }
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.5" }

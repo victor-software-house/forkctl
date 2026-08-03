@@ -1,28 +1,16 @@
 use super::App;
 use crate::ledger;
 use crate::process::{capture, run};
+use crate::protocol::VerificationResult;
 use anyhow::{Context, Result, ensure};
 use std::fs;
 
-pub struct Verification {
-    pub patches: usize,
-    pub source_tree: String,
-}
-
 impl App {
-    pub fn verify(&self) -> Result<()> {
-        let result = self.verify_quiet()?;
-        println!(
-            "forkctl: canonical={} stack-base={} patches={} source-tree={}",
-            self.manifest.base.canonical,
-            self.manifest.base.stack,
-            result.patches,
-            result.source_tree
-        );
-        Ok(())
+    pub fn verify(&self) -> Result<VerificationResult> {
+        self.verify_quiet()
     }
 
-    pub(super) fn verify_quiet(&self) -> Result<Verification> {
+    pub(super) fn verify_quiet(&self) -> Result<VerificationResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
         self.verify_remotes()?;
@@ -38,6 +26,7 @@ impl App {
             )
             .with_context(|| format!("{label} commit is unavailable: {revision}"))?;
         }
+        self.verify_target_evidence(&self.manifest.base.target)?;
         let actual_base = capture(&self.repo, "stg", ["id", "{base}"])?;
         ensure!(
             actual_base == self.manifest.base.stack,
@@ -102,8 +91,10 @@ impl App {
         );
         self.verify_pending()?;
 
-        Ok(Verification {
-            patches: expected_stack.len(),
+        Ok(VerificationResult {
+            canonical_base: self.manifest.base.canonical.clone(),
+            stack_base: self.manifest.base.stack.clone(),
+            patch_count: expected_stack.len(),
             source_tree: expected_tree,
         })
     }
@@ -211,22 +202,74 @@ impl App {
         Ok(())
     }
 
-    fn verify_pending(&self) -> Result<()> {
-        let Some(state) = self.read_pending()? else {
-            return Ok(());
-        };
+    pub(super) fn verify_pending_state(&self, state: &crate::state::PendingState) -> Result<()> {
         run(
             &self.repo,
             "git",
             ["cat-file", "-e", &format!("{}^{{tag}}", state.backup_tag)],
         )
         .with_context(|| format!("backup tag is unavailable: {}", state.backup_tag))?;
-        if let Some(new_tip) = state.new_tip {
+        let recovered = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("{}^{{commit}}", state.backup_tag)],
+        )?;
+        ensure!(
+            recovered == state.old_tip,
+            "backup tag resolves to {recovered}, expected {}",
+            state.old_tip
+        );
+        let old_base = capture(
+            &self.repo,
+            "git",
+            [
+                "rev-parse",
+                &format!("{}~{}", state.old_tip, state.old_patch_count),
+            ],
+        )?;
+        ensure!(
+            old_base == state.old_base,
+            "pending old stack resolves to {old_base}, expected {}",
+            state.old_base
+        );
+        if let Some(new_base) = &state.new_base {
+            let actual_base = capture(&self.repo, "stg", ["id", "{base}"])?;
+            ensure!(
+                actual_base == *new_base && self.manifest.base.stack == *new_base,
+                "pending new base does not match manifest and StGit base"
+            );
+        }
+        if let Some(new_tip) = &state.new_tip {
             let head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
             ensure!(
-                head == new_tip,
+                head == *new_tip,
                 "pending operation records tip {new_tip}, current tip is {head}"
             );
+        }
+        if let Some(target) = &state.target {
+            ensure!(
+                self.manifest.base.target == *target,
+                "pending target does not match manifest target"
+            );
+            ensure!(
+                state.new_base.as_deref() == Some(target.commit.as_str()),
+                "pending target commit does not match new base"
+            );
+        }
+        if let Some(report) = &state.report {
+            let actual = self.file_object_id(std::path::Path::new(&report.path))?;
+            ensure!(
+                actual == report.object_id,
+                "rebase report differs from reviewed object {}",
+                report.object_id
+            );
+        }
+        Ok(())
+    }
+
+    fn verify_pending(&self) -> Result<()> {
+        if let Some(state) = self.read_pending()? {
+            self.verify_pending_state(&state)?;
         }
         Ok(())
     }

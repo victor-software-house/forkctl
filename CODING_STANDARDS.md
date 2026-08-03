@@ -10,9 +10,13 @@ Use the installed `git` and `stg` CLIs. Do not reproduce their storage, revision
 
 The lifecycle operations are `init`, `status`, `new`, `verify`, `rebase`, and `publish`. New commands require another demonstrated cross-fork contract.
 
-### 1.3 Separate editorial text from control flow
+### 1.3 Separate data, adapters, and views
 
-Keep generated Markdown document structure in compile-time Askama templates under `templates/`. Rust renderers provide typed context and explicit Markdown escaping. Keep short status labels and condition-specific error messages beside the code path that emits them.
+Domain and App operations return typed protocol values and errors. Clap and JSON are input adapters; pretty and JSON are output adapters. No command/domain module may print, inspect terminal state or output mode, construct tables, or import renderer crates.
+
+`src/protocol.rs` owns versioned Serde/Schemars request, response, result, notice, and error types. `src/view.rs` is the only human renderer and applies one semantic Anstyle theme plus one Comfy Table configuration. Generated Markdown document structure remains in compile-time Askama templates under `templates/`.
+
+Short diagnostic meaning belongs in typed error data, not ad hoc output strings. Tests cover handler data, JSON/schema contracts, pipe-safe rendering, and view snapshots independently.
 
 ## 2. Dependencies
 

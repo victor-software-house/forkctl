@@ -1,22 +1,13 @@
 use super::App;
-use crate::manifest::{Patch, PatchKind};
+use crate::manifest::Patch;
 use crate::process::{capture, run};
+use crate::protocol::{NewPatchRequest, NewPhase, NewResult};
 use crate::state::PendingOperation;
 use anyhow::{Context, Result, ensure};
 use std::ffi::OsString;
 
-pub struct NewPatchArgs {
-    pub name: String,
-    pub kind: PatchKind,
-    pub purpose: String,
-    pub upstream_status: String,
-    pub drop_when: String,
-    pub paths: Vec<String>,
-    pub export: Option<String>,
-}
-
 impl App {
-    pub fn new_patch(&mut self, args: NewPatchArgs) -> Result<()> {
+    pub fn new_patch(&mut self, args: NewPatchRequest) -> Result<NewResult> {
         self.verify()?;
         let patch = Patch {
             name: args.name,
@@ -71,23 +62,16 @@ impl App {
 
         pending.new_base = Some(capture(&self.repo, "stg", ["id", "{base}"])?);
         self.write_pending(&pending)?;
-        println!(
-            "forkctl: created empty {} patch {}; add implementation only under: {}",
-            match patch.kind {
-                PatchKind::Source => "source",
-                PatchKind::Tooling => "tooling",
-            },
-            patch.name,
-            patch.paths.join(", ")
-        );
-        println!(
-            "forkctl: refresh the patch, restore {}, then run forkctl new --finish",
-            self.manifest.bookkeeping_patch
-        );
-        Ok(())
+        Ok(NewResult {
+            phase: NewPhase::Created,
+            patch: Some(patch.name),
+            kind: Some(patch.kind),
+            allowed_paths: patch.paths,
+            verification: None,
+        })
     }
 
-    pub fn finish_new(&mut self) -> Result<()> {
+    pub fn finish_new(&mut self) -> Result<NewResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
         let mut pending = self
@@ -115,9 +99,15 @@ impl App {
             .collect::<Vec<_>>();
         self.stage_and_refresh_bookkeeping(&paths)?;
         pending.new_base = Some(capture(&self.repo, "stg", ["id", "{base}"])?);
+        pending.new_tip = Some(capture(&self.repo, "git", ["rev-parse", "HEAD"])?);
         self.write_pending(&pending)?;
-        self.verify()?;
-        println!("forkctl: new patch is complete and structurally verified");
-        Ok(())
+        let verification = self.verify()?;
+        Ok(NewResult {
+            phase: NewPhase::Finished,
+            patch: None,
+            kind: None,
+            allowed_paths: Vec::new(),
+            verification: Some(verification),
+        })
     }
 }

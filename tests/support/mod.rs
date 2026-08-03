@@ -1,7 +1,8 @@
 use serde_json::json;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 pub struct Fixture {
     _directory: tempfile::TempDir,
@@ -19,8 +20,14 @@ impl Fixture {
         init_bare(directory.path(), &downstream_bare);
 
         let upstream_work = directory.path().join("upstream-work");
-        let base = create_upstream(directory.path(), &upstream_work, &upstream_bare);
-        create_tooling_commit(&upstream_work, &upstream_bare, &downstream_bare, &base);
+        let (base, tag_object) = create_upstream(directory.path(), &upstream_work, &upstream_bare);
+        create_tooling_commit(
+            &upstream_work,
+            &upstream_bare,
+            &downstream_bare,
+            &base,
+            &tag_object,
+        );
 
         let repo = directory.path().join("consumer");
         git_ok(
@@ -62,6 +69,29 @@ impl Fixture {
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
+    }
+
+    pub fn api_call(&self, request: &serde_json::Value) -> Output {
+        let invocation = serde_json::json!({
+            "protocol_version": 1,
+            "manifest": "fork.json",
+            "request": request,
+        });
+        let mut child = Command::new(env!("CARGO_BIN_EXE_forkctl"))
+            .args(["api", "call"])
+            .current_dir(&self.repo)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(serde_json::to_string(&invocation).unwrap().as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
     }
 
     pub fn advance_upstream(&self, tag: &str, contents: &str) -> String {
@@ -111,7 +141,7 @@ fn init_bare(directory: &Path, path: &Path) {
     );
 }
 
-fn create_upstream(directory: &Path, work: &Path, bare: &Path) -> String {
+fn create_upstream(directory: &Path, work: &Path, bare: &Path) -> (String, String) {
     git_ok(
         directory,
         [
@@ -134,10 +164,19 @@ fn create_upstream(directory: &Path, work: &Path, bare: &Path) -> String {
         work,
         ["push", "--quiet", "upstream-bare", "main", "refs/tags/v1"],
     );
-    git_capture(work, ["rev-parse", "HEAD"])
+    (
+        git_capture(work, ["rev-parse", "HEAD"]),
+        git_capture(work, ["rev-parse", "refs/tags/v1"]),
+    )
 }
 
-fn create_tooling_commit(work: &Path, upstream: &Path, downstream: &Path, base: &str) {
+fn create_tooling_commit(
+    work: &Path,
+    upstream: &Path,
+    downstream: &Path,
+    base: &str,
+    tag_object: &str,
+) {
     fs::write(
         work.join("FORK.md"),
         "Run `mise run fork:verify` before publication.\n",
@@ -156,7 +195,12 @@ fn create_tooling_commit(work: &Path, upstream: &Path, downstream: &Path, base: 
             "fetch_ref": "refs/heads/main"
         },
         "base": {
-            "label": "refs/tags/v1",
+            "target": {
+                "kind": "tag",
+                "selector": "refs/tags/v1",
+                "commit": base,
+                "tag_object": tag_object
+            },
             "canonical": base,
             "stack": base
         },
@@ -170,6 +214,7 @@ fn create_tooling_commit(work: &Path, upstream: &Path, downstream: &Path, base: 
             "drop_when": "The downstream fork is retired.",
             "paths": ["fork.json", "PATCHES.md", "FORK.md", "patches/*"]
         }],
+        "history": [],
         "allow": {"base": []},
         "required": [{"path": "FORK.md", "contains": "mise run fork:verify"}]
     });
@@ -299,5 +344,6 @@ fn ledger(label: &str, base: &str, patches: &[LedgerPatch<'_>]) -> String {
         output.push_str(patch.drop_when);
         output.push_str(" |\n");
     }
+    output.push_str("\n## History\n\n| Event | Patch | Former commit | Target | Purpose |\n|:--|:--|:--|:--|:--|\n| None | — | — | — | — |\n");
     output
 }

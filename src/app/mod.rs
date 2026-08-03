@@ -5,10 +5,8 @@ mod rebase;
 mod status;
 mod verify;
 
-pub use new::NewPatchArgs;
-
 use crate::ledger;
-use crate::manifest::{Manifest, Patch};
+use crate::manifest::{BaseTarget, Manifest, Patch, TargetKind};
 use crate::pattern;
 use crate::process::{capture, output, run, succeeds};
 use crate::state::{PendingOperation, PendingState};
@@ -136,7 +134,13 @@ impl App {
         run(&self.repo, "git", args)
     }
 
-    fn fetch_base_label(&self, quiet: bool) -> Result<()> {
+    fn fetch_base_target(&self, quiet: bool) -> Result<()> {
+        let target = &self.manifest.base.target;
+        let selector = if target.kind == TargetKind::Tag && target.tag_object.is_some() {
+            target.selector.as_str()
+        } else {
+            target.commit.as_str()
+        };
         let mut args = vec!["fetch"];
         if quiet {
             args.push("--quiet");
@@ -144,21 +148,30 @@ impl App {
         args.extend([
             "--no-tags",
             self.manifest.upstream.remote.as_str(),
-            self.manifest.base.label.as_str(),
+            selector,
         ]);
         run(&self.repo, "git", args)?;
         let resolved = capture(&self.repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
         ensure!(
-            resolved == self.manifest.base.stack,
-            "base label {} resolves to {resolved}, expected {}",
-            self.manifest.base.label,
-            self.manifest.base.stack
+            resolved == target.commit,
+            "recorded target {} resolves to {resolved}, expected {}",
+            target.selector,
+            target.commit
         );
-        Ok(())
+        self.verify_target_evidence(target)
     }
 
-    fn resolve_target(&self, target: &str) -> Result<String> {
-        ensure!(!target.trim().is_empty(), "rebase target is required");
+    fn resolve_target(&self, selector: &str) -> Result<BaseTarget> {
+        ensure!(!selector.trim().is_empty(), "rebase target is required");
+        let kind = if is_full_sha(selector) {
+            TargetKind::Commit
+        } else if selector.starts_with("refs/heads/") {
+            TargetKind::Branch
+        } else if selector.starts_with("refs/tags/") {
+            TargetKind::Tag
+        } else {
+            anyhow::bail!("target must be a full refs/heads ref, refs/tags ref, or commit SHA");
+        };
         run(
             &self.repo,
             "git",
@@ -166,10 +179,70 @@ impl App {
                 "fetch",
                 "--no-tags",
                 self.manifest.upstream.remote.as_str(),
-                target,
+                selector,
             ],
         )?;
-        capture(&self.repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])
+        let commit = capture(&self.repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
+        let tag_object = if kind == TargetKind::Tag {
+            let object = self.remote_ref_sha(&self.manifest.upstream.remote, selector)?;
+            match capture(&self.repo, "git", ["cat-file", "-t", &object])?.as_str() {
+                "tag" => Some(object),
+                "commit" => {
+                    ensure!(
+                        object == commit,
+                        "lightweight tag object differs from target commit"
+                    );
+                    None
+                }
+                object_type => anyhow::bail!("tag points to unsupported object type {object_type}"),
+            }
+        } else {
+            None
+        };
+        let target = BaseTarget {
+            kind,
+            selector: selector.to_string(),
+            commit,
+            tag_object,
+        };
+        target.validate()?;
+        self.verify_target_evidence(&target)?;
+        Ok(target)
+    }
+
+    fn verify_target_evidence(&self, target: &BaseTarget) -> Result<()> {
+        target.validate()?;
+        run(
+            &self.repo,
+            "git",
+            ["cat-file", "-e", &format!("{}^{{commit}}", target.commit)],
+        )?;
+        if let Some(object) = &target.tag_object {
+            ensure!(
+                capture(&self.repo, "git", ["cat-file", "-t", object])? == "tag",
+                "tag_object is not an annotated tag"
+            );
+            let peeled = capture(
+                &self.repo,
+                "git",
+                ["rev-parse", &format!("{object}^{{commit}}")],
+            )?;
+            ensure!(
+                peeled == target.commit,
+                "tag object peels to {peeled}, expected {}",
+                target.commit
+            );
+            let tag_name = capture(&self.repo, "git", ["cat-file", "tag", object])?
+                .lines()
+                .find_map(|line| line.strip_prefix("tag "))
+                .context("annotated tag object has no tag name")?
+                .to_string();
+            ensure!(
+                target.selector == format!("refs/tags/{tag_name}"),
+                "tag selector does not match annotated tag name"
+            );
+        }
+        Ok(())
     }
 
     fn stg_series(&self) -> Result<Vec<String>> {
@@ -382,6 +455,14 @@ impl App {
         self.git_private_path("forkctl/pending.json")
     }
 
+    fn file_object_id(&self, path: &Path) -> Result<String> {
+        capture(
+            &self.repo,
+            "git",
+            [OsStr::new("hash-object"), path.as_os_str()],
+        )
+    }
+
     fn read_pending(&self) -> Result<Option<PendingState>> {
         let path = self.pending_path()?;
         match fs::read(&path) {
@@ -459,9 +540,14 @@ impl App {
             expected_remote_sha,
             old_base,
             old_tip,
+            self.manifest.patches.len(),
             backup_tag,
         ))
     }
+}
+
+fn is_full_sha(value: &str) -> bool {
+    value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn git_private_path(repo: &Path, relative: &str) -> Result<PathBuf> {

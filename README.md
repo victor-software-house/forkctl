@@ -2,7 +2,9 @@
 
 Audited, mise-provisioned lifecycle control for downstream forks carried as [StGit](https://stacked-git.github.io/) patch stacks.
 
-Forkctl is a small Rust policy CLI over real `git` and `stg` commands. Git remains canonical history; StGit remains responsible for patch mechanics and conflicts. Forkctl declares policy, verifies reproducibility, records review evidence, and publishes rewritten history only under an exact lease. Generated ledger and rebase-report structure lives in compile-time, type-checked Askama templates; Rust renderers retain typed context and Markdown escaping.
+Forkctl is a small Rust policy CLI over real `git` and `stg` commands. Git remains canonical history; StGit remains responsible for patch mechanics and conflicts. Forkctl declares policy, verifies reproducibility, records review evidence, and publishes rewritten history only under an exact lease.
+
+Every command handler returns a typed protocol value. Clap commands and JSON requests are equal adapters over those handlers; command/domain modules never print, detect terminals, or construct tables. One centralized Anstyle/Comfy Table view renders consistent pipe-safe human output, while Serde emits the same values as JSON and Schemars generates the full local API schema. Generated ledger and rebase-report documents remain compile-time, type-checked Askama templates.
 
 The repository publishes:
 
@@ -53,6 +55,19 @@ mise run fork:publish
 
 `forkctl instructions` prints the agent/operator contract without requiring a Git repository.
 
+## Output and local API
+
+```sh
+forkctl status --output pretty
+forkctl status --output json
+forkctl status --json                 # compatibility alias
+forkctl api schema
+printf '%s' '{"protocol_version":1,"manifest":"patches/downstream/fork.json","request":{"command":"status"}}' \
+  | forkctl api call
+```
+
+Pretty and JSON output consume the same typed result. JSON stdout is exactly one versioned success/error envelope; Git/StGit subprocess output is captured and cannot contaminate it. `api schema` emits JSON Schema 2020-12 for invocation and response envelopes.
+
 ## Manifest
 
 ```json
@@ -69,7 +84,12 @@ mise run fork:publish
     "fetch_ref": "refs/heads/main"
   },
   "base": {
-    "label": "refs/tags/v1.2.3",
+    "target": {
+      "kind": "tag",
+      "selector": "refs/tags/v1.2.3",
+      "commit": "0000000000000000000000000000000000000000",
+      "tag_object": "1111111111111111111111111111111111111111"
+    },
     "canonical": "0000000000000000000000000000000000000000",
     "stack": "0000000000000000000000000000000000000000"
   },
@@ -94,6 +114,7 @@ mise run fork:publish
       "paths": ["FORK.md", "PATCHES.md", "mise.toml", "patches/downstream/*"]
     }
   ],
+  "history": [],
   "allow": { "base": [] },
   "required": [
     { "path": "FORK.md", "contains": "mise run fork:verify" }
@@ -109,7 +130,11 @@ Upstream-Status: not-submitted
 Drop-When: Upstream provides the required behavior.
 ```
 
-Source patches precede tooling patches. The final tooling patch owns manifest, ledger, export, and task bookkeeping. A tooling-only stack is valid. Exports are optional independent reconstruction evidence.
+Source patches precede tooling patches. The final tooling patch owns manifest, ledger, export, and task bookkeeping. A tooling-only stack is valid. Export destinations are concrete, bookkeeping-owned, and disjoint from source/contract paths.
+
+Targets are typed historical selections: full commit SHAs, full `refs/heads/*` branch refs, or full `refs/tags/*` tag refs. Resolved commits remain immutable even when a selected branch later advances. Annotated tag objects are persisted and verified when available.
+
+When `stg rebase --merged` produces an empty non-bookkeeping patch, forkctl removes it and appends its full metadata, former commit, and target to manifest-backed `PATCHES.md` history.
 
 ## Verification and recovery
 

@@ -1,9 +1,10 @@
 use super::App;
 use crate::process::{capture, run};
+use crate::protocol::InitResult;
 use anyhow::{Result, ensure};
 
 impl App {
-    pub fn init(&mut self) -> Result<()> {
+    pub fn init(&mut self) -> Result<InitResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
         ensure!(
@@ -31,13 +32,15 @@ impl App {
             ["remote", "set-url", "--push", &upstream.remote, "DISABLED"],
         )?;
         self.fetch_upstream(true)?;
-        self.fetch_base_label(true)?;
+        self.fetch_base_target(true)?;
 
         let actual = self.stg_series()?;
         let expected = self.manifest.patch_names();
         if actual == expected {
-            println!("forkctl: stack already initialized");
-            return self.verify();
+            return Ok(InitResult {
+                already_initialized: true,
+                verification: self.verify()?,
+            });
         }
         ensure!(
             actual.is_empty(),
@@ -51,6 +54,9 @@ impl App {
             .chain(expected.iter().rev().cloned())
             .collect::<Vec<_>>();
         run(&self.repo, "stg", args)?;
-        self.verify()
+        Ok(InitResult {
+            already_initialized: false,
+            verification: self.verify()?,
+        })
     }
 }

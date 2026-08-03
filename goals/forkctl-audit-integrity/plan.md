@@ -41,8 +41,8 @@ Publish forkctl 0.0.5 as a narrow audit-integrity correction. Bind every recover
    - Map Clap commands and `api call` JSON requests into the same request enum and execute each handler once without output concerns.
    - Add global `--output pretty|json`, `api schema`, and `api call`; JSON stdout contains exactly one schema-valid envelope and diagnostics never contaminate it.
    - Make every App operation return typed data and notices. Capture Git/StGit subprocess output rather than inheriting stdout/stderr.
-   - Centralize human rendering in one view module using one semantic Anstyle theme and Tabled-derived rows. Do not expose crate-default styles or construct tables in handlers.
-   - Use Miette only to render typed protocol errors in pretty mode; JSON errors retain stable codes and structured details.
+   - Centralize human rendering in one view module using one semantic Anstyle theme and one Comfy Table configuration. Do not expose crate-default styles or construct tables in handlers.
+   - Render typed protocol errors through the same semantic view. Defer Miette until diagnostics require source spans; JSON errors retain stable codes and structured details.
    - Add schema contract tests, JSON round-trips, pretty/JSON parity tests, NO_COLOR/pipe snapshots, and a source guard that rejects printing/table/view dependencies outside the boundary.
 
 7. **Release and proof**
