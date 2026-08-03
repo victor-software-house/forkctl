@@ -1,5 +1,5 @@
 use super::{App, relative_to, write_atomic};
-use crate::process::{capture, output, run};
+use crate::process::{capture, output, run, succeeds};
 use anyhow::{Context, Result, ensure};
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -61,10 +61,22 @@ impl App {
             .chain(exported.iter().map(PathBuf::as_path))
             .map(|path| relative_to(&self.repo, path))
             .collect::<Result<Vec<_>>>()?;
-        let mut args = vec![OsString::from("add"), OsString::from("--")];
-        args.extend(paths.into_iter().map(OsString::from));
-        run(&self.repo, "git", args)?;
-        run(&self.repo, "stg", ["refresh", "--index"])?;
+        let mut add_args = vec![OsString::from("add"), OsString::from("--")];
+        add_args.extend(paths.iter().cloned().map(OsString::from));
+        run(&self.repo, "git", add_args)?;
+
+        let diff_args = vec![
+            OsString::from("diff"),
+            OsString::from("--cached"),
+            OsString::from("--quiet"),
+            OsString::from("--"),
+        ]
+        .into_iter()
+        .chain(paths.into_iter().map(OsString::from))
+        .collect::<Vec<_>>();
+        if !succeeds(&self.repo, "git", diff_args)? {
+            run(&self.repo, "stg", ["refresh", "--index"])?;
+        }
         self.verify()?;
         println!("forkctl: rebased and verified at {new_base}");
         Ok(())

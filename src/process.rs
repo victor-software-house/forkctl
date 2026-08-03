@@ -43,6 +43,19 @@ where
     }
 }
 
+pub fn succeeds<I, S>(dir: &Path, program: &str, args: I) -> Result<bool>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    Ok(Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .with_context(|| format!("run {program}"))?
+        .success())
+}
+
 pub fn run<I, S>(dir: &Path, program: &str, args: I) -> Result<()>
 where
     I: IntoIterator<Item = S>,
