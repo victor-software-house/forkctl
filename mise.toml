@@ -18,19 +18,27 @@ run = "cargo fmt --all -- --check"
 
 [tasks."lint:fix"]
 description = "Apply machine-fixable Clippy suggestions"
-run = "cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features -- -D warnings"
+run = "cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets --all-features -- -D warnings"
 
 [tasks.lint]
 description = "Run Clippy with warnings denied"
-run = "cargo clippy --all-targets --all-features -- -D warnings"
+run = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
 
 [tasks.test]
 description = "Run unit tests"
-run = "cargo test --all-features"
+run = "cargo test --workspace --all-features"
+
+[tasks."version:sync"]
+description = "Synchronize task and example versions from Cargo.toml"
+run = "cargo run --quiet --package forkctl-xtask"
+
+[tasks."version:check"]
+description = "Verify task and example versions match Cargo.toml"
+run = "cargo run --quiet --package forkctl-xtask -- --check"
 
 [tasks.verify]
 description = "Run all repository checks"
-depends = ["format", "lint", "test"]
+depends = ["format", "lint", "test", "version:check"]
 
 [tasks.build]
 description = "Build the release binary"

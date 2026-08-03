@@ -3,6 +3,9 @@ pre-commit:
     - run: test -n "$CI"
   parallel: false
   commands:
+    version-sync:
+      run: mise run version:sync
+      stage_fixed: true
     format:
       run: mise run format:fix
       stage_fixed: true

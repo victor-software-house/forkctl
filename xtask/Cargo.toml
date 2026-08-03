@@ -1,0 +1,8 @@
+[package]
+name = "forkctl-xtask"
+version.workspace = true
+edition = "2024"
+publish = false
+
+[lints]
+workspace = true

@@ -18,6 +18,7 @@ Reusable downstream-fork maintenance for StGit patch stacks.
 - `rebase` may update only declared base pins and exported source patches before refreshing the top tooling patch.
 - Keep `main.rs` as wiring; implementation modules stay bounded by responsibility.
 - Keep examples synchronized with the released task catalog and manifest schema.
+- `[workspace.package].version` is the only version source. Never hand-edit task/example version copies; run `mise run version:sync` and let Lefthook stage the result.
 
 ## Checks
 

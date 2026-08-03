@@ -49,6 +49,10 @@ For direct use outside mise, install the CLI from crates.io and provide `git` an
 cargo install forkctl --locked
 ```
 
+## Version synchronization
+
+`[workspace.package].version` in `Cargo.toml` is the sole version source. `mise run version:sync` updates the forkctl tool version in `tasks/fork.toml` and the release tag in `examples/mise.toml`. Lefthook runs and stages that synchronization automatically before commits; `mise run verify` also fails if either file drifts.
+
 ## Development
 
 ```sh
