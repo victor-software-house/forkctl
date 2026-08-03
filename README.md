@@ -134,7 +134,7 @@ Source patches precede tooling patches. The final tooling patch owns manifest, l
 
 Targets are typed historical selections: full commit SHAs, full `refs/heads/*` branch refs, or full `refs/tags/*` tag refs. Resolved commits remain immutable even when a selected branch later advances. Annotated tag objects are persisted and verified when available.
 
-When `stg rebase --merged` produces an empty non-bookkeeping patch, forkctl removes it and appends its full metadata, former commit, and target to manifest-backed `PATCHES.md` history.
+When `stg rebase --merged` produces an empty non-bookkeeping patch, forkctl removes it and appends its full metadata, former pre-rebase commit, and target to manifest-backed `PATCHES.md` history. `fork:init` fetches published forkctl recovery tags by the declared prefix before verification, keeping those historical commits inspectable in fresh clones.
 
 ## Verification and recovery
 

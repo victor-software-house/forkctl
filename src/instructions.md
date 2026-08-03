@@ -19,7 +19,7 @@
 
 ## Workflow
 
-1. Run `mise run fork:init` after cloning when StGit metadata is absent.
+1. Run `mise run fork:init` after cloning when StGit metadata is absent. Initialization also fetches published forkctl recovery tags by their declared prefix so manifest history commits remain available for verification.
 2. Use `mise run fork:status` at any time, including dirty or conflicted states.
 3. Run `mise run fork:new -- NAME --kind source|tooling --purpose ... --upstream-status ... --drop-when ... --path ...` to scaffold a documented empty patch.
 4. Add only declared implementation paths, refresh that patch with StGit, restore the bookkeeping patch, and run `mise run fork:new -- --finish` to bind the verified tip and regenerate exports.

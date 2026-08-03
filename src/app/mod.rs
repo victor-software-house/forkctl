@@ -9,7 +9,7 @@ use crate::ledger;
 use crate::manifest::{BaseTarget, Manifest, Patch, TargetKind};
 use crate::pattern;
 use crate::process::{capture, output, run, succeeds};
-use crate::state::{PendingOperation, PendingState};
+use crate::state::{PatchCommitEvidence, PendingOperation, PendingState};
 use anyhow::{Context, Result, ensure};
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -159,6 +159,23 @@ impl App {
             target.commit
         );
         self.verify_target_evidence(target)
+    }
+
+    fn fetch_recovery_tags(&self, quiet: bool) -> Result<()> {
+        let pattern = format!(
+            "refs/tags/{}-*:refs/tags/{}-*",
+            self.manifest.downstream.backup_tag_prefix, self.manifest.downstream.backup_tag_prefix
+        );
+        let mut args = vec!["fetch"];
+        if quiet {
+            args.push("--quiet");
+        }
+        args.extend([
+            "--no-tags",
+            self.manifest.downstream.remote.as_str(),
+            pattern.as_str(),
+        ]);
+        run(&self.repo, "git", args)
     }
 
     fn resolve_target(&self, selector: &str) -> Result<BaseTarget> {
@@ -511,6 +528,17 @@ impl App {
         let expected_remote_sha = self.downstream_sha()?;
         let old_base = capture(&self.repo, "stg", ["id", "{base}"])?;
         let old_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+        let old_patches = self
+            .manifest
+            .patches
+            .iter()
+            .map(|patch| {
+                Ok(PatchCommitEvidence {
+                    name: patch.name.clone(),
+                    commit: self.patch_commit(&patch.name)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
         let epoch = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .context("system clock is before Unix epoch")?
@@ -540,7 +568,7 @@ impl App {
             expected_remote_sha,
             old_base,
             old_tip,
-            self.manifest.patches.len(),
+            old_patches,
             backup_tag,
         ))
     }

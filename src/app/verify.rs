@@ -1,5 +1,6 @@
 use super::App;
 use crate::ledger;
+use crate::manifest::{Manifest, Patch};
 use crate::process::{capture, run};
 use crate::protocol::VerificationResult;
 use anyhow::{Context, Result, ensure};
@@ -27,6 +28,7 @@ impl App {
             .with_context(|| format!("{label} commit is unavailable: {revision}"))?;
         }
         self.verify_target_evidence(&self.manifest.base.target)?;
+        self.verify_history()?;
         let actual_base = capture(&self.repo, "stg", ["id", "{base}"])?;
         ensure!(
             actual_base == self.manifest.base.stack,
@@ -141,6 +143,10 @@ impl App {
             .iter()
             .find(|candidate| candidate.name == patch_name)
             .expect("patch name came from manifest");
+        self.verify_patch_commit(patch, commit)
+    }
+
+    fn verify_patch_commit(&self, patch: &Patch, commit: &str) -> Result<()> {
         for (key, expected) in [
             ("Downstream-Reason", patch.purpose.as_str()),
             ("Upstream-Status", patch.upstream_status.as_str()),
@@ -154,7 +160,8 @@ impl App {
             )?;
             ensure!(
                 actual == expected,
-                "patch {patch_name} trailer {key} is {actual:?}, expected {expected:?}"
+                "patch {} trailer {key} is {actual:?}, expected {expected:?}",
+                patch.name
             );
         }
         Ok(())
@@ -202,7 +209,56 @@ impl App {
         Ok(())
     }
 
+    fn verify_history(&self) -> Result<()> {
+        for event in &self.manifest.history {
+            run(
+                &self.repo,
+                "git",
+                ["cat-file", "-e", &format!("{}^{{commit}}", event.commit)],
+            )
+            .with_context(|| {
+                format!(
+                    "historical commit is unavailable for patch {}: {}",
+                    event.patch.name, event.commit
+                )
+            })?;
+            run(
+                &self.repo,
+                "git",
+                [
+                    "cat-file",
+                    "-e",
+                    &format!("{}^{{commit}}", event.target.commit),
+                ],
+            )
+            .with_context(|| {
+                format!(
+                    "historical target commit is unavailable for patch {}: {}",
+                    event.patch.name, event.target.commit
+                )
+            })?;
+            let paths = self.patch_paths(&event.commit)?;
+            ensure!(
+                !paths.is_empty(),
+                "historical patch {} is empty",
+                event.patch.name
+            );
+            Self::verify_allowed_paths(
+                &paths,
+                &event.patch.paths,
+                &format!("path in historical patch {}", event.patch.name),
+            )?;
+            self.verify_patch_commit(&event.patch, &event.commit)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn verify_pending_state(&self, state: &crate::state::PendingState) -> Result<()> {
+        self.verify_pending_recovery(state)?;
+        self.verify_pending_result(state)
+    }
+
+    fn verify_pending_recovery(&self, state: &crate::state::PendingState) -> Result<()> {
         run(
             &self.repo,
             "git",
@@ -219,7 +275,27 @@ impl App {
             "backup tag resolves to {recovered}, expected {}",
             state.old_tip
         );
-        let old_base = capture(
+        ensure!(
+            state.old_patch_count == state.old_patches.len(),
+            "pending old patch count does not match old patch evidence"
+        );
+        let snapshot_path = self.git_private_path("forkctl/manifest.json")?;
+        let snapshot: Manifest = serde_json::from_slice(
+            &fs::read(&snapshot_path)
+                .with_context(|| format!("read {}", snapshot_path.display()))?,
+        )
+        .with_context(|| format!("parse {}", snapshot_path.display()))?;
+        let snapshot_names = snapshot.patch_names();
+        let recorded_names = state
+            .old_patches
+            .iter()
+            .map(|patch| patch.name.clone())
+            .collect::<Vec<_>>();
+        ensure!(
+            snapshot_names == recorded_names,
+            "pending old patch names do not match the recovery manifest"
+        );
+        let resolved_old_base = capture(
             &self.repo,
             "git",
             [
@@ -228,10 +304,35 @@ impl App {
             ],
         )?;
         ensure!(
-            old_base == state.old_base,
-            "pending old stack resolves to {old_base}, expected {}",
+            resolved_old_base == state.old_base,
+            "pending old stack resolves to {resolved_old_base}, expected {}",
             state.old_base
         );
+        let old_commits = capture(
+            &self.repo,
+            "git",
+            [
+                "rev-list",
+                "--reverse",
+                &format!("{}..{}", state.old_base, state.old_tip),
+            ],
+        )?
+        .lines()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+        let recorded_commits = state
+            .old_patches
+            .iter()
+            .map(|patch| patch.commit.clone())
+            .collect::<Vec<_>>();
+        ensure!(
+            old_commits == recorded_commits,
+            "pending old patch evidence does not match the preserved old stack"
+        );
+        Ok(())
+    }
+
+    fn verify_pending_result(&self, state: &crate::state::PendingState) -> Result<()> {
         if let Some(new_base) = &state.new_base {
             let actual_base = capture(&self.repo, "stg", ["id", "{base}"])?;
             ensure!(

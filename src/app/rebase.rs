@@ -75,7 +75,7 @@ impl App {
             self.manifest.bookkeeping_patch
         );
 
-        let dropped = self.drop_upstream_merged(&target)?;
+        let dropped = self.drop_upstream_merged(&target, &pending)?;
         self.manifest.base.target = target;
         self.manifest.base.stack.clone_from(&new_base);
         self.manifest.base.canonical = capture(
@@ -134,7 +134,11 @@ impl App {
         })
     }
 
-    fn drop_upstream_merged(&mut self, target: &BaseTarget) -> Result<DroppedPatches> {
+    fn drop_upstream_merged(
+        &mut self,
+        target: &BaseTarget,
+        pending: &PendingState,
+    ) -> Result<DroppedPatches> {
         let mut dropped = Vec::new();
         for patch in &self.manifest.patches {
             if patch.name == self.manifest.bookkeeping_patch {
@@ -142,7 +146,19 @@ impl App {
             }
             let commit = self.patch_commit(&patch.name)?;
             if self.patch_paths(&commit)?.is_empty() {
-                dropped.push((patch.clone(), commit));
+                let old_commit = pending
+                    .old_patches
+                    .iter()
+                    .find(|evidence| evidence.name == patch.name)
+                    .with_context(|| {
+                        format!(
+                            "pending recovery has no old commit for patch {}",
+                            patch.name
+                        )
+                    })?
+                    .commit
+                    .clone();
+                dropped.push((patch.clone(), old_commit));
             }
         }
         if dropped.is_empty() {

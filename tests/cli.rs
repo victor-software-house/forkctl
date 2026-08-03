@@ -115,6 +115,34 @@ fn json_alias_remains_compatible() {
 }
 
 #[test]
+fn json_api_classifies_domain_failures_as_operation_failed() {
+    let directory = tempfile::tempdir().unwrap();
+    let invocation = serde_json::json!({
+        "protocol_version": 1,
+        "request": {"command": "verify"}
+    });
+    let mut child = forkctl()
+        .args(["api", "call"])
+        .current_dir(directory.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(serde_json::to_string(&invocation).unwrap().as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(output.stderr.is_empty());
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["error"]["code"], "operation_failed");
+}
+
+#[test]
 fn invalid_manifest_fails_before_patch_commands() {
     let directory = tempfile::tempdir().unwrap();
     assert!(

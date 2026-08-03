@@ -17,6 +17,13 @@ pub struct ReportEvidence {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct PatchCommitEvidence {
+    pub name: String,
+    pub commit: String,
+}
+
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PendingState {
     pub schema: u32,
     pub operation: PendingOperation,
@@ -24,6 +31,7 @@ pub struct PendingState {
     pub old_base: String,
     pub old_tip: String,
     pub old_patch_count: usize,
+    pub old_patches: Vec<PatchCommitEvidence>,
     pub backup_tag: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<BaseTarget>,
@@ -41,7 +49,7 @@ impl PendingState {
         expected_remote_sha: String,
         old_base: String,
         old_tip: String,
-        old_patch_count: usize,
+        old_patches: Vec<PatchCommitEvidence>,
         backup_tag: String,
     ) -> Self {
         Self {
@@ -50,7 +58,8 @@ impl PendingState {
             expected_remote_sha,
             old_base,
             old_tip,
-            old_patch_count,
+            old_patch_count: old_patches.len(),
+            old_patches,
             backup_tag,
             target: None,
             new_base: None,

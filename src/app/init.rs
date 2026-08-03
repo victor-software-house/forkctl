@@ -33,6 +33,7 @@ impl App {
         )?;
         self.fetch_upstream(true)?;
         self.fetch_base_target(true)?;
+        self.fetch_recovery_tags(true)?;
 
         let actual = self.stg_series()?;
         let expected = self.manifest.patch_names();

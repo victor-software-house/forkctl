@@ -427,10 +427,126 @@ fn upstream_merged_patch_is_dropped_into_history() {
         serde_json::from_slice(&fs::read(fixture.repo.join("fork.json")).unwrap()).unwrap();
     assert_eq!(manifest["history"][0]["patch"]["name"], "merged-change");
     assert_eq!(manifest["history"][0]["kind"], "upstream-merged");
+    let history_commit = manifest["history"][0]["commit"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let ledger = fs::read_to_string(fixture.repo.join("PATCHES.md")).unwrap();
     assert!(ledger.contains("upstream merged"));
     assert!(ledger.contains("merged-change"));
     fixture.forkctl_ok(&["verify"]);
+    fixture.forkctl_ok(&["publish"]);
+
+    let clone = fixture.repo.parent().unwrap().join("history-reader");
+    git_ok(
+        fixture.repo.parent().unwrap(),
+        [
+            "clone",
+            "--quiet",
+            fixture.downstream_bare.to_str().unwrap(),
+            clone.to_str().unwrap(),
+        ],
+    );
+    let init = Command::new(env!("CARGO_BIN_EXE_forkctl"))
+        .args(["--manifest", "fork.json", "init"])
+        .current_dir(&clone)
+        .output()
+        .unwrap();
+    assert!(
+        init.status.success(),
+        "fresh-clone init failed: {}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    git_ok(
+        &clone,
+        ["cat-file", "-e", &format!("{history_commit}^{{commit}}")],
+    );
+}
+
+#[test]
+fn pending_old_stack_boundary_mismatch_is_rejected() {
+    let fixture = finished_new_fixture();
+    mutate_pending(&fixture.repo, |pending| {
+        pending["old_base"] = Value::String("0".repeat(40));
+    });
+    let output = fixture.forkctl(&["verify"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("pending old stack"));
+}
+
+#[test]
+fn pending_old_patch_name_mismatch_is_rejected() {
+    let fixture = finished_new_fixture();
+    mutate_pending(&fixture.repo, |pending| {
+        pending["old_patches"][0]["name"] = Value::String("different-patch".into());
+    });
+    let output = fixture.forkctl(&["verify"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("old patch names"));
+}
+
+#[test]
+fn pending_new_base_mismatch_is_rejected() {
+    let fixture = finished_new_fixture();
+    mutate_pending(&fixture.repo, |pending| {
+        pending["new_base"] = Value::String("0".repeat(40));
+    });
+    let output = fixture.forkctl(&["verify"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("pending new base"));
+}
+
+#[test]
+fn pending_rebase_target_mismatch_is_rejected() {
+    let fixture = Fixture::tooling_only();
+    fixture.forkctl_ok(&["init"]);
+    fixture.advance_upstream("v2", "upstream v2\n");
+    fixture.forkctl_ok(&["rebase", "--onto", "refs/tags/v2"]);
+    mutate_pending(&fixture.repo, |pending| {
+        pending["target"]["selector"] = Value::String("refs/tags/different".into());
+    });
+    let output = fixture.forkctl(&["verify"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("pending target"));
+}
+
+fn finished_new_fixture() -> Fixture {
+    let fixture = Fixture::tooling_only();
+    fixture.forkctl_ok(&["init"]);
+    fixture.forkctl_ok(&[
+        "new",
+        "source-change",
+        "--kind",
+        "source",
+        "--purpose",
+        "Add downstream source behavior.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream adds the behavior.",
+        "--path",
+        "source.txt",
+    ]);
+    fixture.implement_patch("source-change", "source.txt", "downstream\n");
+    fixture.forkctl_ok(&["new", "--finish"]);
+    fixture
+}
+
+fn mutate_pending(repo: &std::path::Path, mutate: impl FnOnce(&mut Value)) {
+    let relative = git_capture(repo, ["rev-parse", "--git-path", "forkctl/pending.json"]);
+    let candidate = std::path::PathBuf::from(relative);
+    let path = if candidate.is_absolute() {
+        candidate
+    } else {
+        repo.join(candidate)
+    };
+    let mut pending: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    mutate(&mut pending);
+    fs::write(
+        path,
+        format!("{}\n", serde_json::to_string_pretty(&pending).unwrap()),
+    )
+    .unwrap();
 }
 
 #[test]

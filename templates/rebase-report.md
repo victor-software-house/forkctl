@@ -19,4 +19,3 @@
 ```diff
 {{ range_diff }}
 ```
-

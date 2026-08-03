@@ -126,29 +126,23 @@ fn run_api(operation: &ApiOperation) -> ExitCode {
             Err(_) => ExitCode::FAILURE,
         },
         ApiOperation::Call => {
-            let response = read_invocation()
-                .and_then(|invocation| {
-                    ensure!(
-                        invocation.protocol_version == PROTOCOL_VERSION,
+            let response = match read_invocation() {
+                Err(error) => ApiResponse::error(api_error(&error, ApiErrorCode::InvalidRequest)),
+                Ok(invocation) if invocation.protocol_version != PROTOCOL_VERSION => {
+                    let error = anyhow::anyhow!(
                         "unsupported protocol version: {}",
                         invocation.protocol_version
                     );
-                    execute(invocation.manifest.as_deref(), invocation.request)
-                })
-                .map_or_else(
-                    |error| {
-                        let code = if error
-                            .to_string()
-                            .starts_with("unsupported protocol version")
-                        {
-                            ApiErrorCode::UnsupportedProtocol
-                        } else {
-                            ApiErrorCode::InvalidRequest
-                        };
-                        ApiResponse::error(api_error(&error, code))
-                    },
-                    ApiResponse::success,
-                );
+                    ApiResponse::error(api_error(&error, ApiErrorCode::UnsupportedProtocol))
+                }
+                Ok(invocation) => execute(invocation.manifest.as_deref(), invocation.request)
+                    .map_or_else(
+                        |error| {
+                            ApiResponse::error(api_error(&error, ApiErrorCode::OperationFailed))
+                        },
+                        ApiResponse::success,
+                    ),
+            };
             let emitted = view::emit_json(&response).is_ok();
             if emitted {
                 response_exit(&response)
