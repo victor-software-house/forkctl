@@ -15,3 +15,4 @@
 - 2026-08-03 One centralized semantic theme and renderer owns every human-facing visual element so the CLI remains visually consistent rather than combining crate defaults.
 - 2026-08-03 Keep the protocol/view kernel small; do not add progress, panels, or renderer abstractions that forkctl does not currently need.
 - 2026-08-03 Historical upstream-merged entries record the pre-rebase patch commit preserved by the published recovery tag, never the transient empty post-rebase commit; `fork:init` hydrates recovery tags by the declared prefix before verifying history in a fresh clone.
+- 2026-08-03 Disposable lifecycle subprocesses remove inherited `GIT_*` variables because Git hooks export parent-repository context; fixture commands must never resolve against or mutate the checkout running the hook.

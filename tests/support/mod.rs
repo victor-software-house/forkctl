@@ -50,7 +50,7 @@ impl Fixture {
     }
 
     pub fn forkctl(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_forkctl"))
+        isolated_command(env!("CARGO_BIN_EXE_forkctl"))
             .arg("--manifest")
             .arg("fork.json")
             .args(args)
@@ -77,7 +77,7 @@ impl Fixture {
             "manifest": "fork.json",
             "request": request,
         });
-        let mut child = Command::new(env!("CARGO_BIN_EXE_forkctl"))
+        let mut child = isolated_command(env!("CARGO_BIN_EXE_forkctl"))
             .args(["api", "call"])
             .current_dir(&self.repo)
             .stdin(Stdio::piped())
@@ -257,7 +257,7 @@ fn create_tooling_commit(
 }
 
 pub fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
-    let output = Command::new("git")
+    let output = isolated_command("git")
         .args(args)
         .current_dir(dir)
         .output()
@@ -271,7 +271,7 @@ pub fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
 }
 
 pub fn stg_ok<const N: usize>(dir: &Path, args: [&str; N]) {
-    let output = Command::new("stg")
+    let output = isolated_command("stg")
         .args(args)
         .current_dir(dir)
         .output()
@@ -285,7 +285,7 @@ pub fn stg_ok<const N: usize>(dir: &Path, args: [&str; N]) {
 }
 
 pub fn stg_capture<const N: usize>(dir: &Path, args: [&str; N]) -> String {
-    let output = Command::new("stg")
+    let output = isolated_command("stg")
         .args(args)
         .current_dir(dir)
         .output()
@@ -299,7 +299,7 @@ pub fn stg_capture<const N: usize>(dir: &Path, args: [&str; N]) -> String {
 }
 
 pub fn git_capture<const N: usize>(dir: &Path, args: [&str; N]) -> String {
-    let output = Command::new("git")
+    let output = isolated_command("git")
         .args(args)
         .current_dir(dir)
         .output()
@@ -310,6 +310,16 @@ pub fn git_capture<const N: usize>(dir: &Path, args: [&str; N]) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8(output.stdout).unwrap().trim().to_string()
+}
+
+pub fn isolated_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("GIT_") {
+            command.env_remove(key);
+        }
+    }
+    command
 }
 
 fn configure_identity(repo: &Path) {

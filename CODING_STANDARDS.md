@@ -51,3 +51,5 @@ Formatting, Clippy with denied warnings, and tests must pass before release.
 ### 4.2 Consumer proof
 
 Every release must be exercised through mise against disposable real Git/StGit remotes, including metadata initialization, deterministic reconstruction, rebase evidence, exact-lease rejection, and successful publication.
+
+Every test subprocess that runs `git`, `stg`, or `forkctl` against a disposable repository must remove inherited `GIT_*` variables. Git hooks export parent-repository context; allowing fixtures to inherit it can redirect destructive fixture commands into the checkout running the hook.

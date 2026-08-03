@@ -2,8 +2,18 @@ use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+fn isolated_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("GIT_") {
+            command.env_remove(key);
+        }
+    }
+    command
+}
+
 fn forkctl() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_forkctl"))
+    isolated_command(env!("CARGO_BIN_EXE_forkctl"))
 }
 
 #[test]
@@ -146,7 +156,7 @@ fn json_api_classifies_domain_failures_as_operation_failed() {
 fn invalid_manifest_fails_before_patch_commands() {
     let directory = tempfile::tempdir().unwrap();
     assert!(
-        Command::new("git")
+        isolated_command("git")
             .args(["init", "--quiet"])
             .current_dir(directory.path())
             .status()

@@ -2,8 +2,7 @@ mod support;
 
 use serde_json::Value;
 use std::fs;
-use std::process::Command;
-use support::{Fixture, git_capture, git_ok, stg_capture, stg_ok};
+use support::{Fixture, git_capture, git_ok, isolated_command, stg_capture, stg_ok};
 
 fn command_data(response: &Value) -> &Value {
     &response["result"]["data"]
@@ -254,7 +253,7 @@ fn rebase_conflict_preserves_pending_state_and_recovery_tag() {
         git_capture(&fixture.repo, ["tag", "--list", backup]),
         backup
     );
-    let remote_tag = Command::new("git")
+    let remote_tag = isolated_command("git")
         .args(["ls-remote", "origin", &format!("refs/tags/{backup}")])
         .current_dir(&fixture.repo)
         .output()
@@ -447,7 +446,7 @@ fn upstream_merged_patch_is_dropped_into_history() {
             clone.to_str().unwrap(),
         ],
     );
-    let init = Command::new(env!("CARGO_BIN_EXE_forkctl"))
+    let init = isolated_command(env!("CARGO_BIN_EXE_forkctl"))
         .args(["--manifest", "fork.json", "init"])
         .current_dir(&clone)
         .output()
@@ -674,7 +673,7 @@ fn wrong_branch_fails_before_mutation() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("current branch is other"));
     assert!(
-        Command::new("git")
+        isolated_command("git")
             .args(["tag", "--list", "vsh/pre-sync-*"])
             .current_dir(&fixture.repo)
             .output()
