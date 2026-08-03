@@ -6,8 +6,10 @@ rust-version = "1.97"
 description = "Verify and rebase reusable StGit downstream patch stacks"
 license = "MIT"
 repository = "https://github.com/victor-software-house/forkctl"
-publish = false
-
+homepage = "https://github.com/victor-software-house/forkctl"
+readme = "README.md"
+keywords = ["git", "stgit", "fork", "patches", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 [profile.release]
 codegen-units = 1
 lto = "thin"

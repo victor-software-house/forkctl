@@ -23,7 +23,7 @@ FORK_MANIFEST = "patches/embedding/fork.json"
 
 [task_config]
 includes = [
-  "git::ssh://git@github.com/victor-software-house/forkctl.git//tasks/fork.toml?ref=<immutable-ref>",
+  "git::https://github.com/victor-software-house/forkctl.git//tasks/fork.toml?ref=<immutable-ref>",
   "mise-tasks",
 ]
 ```
@@ -39,6 +39,12 @@ mise run fork:rebase
 ```
 
 Mise installs the pinned `forkctl`, Rust, and `cargo:stgit` tools in its isolated store before running a task. No global Cargo or Homebrew installation is required.
+
+For direct use outside mise, install the CLI from crates.io and provide `git` and `stg` on `PATH`:
+
+```sh
+cargo install forkctl --locked
+```
 
 ## Development
 

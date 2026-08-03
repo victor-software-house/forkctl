@@ -37,7 +37,9 @@ if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
   [ "$(gh api "repos/$repo/commits/$tag" --jq .sha)" = "$head" ] || { printf 'release: existing tag targets another commit\n' >&2; exit 1; }
   gh release upload "$tag" "$asset" --repo "$repo"
 else
-  gh release create "$tag" "$asset" --repo "$repo" --target "$head" --title "forkctl $version" --notes "Native forkctl release $version."
+  gh release create "$tag" "$asset" --repo "$repo" --target "$head" --title "forkctl $version" --notes "Native forkctl release $version." --draft
+  cargo publish --locked
+  gh release edit "$tag" --repo "$repo" --draft=false
 fi
 
 download="$work/download"
