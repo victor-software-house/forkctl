@@ -8,7 +8,7 @@ Use the installed `git` and `stg` CLIs. Do not reproduce their storage, revision
 
 ### 1.2 Keep the public surface narrow
 
-The supported commands are `init`, `verify`, and `rebase`. New commands require a demonstrated cross-fork contract.
+The stack operations are `init`, `verify`, and `rebase`. Additional commands must be read-only or require a demonstrated cross-fork contract.
 
 ## 2. Dependencies
 

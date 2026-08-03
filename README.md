@@ -36,7 +36,10 @@ Then use:
 mise run fork:init
 mise run fork:verify
 mise run fork:rebase
+forkctl instructions
 ```
+
+`forkctl instructions` prints the concise repository, workflow, and safety contract without requiring a Git repository. Copy-ready consumer files live under [`examples/`](examples/).
 
 Mise installs the pinned `forkctl`, Rust, and `cargo:stgit` tools in its isolated store before running a task. No global Cargo or Homebrew installation is required.
 

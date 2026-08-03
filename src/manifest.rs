@@ -163,9 +163,8 @@ fn validate_repo_path(repo: &Path, value: &str) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn derives_source_top_from_last_exported_patch() {
-        let manifest = Manifest {
+    fn manifest() -> Manifest {
+        Manifest {
             schema: 1,
             upstream: Upstream {
                 remote: "upstream".into(),
@@ -188,7 +187,70 @@ mod tests {
             ],
             allow: Allow::default(),
             required: Vec::new(),
-        };
-        assert_eq!(manifest.source_top().unwrap().name, "source");
+        }
+    }
+
+    #[test]
+    fn derives_source_top_from_last_exported_patch() {
+        assert_eq!(manifest().source_top().unwrap().name, "source");
+    }
+
+    #[test]
+    fn rejects_export_after_tooling_patch() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut value = manifest();
+        value.patches.push(Patch {
+            name: "late-source".into(),
+            export: Some("patches/0002-late.patch".into()),
+        });
+        assert!(
+            value
+                .validate(directory.path(), &directory.path().join("fork.json"))
+                .unwrap_err()
+                .to_string()
+                .contains("appears after a tooling-only patch")
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_patch_names() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut value = manifest();
+        value.patches[1].name = "source".into();
+        assert!(
+            value
+                .validate(directory.path(), &directory.path().join("fork.json"))
+                .unwrap_err()
+                .to_string()
+                .contains("duplicate patch name")
+        );
+    }
+
+    #[test]
+    fn rejects_short_base_sha() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut value = manifest();
+        value.bases.stack = "abc123".into();
+        assert!(
+            value
+                .validate(directory.path(), &directory.path().join("fork.json"))
+                .unwrap_err()
+                .to_string()
+                .contains("full 40-character commit SHA")
+        );
+    }
+
+    #[test]
+    fn rejects_paths_that_escape_repository() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut value = manifest();
+        value.patches[0].export = Some("../outside.patch".into());
+        assert!(
+            value
+                .validate(directory.path(), &directory.path().join("fork.json"))
+                .unwrap_err()
+                .to_string()
+                .contains("repository-relative")
+        );
     }
 }

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "upstream": {
+    "remote": "upstream",
+    "url": "https://github.com/example/project.git",
+    "ref": "upstream/main"
+  },
+  "bases": {
+    "canonical": "0000000000000000000000000000000000000000",
+    "stack": "0000000000000000000000000000000000000000"
+  },
+  "patches": [
+    {
+      "name": "downstream-change",
+      "export": "patches/downstream/0001-downstream-change.patch"
+    },
+    {
+      "name": "fork-tooling"
+    }
+  ],
+  "allow": {
+    "base": [],
+    "tooling": [
+      "AGENTS.md",
+      "FORK.md",
+      "mise.toml",
+      "patches/downstream/*"
+    ]
+  },
+  "required": [
+    {
+      "path": "include/project.h",
+      "contains": "required_symbol"
+    }
+  ]
+}

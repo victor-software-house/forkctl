@@ -30,4 +30,12 @@ mod tests {
             "patches/embedding/nested/file"
         ));
     }
+
+    #[test]
+    fn matches_literals_and_single_characters() {
+        assert!(matches("src/main.rs", "src/main.rs"));
+        assert!(matches("patches/000?.patch", "patches/0001.patch"));
+        assert!(!matches("patches/000?.patch", "patches/0010.patch"));
+        assert!(!matches("src/*.rs", "src/app/mod.rs"));
+    }
 }

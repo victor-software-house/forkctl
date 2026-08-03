@@ -10,6 +10,7 @@ use std::env;
 use std::path::PathBuf;
 
 const DEFAULT_MANIFEST: &str = "patches/fork.json";
+const INSTRUCTIONS: &str = include_str!("instructions.md");
 
 #[derive(Parser)]
 #[command(version, about = "Maintain a declared StGit downstream patch stack")]
@@ -29,10 +30,17 @@ enum Operation {
     Verify,
     /// Rebase onto upstream and refresh exports and base pins.
     Rebase,
+    /// Print the repository and agent workflow contract.
+    Instructions,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    if matches!(&cli.operation, Operation::Instructions) {
+        print!("{INSTRUCTIONS}");
+        return Ok(());
+    }
+
     let manifest = cli
         .manifest
         .or_else(|| env::var_os("FORK_MANIFEST").map(PathBuf::from))
@@ -42,5 +50,6 @@ fn main() -> Result<()> {
         Operation::Init => app.init(),
         Operation::Verify => app.verify(),
         Operation::Rebase => app.rebase(),
+        Operation::Instructions => unreachable!("handled before loading repository state"),
     }
 }

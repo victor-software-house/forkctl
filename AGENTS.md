@@ -11,12 +11,13 @@ Reusable downstream-fork maintenance for StGit patch stacks.
 
 ## Invariants
 
-- Keep exactly three public operations: `init`, `verify`, and `rebase`.
+- Keep exactly three stack operations: `init`, `verify`, and `rebase`; `instructions` is a read-only workflow reference for humans and coding agents.
 - No runtime language, package manager, config parser, or shell-library dependency beyond the mise-provisioned `forkctl`, `git`, and `stg` executables.
 - Remote task and release versions are immutable. Consumers pin the remote catalog by commit or release tag.
 - `verify` must fail closed on dirty worktrees, missing tools, remote drift, patch-order drift, undeclared paths, missing source contracts, or non-reconstructable exports.
 - `rebase` may update only declared base pins and exported source patches before refreshing the top tooling patch.
 - Keep `main.rs` as wiring; implementation modules stay bounded by responsibility.
+- Keep examples synchronized with the released task catalog and manifest schema.
 
 ## Checks
 
