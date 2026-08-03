@@ -36,7 +36,16 @@ Publish forkctl 0.0.5 as a narrow audit-integrity correction. Bind every recover
    - Retain existing real bare upstream/downstream fixtures and add focused helper abstractions only where they reduce duplication. No mocks replace Git/StGit behavior.
    - Keep unsupported atomic fallback as source-level proof: a single `git push --atomic` invocation propagates failure and has no retry path.
 
-6. **Release and proof**
+6. **Protocol-first CLI and unified view**
+   - Define versioned typed request, success, error, warning, and command-result envelopes deriving Serde and Schemars from the same Rust types.
+   - Map Clap commands and `api call` JSON requests into the same request enum and execute each handler once without output concerns.
+   - Add global `--output pretty|json`, `api schema`, and `api call`; JSON stdout contains exactly one schema-valid envelope and diagnostics never contaminate it.
+   - Make every App operation return typed data and notices. Capture Git/StGit subprocess output rather than inheriting stdout/stderr.
+   - Centralize human rendering in one view module using one semantic Anstyle theme and Tabled-derived rows. Do not expose crate-default styles or construct tables in handlers.
+   - Use Miette only to render typed protocol errors in pretty mode; JSON errors retain stable codes and structured details.
+   - Add schema contract tests, JSON round-trips, pretty/JSON parity tests, NO_COLOR/pipe snapshots, and a source guard that rejects printing/table/view dependencies outside the boundary.
+
+7. **Release and proof**
    - Update manifest examples, README, instructions, project guidance, Askama templates, and durable vault reference.
    - Bump the Cargo single source to 0.0.5 and synchronize six remote task pins plus example ref.
    - Run clean rustfmt, strict workspace Clippy, all unit/CLI/lifecycle/xtask tests, release build, package dry-run, and local release.
