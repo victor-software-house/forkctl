@@ -1,0 +1,17 @@
+["fork:init"]
+description = "Initialize StGit metadata for a cloned downstream fork"
+dir = "{{ config_root }}"
+run = "forkctl init"
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.1" }
+
+["fork:verify"]
+description = "Verify the downstream patch stack and detect undeclared drift"
+dir = "{{ config_root }}"
+run = "forkctl verify"
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.1" }
+
+["fork:rebase"]
+description = "Rebase the downstream patch stack onto canonical upstream"
+dir = "{{ config_root }}"
+run = "forkctl rebase"
+tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.1" }

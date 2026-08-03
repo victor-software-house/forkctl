@@ -1,0 +1,37 @@
+min_version = "2026.7.7"
+
+[settings]
+lockfile = true
+
+[tools]
+rust = "1.97.1"
+lefthook = "2.1.10"
+gh = "2.95.0"
+
+[tasks."format:fix"]
+description = "Format Rust sources"
+run = "cargo fmt --all"
+
+[tasks.format]
+description = "Check Rust formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks."lint:fix"]
+description = "Apply machine-fixable Clippy suggestions"
+run = "cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features -- -D warnings"
+
+[tasks.lint]
+description = "Run Clippy with warnings denied"
+run = "cargo clippy --all-targets --all-features -- -D warnings"
+
+[tasks.test]
+description = "Run unit tests"
+run = "cargo test --all-features"
+
+[tasks.verify]
+description = "Run all repository checks"
+depends = ["format", "lint", "test"]
+
+[tasks.build]
+description = "Build the release binary"
+run = "cargo build --release"

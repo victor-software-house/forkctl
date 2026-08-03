@@ -1,0 +1,20 @@
+pre-commit:
+  skip:
+    - run: test -n "$CI"
+  parallel: false
+  commands:
+    format:
+      run: mise run format:fix
+      stage_fixed: true
+    lint-fix:
+      run: mise run lint:fix
+      stage_fixed: true
+    lint:
+      run: mise run lint
+
+pre-push:
+  skip:
+    - run: test -n "$CI"
+  commands:
+    test:
+      run: mise run test
