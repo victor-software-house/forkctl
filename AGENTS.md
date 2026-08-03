@@ -8,6 +8,7 @@ Reusable downstream-fork maintenance for StGit patch stacks.
 - `tasks/fork.toml` is the mise-native remote task catalog. Every task declares all required tools and versions so consuming repositories need only mise.
 - A consuming fork owns one JSON manifest and its exported patch files. Generic executable logic stays here.
 - `src/patchexport.tmpl` pins StGit export formatting across StGit upgrades.
+- `templates/*.md` holds Askama-compiled editorial text for generated ledgers and rebase reports; Rust renderers own typed context and format-specific escaping.
 
 ## Invariants
 

@@ -2,7 +2,7 @@
 
 Audited, mise-provisioned lifecycle control for downstream forks carried as [StGit](https://stacked-git.github.io/) patch stacks.
 
-Forkctl is a small Rust policy CLI over real `git` and `stg` commands. Git remains canonical history; StGit remains responsible for patch mechanics and conflicts. Forkctl declares policy, verifies reproducibility, records review evidence, and publishes rewritten history only under an exact lease.
+Forkctl is a small Rust policy CLI over real `git` and `stg` commands. Git remains canonical history; StGit remains responsible for patch mechanics and conflicts. Forkctl declares policy, verifies reproducibility, records review evidence, and publishes rewritten history only under an exact lease. Generated ledger and rebase-report structure lives in compile-time, type-checked Askama templates; Rust renderers retain typed context and Markdown escaping.
 
 The repository publishes:
 

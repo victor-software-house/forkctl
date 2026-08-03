@@ -1,8 +1,8 @@
 use super::{App, write_atomic};
 use crate::process::{capture, run};
+use crate::report::{self, ExportEvidence, RebaseReport};
 use crate::state::{PendingOperation, PendingState};
 use anyhow::{Context, Result, ensure};
-use std::fmt::Write;
 use std::path::PathBuf;
 
 impl App {
@@ -129,21 +129,29 @@ impl App {
         new_tip: &str,
         range: &str,
     ) -> Result<String> {
-        let mut export_lines = String::new();
-        for patch in self.manifest.exported_patches() {
-            let relative = patch.export.as_ref().expect("exported patch");
-            let hash = capture(&self.repo, "git", ["hash-object", relative])?;
-            writeln!(export_lines, "- `{relative}` — `{hash}`")?;
-        }
-        if export_lines.is_empty() {
-            export_lines.push_str("- None\n");
-        }
-        Ok(format!(
-            "# Forkctl Rebase Review\n\n- Target: `{}`\n- Old base: `{}`\n- Old tip: `{}`\n- New base: `{new_base}`\n- New tip: `{new_tip}`\n- Recovery tag: `{}`\n- Structural verification: passed\n- Semantic verification: pending consumer checks\n\n## Exports\n\n{export_lines}\n## Range diff\n\n```diff\n{range}\n```\n",
-            pending.target_label.as_deref().unwrap_or("unknown"),
-            pending.old_base,
-            pending.old_tip,
-            pending.backup_tag
-        ))
+        let exports = self
+            .manifest
+            .exported_patches()
+            .map(|patch| {
+                let path = patch.export.as_ref().expect("exported patch");
+                Ok(ExportEvidence {
+                    path: path.clone(),
+                    hash: capture(&self.repo, "git", ["hash-object", path])?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        report::render(RebaseReport {
+            target: pending
+                .target_label
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
+            old_base: pending.old_base.clone(),
+            old_tip: pending.old_tip.clone(),
+            new_base: new_base.to_string(),
+            new_tip: new_tip.to_string(),
+            recovery_tag: pending.backup_tag.clone(),
+            exports,
+            range_diff: range.to_string(),
+        })
     }
 }

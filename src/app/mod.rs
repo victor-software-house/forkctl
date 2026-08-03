@@ -318,7 +318,7 @@ impl App {
 
     fn write_ledger(&self) -> Result<PathBuf> {
         let path = self.repo.join(&self.manifest.ledger);
-        write_atomic(&path, ledger::render(&self.manifest).as_bytes())?;
+        write_atomic(&path, ledger::render(&self.manifest)?.as_bytes())?;
         Ok(path)
     }
 

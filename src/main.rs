@@ -3,6 +3,7 @@ mod ledger;
 mod manifest;
 mod pattern;
 mod process;
+mod report;
 mod state;
 
 use anyhow::{Context, Result, ensure};

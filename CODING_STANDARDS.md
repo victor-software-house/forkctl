@@ -10,6 +10,10 @@ Use the installed `git` and `stg` CLIs. Do not reproduce their storage, revision
 
 The lifecycle operations are `init`, `status`, `new`, `verify`, `rebase`, and `publish`. New commands require another demonstrated cross-fork contract.
 
+### 1.3 Separate editorial text from control flow
+
+Keep generated Markdown document structure in compile-time Askama templates under `templates/`. Rust renderers provide typed context and explicit Markdown escaping. Keep short status labels and condition-specific error messages beside the code path that emits them.
+
 ## 2. Dependencies
 
 ### 2.1 Runtime isolation

@@ -187,7 +187,7 @@ impl App {
     fn verify_ledger(&self) -> Result<()> {
         let path = self.repo.join(&self.manifest.ledger);
         let actual = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
-        let expected = ledger::render(&self.manifest);
+        let expected = ledger::render(&self.manifest)?;
         ensure!(
             actual == expected.as_bytes(),
             "generated ledger differs: {}",
