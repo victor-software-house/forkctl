@@ -10,3 +10,13 @@
 - 2026-08-03 Use `ask_user` only for final design choices or real surviving ambiguity; do not use Plannotator for this initiative.
 - 2026-08-03 PR #1 is evidence only. Reimplement its valid history, API error, report newline, and test-isolation findings in coherent layers; never merge it as the implementation base.
 - 2026-08-03 Generic forkctl never mutates GitHub organization rulesets. VSH owns a narrow durable protected-branch policy for approved fork repositories.
+- 2026-08-03 Give most long CLI options a deliberate short form. Reserve global shorts across the full tree, reuse local shorts only across disjoint subcommands, and leave a long option without a short only when the abbreviation would be misleading or collide.
+- 2026-08-03 Model leaf-command parameters after justpath: small orthogonal concerns, repeatable values, sensible defaults, explicit format, and useful composed shortcuts rather than proliferating mode subcommands.
+- 2026-08-03 Render clean colored width-aware help from the Clap command graph through forkctl's existing Anstyle/Comfy Table theme. Do not adopt `clap-help` because it cannot render subcommands, and do not maintain a second handwritten parameter model.
+- 2026-08-03 One `check` command owns validation. Full repository checking is the default; `-s`/`--staged` selects the narrower index check. Remove `verify` rather than creating two strict-sounding commands or an optional `staged` subcommand for what is only a mode parameter.
+- 2026-08-03 Mise receives the complete forkctl grammar through `usage-lib`'s direct Clap conversion and a mounted `fork` task. Do not duplicate command flags in task TOML or maintain one shallow task per forkctl command.
+- 2026-08-03 Approved workflow: explicit metadata-only active intent, normal Git staging, smart staged-by-default refresh with explicit all/path alternatives, repeatable refresh, and finish as full-check-plus-clear.
+- 2026-08-03 Approved CLI: top-level primary verbs, patch/operation/API families only for distinct actions, parameterized check scope, composable justpath-style flags, collision-audited shorts, data-driven colored help, and full dynamic completion.
+- 2026-08-03 Approved API: one typed local request/response protocol, execute/plan modes, complete selectable JSON Schemas, stable typed results/notices/errors/details, and exact CLI parity.
+- 2026-08-03 Approved integration: one mounted mise `fork` task generated from Clap with correct Usage and cwd macros; hook-manager-neutral checks with first-class optional Lefthook/mise composition.
+- 2026-08-03 Approved recovery: one typed in-flight operation journal with status/continue/abort, plus operation-level history bound to exact annotated recovery objects; no generalized second VCS log.

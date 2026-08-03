@@ -12,7 +12,7 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 4. Domain handlers return typed data only; input and output protocols never leak into repository logic.
 5. Pretty CLI and JSON/API output consume the same typed results and errors.
 6. Mutations never stash operator changes.
-7. Repository-wide verify, rebase, and publish fail on an unclean worktree, incomplete active patch, or unresolved operation.
+7. Full repository check, rebase, and publish fail on an unclean worktree, incomplete active patch, or unresolved operation.
 8. Every source patch has a deterministic generated export; tooling patches do not reconstruct product source.
 9. Recovery tags are immutable annotated objects and every historical removal names the exact tag object preserving its old stack.
 10. Publication is one atomic explicit-ref push with an exact lease and no fallback.
@@ -23,22 +23,30 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 
 ### Global behavior
 
-- `--manifest PATH` selects the manifest; `FORK_MANIFEST` remains the environment alternative.
-- `--format pretty|json` selects one output representation. There is no `--json` alias.
-- `--color auto|always|never` controls pretty output only and respects `NO_COLOR`.
-- `--quiet` suppresses non-error pretty output; JSON remains complete.
-- Mutating commands that support planning expose `--dry-run`; planning executes all reads and validation but performs no writes, ref changes, or hooks.
-- Destructive recovery requires `--yes` in non-interactive contexts and displays the exact discarded state in pretty mode.
+- `--manifest PATH`/`-m PATH` selects the manifest; `FORK_MANIFEST` remains the environment alternative.
+- `--format pretty|json`/`-f pretty|json` selects one output representation. There is no `--json` alias.
+- `--color auto|always|never`/`-c ...` controls pretty output only and respects `NO_COLOR`.
+- `--quiet`/`-q` suppresses non-error pretty output; JSON remains complete.
+- Every mutating command exposes `--dry-run`/`-n`; planning executes all reads and validation but performs no writes, ref changes, or hooks.
+- Destructive recovery requires `--yes`/`-y` in non-interactive contexts and displays the exact discarded state in pretty mode.
+- Most command-local long options have a mnemonic short form. Global shorts are reserved across the tree; command-local shorts may repeat only on disjoint subcommands. Misleading abbreviations remain long-only.
+- Leaf-command parameters are orthogonal and composable: subject selection, metadata/scope, capture selection, execution safety, and global presentation do not duplicate one another as mode-specific commands.
+- Repeatable values use repeatable options, composed conveniences expand into the same typed option groups, and defaults remain visible in help.
+- `--help` is a colored, width-aware, scan-friendly view generated solely from Clap metadata. It groups commands/arguments/options, shows short and long forms, metavars, defaults, choices, and descriptions, and uses forkctl's existing semantic theme.
+- `forkctl completion SHELL` generates completions for bash, elvish, fish, Nushell, PowerShell, and zsh from the same Clap graph. Completions include commands, options, short forms, enums, paths, repository remotes/refs, and live patch names.
+- Dynamic completion is local/offline and fail-silent: an absent/invalid manifest yields no domain candidates rather than terminal errors or network access.
+- Hidden `--usage-spec[=BIN]` emits a full Usage KDL specification generated from Clap and augmented with the same dynamic candidates; `BIN` relabels the mounted root command, and mise requests `--usage-spec=fork` so `mise run fork ...` has equivalent validation, help, and completion.
 - Invalid CLI syntax exits 2; actionable repository/policy failure exits 1; success exits 0. Machine callers use typed error codes rather than additional exit-code taxonomy.
 
 ### Core lifecycle
 
 - With no manifest, `forkctl init` bootstraps a new contract from explicit upstream/downstream/base/document/bookkeeping arguments, requires the branch to equal the selected base, creates the initial bookkeeping patch, and writes the first verified manifest/ledger. It never imports or interprets legacy commits.
 - With a manifest, `forkctl init` idempotently hydrates StGit metadata and exact historical recovery refs in a fresh clone.
-- `forkctl status` reports repository identity, base/target, patch series, active patch, staged/unstaged paths, verification summary, and current operation without mutation.
-- `forkctl verify` performs the complete offline structural, audit, export, history, and reconstruction gate.
+- `forkctl status` reports repository identity, base/target, patch series, active patch, staged/unstaged paths, check summary, and current operation without mutation.
+- `forkctl check` performs the complete offline structural, audit, export, history, and reconstruction gate.
+- `forkctl check --staged`/`-s` performs the narrower read-only index/scope check against `--patch NAME`/`-p NAME` or the active patch. An empty index succeeds; a nonempty index without a target fails.
 - `forkctl rebase --onto REF` starts or completes a journaled upstream replay and never publishes.
-- `forkctl publish` requires complete verification and atomically publishes the branch and exact recovery tag under the recorded lease.
+- `forkctl publish` requires a successful full check and atomically publishes the branch and exact recovery tag under the recorded lease.
 - `forkctl instructions` emits the generated consumer/operator contract.
 
 ### Patch family
@@ -48,10 +56,9 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 - `patch create NAME` records complete patch metadata and selects it as the active draft without creating an empty commit; repeated `--scope GLOB` values declare ownership.
 - `patch select NAME` selects an existing patch locally and performs no repository mutation.
 - `patch edit [NAME]` updates purpose, upstream status, drop condition, kind, and ownership scope through explicit set/add/remove-scope arguments; it updates commit trailers and bookkeeping atomically.
-- `patch check [NAME]` validates staged paths against the named/active patch without mutation and can require an active patch for strict hook policies.
 - `patch refresh [NAME]` captures the index by default. `--all` captures the explicitly allowed working-tree set; repeated `--path PATHSPEC` captures only those paths. The modes are mutually exclusive.
 - `patch refresh` validates ownership before invoking `stg refresh --patch ... --index`, regenerates source exports/ledger/manifest, refreshes bookkeeping, restores the fully applied series, and returns a typed result.
-- `patch finish [NAME]` requires no remaining staged/unstaged changes, runs full verification, and clears active state. It does not create another commit.
+- `patch finish [NAME]` requires no remaining staged/unstaged changes, runs the full check, and clears active state. It does not create another commit.
 - `patch delete NAME` is not in the first implementation; upstream-merged deletion remains rebase-owned. Add manual deletion only after a concrete workflow requires it.
 
 ### Operation family
@@ -63,11 +70,12 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 
 ### Check and integration family
 
-- Forkctl's reusable hook primitive is `patch check --staged`; it receives optional path arguments but can query the index itself.
-- Pre-push integration calls ordinary `forkctl verify`.
-- Commit-message validation is provided as `patch check-message FILE [NAME]` only if implementation evidence shows it catches a gap not already covered by generated messages and full verification.
-- The repository publishes exact mise tasks for checks, refresh, verification, and hook installation/validation.
-- The repository publishes a small Lefthook preset or documented local snippet using those mise tasks. It never overwrites consumer hook configuration or claims `core.hooksPath`.
+- Forkctl's reusable pre-commit primitive is `check --staged`; it queries the index itself and never mutates.
+- Pre-push integration calls ordinary `forkctl check`.
+- Commit-message validation is added only if implementation evidence shows it catches a gap not already covered by generated messages and full check.
+- The repository publishes one exact `fork` mise task whose mounted Usage spec exposes the complete forkctl grammar, plus optional Lefthook install/validate helpers. It does not duplicate command arguments across wrapper tasks.
+- The mounted task uses `dir = "{{cwd}}"`, a shebang `exec forkctl "$@"` passthrough, exact task-local tools, and no deprecated Tera argument functions or manual `usage_*` forwarding.
+- The repository publishes a small Lefthook preset or documented local snippet using `mise run fork check [-s]`. It never overwrites consumer hook configuration or claims `core.hooksPath`.
 
 ## Manifest Requirements
 

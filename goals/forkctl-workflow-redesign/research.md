@@ -15,7 +15,12 @@ This research grounds an incompatible, from-scratch forkctl contract. The target
 | [Lefthook remotes](https://lefthook.dev/configuration/remotes/) | Versioned remote configs merge with local and local-override configuration | A reusable VSH preset is viable, but the core contract must remain hook-manager-neutral and consumer-local configuration must retain priority |
 | [Jujutsu operation log](https://docs.jj-vcs.dev/latest/operation-log/) | Mutating operations are named, inspectable, and restorable; users can see why repository state changed | Forkctl needs typed current-operation status plus bounded continue/abort, but not a second VCS or a speculative full snapshot database |
 | [GitHub CLI formatting](https://cli.github.com/manual/gh_help_formatting) | Human output is the default; structured JSON is explicit and formatting happens after typed data exists | CLI pretty and JSON views consume the same typed result; the local API uses the same command handlers and schema-derived request/result types |
-| [mise CLI source at `4329507`](https://github.com/jdx/mise/blob/432950772aeb7f45420b514c6202d7b8880b1744/src/cli/mod.rs) | Common verbs remain top-level, object families receive subcommands, and global flags are orthogonal | Keep `init`, `status`, `verify`, `rebase`, and `publish` top-level; use namespaces only for patch, operation, check, and API families |
+| [justpath CLI](https://github.com/epogrebnyak/justpath/blob/main/src/justpath/cli.py) | Orthogonal select/display/modify option groups, repeatable include/exclude values, sensible defaults, explicit format, and a scan-friendly colored option table make one command highly composable | Organize each forkctl subcommand's parameters into orthogonal subject, metadata/scope, capture, execution, and output concerns; favor repeatable flags and composed shortcuts over mode-specific command duplication |
+| [Clap help styling](https://epage.github.io/blog/2023/03/clap-v4-2/) | Clap owns one authoritative command graph and supports semantic Anstyle slots plus styled help text | Generate help from Clap metadata and forkctl's existing semantic theme; never duplicate arguments in a handwritten help schema |
+| [clap-help 1.6.0](https://github.com/Canop/clap-help) | Width-aware colored option tables are attractive and mature enough for simple CLIs, but the crate explicitly has no subcommand support | Do not adopt it as forkctl's foundation; reproduce the useful table/panel behavior from Clap's command tree through the existing Anstyle/Comfy Table view stack |
+| [usage-lib 4.1.0 Clap conversion](https://github.com/jdx/usage/blob/v4.1.0/usage-lib/src/spec/mod.rs) | `usage_lib::Spec::from(&clap::Command)` converts the authoritative Clap tree—including subcommands, flags, choices, defaults, and usage—to mise's Usage specification | Add a hidden `--usage-spec` machine output generated directly from Clap; do not duplicate task arguments in TOML |
+| [mise usage mounts](https://mise.jdx.dev/tasks/task-arguments.html#mounting-generated-specs) | A task wrapper can mount a CLI-generated Usage spec and `exec ... "$@"`, giving mise validation, help, and completion for the wrapped CLI | Replace six shallow remote tasks with one canonical `fork` task whose mounted grammar mirrors all forkctl commands; hooks call the same task |
+| [mise CLI source at `4329507`](https://github.com/jdx/mise/blob/432950772aeb7f45420b514c6202d7b8880b1744/src/cli/mod.rs) | Common verbs remain top-level, object families receive subcommands, and global flags are orthogonal | Keep `init`, `status`, `check`, `rebase`, and `publish` top-level; use namespaces only for patch, operation, and API families |
 | [Current forkctl `229247d`](https://github.com/victor-software-house/forkctl/tree/229247d6f6789a21201f1778439caa0b9b1ba102) | Typed protocol/view separation, exact leases, generated evidence, and fail-closed verification already work | Preserve proven architecture, not command or manifest compatibility |
 | [PR #1](https://github.com/victor-software-house/forkctl/pull/1) | Correctly identifies pre-rebase history and JSON error classification, but test-only environment sanitization masks the production hook failure and history remains unbound to one recovery tag | Reimplement useful findings in clean layers; do not merge the PR |
 
@@ -45,6 +50,12 @@ fatal: working tree '.../macterm' already exists.
 
 The PR removes `GIT_*` before launching forkctl in tests; production `src/process.rs` still inherits them. The new design must fix production command execution and add an end-to-end regression that leaves the inherited variables intact.
 
+## Parameter/help observation
+
+The supplied justpath help screenshot confirms the useful target: compact usage, visible color hierarchy, one aligned panel, separate short/long/value columns, defaults adjacent to descriptions, and repeatable composable filters. Forkctl needs subcommands, but each leaf command can preserve that cleanliness. Boolean negation pairs are generated only when both states are real user choices; forkctl does not manufacture `--no-*` aliases for one-way actions.
+
+The researched `clap-help` crate provides the visual shape but cannot render subcommands and would add a second styling stack. A custom `HelpRenderer` should instead traverse `clap::Command` metadata, group arguments by declarative `help_heading`, and render through forkctl's existing semantic theme and width-aware table primitive. The Clap graph remains the only parameter source.
+
 ## Existing Fleet State
 
 | Repository | State before redesign | Required clean cut |
@@ -61,7 +72,7 @@ The PR removes `GIT_*` before launching forkctl in tests; production `src/proces
 - Typed handlers shared by Clap and the local JSON API.
 - Central semantic pretty renderer and schema-derived JSON.
 - Exact remote lease, atomic branch-plus-recovery publication, generated ledger/exports, target provenance, and report object binding.
-- Clean-worktree requirements for repository-wide verify, rebase, and publish.
+- Clean-worktree requirements for full repository check, rebase, and publish.
 
 ### Rewrite
 

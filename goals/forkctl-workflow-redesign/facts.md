@@ -7,7 +7,7 @@
 - A new patch begins as metadata-only local intent and is materialized on its first refresh, avoiding empty commits.
 - Staged index capture is the default; all-owned and explicit pathspec capture are opt-in.
 - Persistent ownership is named `scope` and uses `globset` semantics; one-shot capture uses Git pathspecs.
-- `patch check` is read-only and composable with any hook manager.
+- `check` is the single read-only validation command: full repository by default, staged scope with `-s`.
 - `patch refresh` delegates capture to StGit, accepts hook-modified index state, and owns generated evidence/bookkeeping.
 - `patch finish` verifies and clears active state; it does not create another commit.
 - Forkctl does not install or own native Git hooks.
@@ -18,6 +18,12 @@
 - Historical dropped patches are grouped by rebase operation and bound to one exact annotated recovery tag object.
 - Every source patch has a deterministic generated export; tooling patches have none.
 - CLI and local JSON API execute the same typed handlers.
+- Most long CLI options have collision-audited mnemonic short forms; `-n` consistently means dry-run and `-y` confirmed destructive execution.
+- Leaf parameters are small orthogonal groups with repeatable values and sensible defaults, following justpath's composable design.
+- Colored width-aware help is generated from Clap metadata through forkctl's existing semantic renderer; no second parameter or style model exists.
+- Direct forkctl provides complete command/flag/enum/path plus dynamic patch/ref completion across bash, elvish, fish, Nushell, PowerShell, and zsh; the mounted mise task provides the same grammar on mise/Usage-supported shells (bash, fish, Nushell, PowerShell, and zsh).
+- Mise exposes one mounted `fork` task generated from Clap via usage-lib, using `{{cwd}}`, exact task tools, and `exec forkctl "$@"`; arguments are not duplicated in task TOML.
+- `api.md` defines every invocation, plan, result, notice, typed error detail, and selectable JSON Schema document.
 - JSON requests use dotted CLI command paths and command-specific typed arguments.
 - JSON errors have stable codes, structured details, retryability, and optional suggested commands.
 - Forkctl never mutates GitHub branch-protection rules; VSH provisions durable narrow policy externally.
