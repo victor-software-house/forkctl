@@ -1,0 +1,167 @@
+{
+  "stage": "facts",
+  "title": "Forkctl Audited Lifecycle",
+  "goalSlug": "forkctl-audited-lifecycle",
+  "facts": [
+    {
+      "id": "scope-forkctl-only",
+      "text": "The work changes only forkctl; it does not inspect, migrate, or modify Zed.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": false,
+      "automatedVerification": false
+    },
+    {
+      "id": "schema-one-replaced",
+      "text": "The manifest remains `schema: 1`, and its current barely released shape is replaced in place without a compatibility reader or migration path.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "commands",
+      "text": "The public lifecycle commands are `init`, `status`, `new`, `verify`, `rebase`, `publish`, and `instructions`.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "target-separation",
+      "text": "Upstream fetch identity is declared separately from an explicit `rebase --onto <ref>` target, and targets may be branches, tags, or exact commits.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "tooling-only",
+      "text": "A stack containing only tooling patches is valid; its reconstructed source top and source tree are the declared stack base.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "patch-metadata",
+      "text": "Every patch declares a purpose, upstream status, drop condition, kind, and allowed paths, and verification requires matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` commit trailers.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "generated-ledger",
+      "text": "The manifest is canonical for patch audit metadata; forkctl deterministically generates the tracked `PATCHES.md` ledger and verification rejects byte drift.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "status",
+      "text": "`status` is read-only, explains branch, remotes, bases, stack order, dirty state, lease state, recovery state, and verification outcome, and offers stable JSON output.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "new",
+      "text": "`new` creates and positions a documented empty StGit patch with matching trailers, updates manifest and ledger bookkeeping in the final bookkeeping patch, and leaves implementation edits to the operator.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "verify",
+      "text": "`verify` fails closed on dirty state, wrong downstream branch, remote drift, base drift, patch-order drift, unapplied patches, undeclared per-patch paths, trailer drift, ledger drift, export drift, reconstruction drift, or missing source contracts.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "rebase-recovery",
+      "text": "Before replay, `rebase` captures the old base and tip, records the exact downstream remote SHA, and creates a unique immutable annotated recovery tag without moving an existing tag.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "rebase-evidence",
+      "text": "`rebase` delegates replay to `stg rebase --merged`, preserves normal conflict state, verifies the resulting stack, and writes a Git-private no-color range-diff report that identifies old and new bases and tips.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "separate-publication",
+      "text": "Rebase never publishes; publication remains a separate explicit command after structural and consumer-specific review.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "exact-lease-publish",
+      "text": "`publish` verifies first and atomically pushes the recovery tag and declared downstream branch with an exact `--force-with-lease=<ref>:<captured-sha>`; it never uses plain `--force` or an implicit lease.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "publish-verification",
+      "text": "Publication fails rather than falling back when atomic push is unsupported or the remote advanced, and success is confirmed by reading both remote refs before local pending state is cleared.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "real-integration-tests",
+      "text": "The test suite uses disposable real Git and StGit repositories to cover clone initialization, idempotency, tooling-only stacks, dirty and wrong-branch rejection, metadata/path/export drift, no-op and changed rebases, conflicts and recovery tags, exact-lease rejection, and successful publication.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "delegation-boundary",
+      "text": "Forkctl remains narrow Rust policy code over the supported `git` and `stg` CLIs and does not implement VCS or conflict semantics itself.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": false,
+      "automatedVerification": false
+    },
+    {
+      "id": "version-release",
+      "text": "The next version is `0.0.3`, synchronized from `[workspace.package].version`, and is published through the existing local release path after all gates pass.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "release-workflow-deferred",
+      "text": "This work adds no release workflow or native asset matrix; those wait for the shared workflow collection and will use GitHub-hosted default runners because forkctl is public.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": false,
+      "automatedVerification": false
+    },
+    {
+      "id": "docs-consistency",
+      "text": "README, examples, embedded instructions, remote mise tasks, and manifest examples describe the same audited lifecycle and pass the version-synchronization gate.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    }
+  ]
+}

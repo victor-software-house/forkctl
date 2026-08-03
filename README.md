@@ -7,8 +7,6 @@ The repository publishes:
 - `forkctl` — a self-contained Rust binary that validates fork policy and delegates patch operations to `stg`;
 - `tasks/fork.toml` — remote mise tasks exposing `fork:init`, `fork:verify`, and `fork:rebase` with every tool dependency declared.
 
-The standalone [forkctl 0.1 proposal](docs/forkctl-0.1-proposal.md) defines the researched target contract, manifest schema 2, safety algorithms, mise delivery, test strategy, and Zed migration.
-
 ## Consumer setup
 
 A fork keeps one manifest and its exported patches, then pins this task catalog:

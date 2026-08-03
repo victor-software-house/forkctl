@@ -1,0 +1,24 @@
+# Facts
+
+- The work changes only forkctl; it does not inspect, migrate, or modify Zed.
+- The manifest remains `schema: 1`, and its current barely released shape is replaced in place without a compatibility reader or migration path.
+- The public lifecycle commands are `init`, `status`, `new`, `verify`, `rebase`, `publish`, and `instructions`.
+- Upstream fetch identity is declared separately from an explicit `rebase --onto <ref>` target, and targets may be branches, tags, or exact commits.
+- A stack containing only tooling patches is valid; its reconstructed source top and source tree are the declared stack base.
+- Every patch declares a purpose, upstream status, drop condition, kind, and allowed paths, and verification requires matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` commit trailers.
+- The manifest is canonical for patch audit metadata; forkctl deterministically generates the tracked `PATCHES.md` ledger and verification rejects byte drift.
+- `status` is read-only, explains branch, remotes, bases, stack order, dirty state, lease state, recovery state, and verification outcome, and offers stable JSON output.
+- Human status uses color only when stdout is a terminal and `NO_COLOR` is absent; redirected and JSON output contain no ANSI escapes.
+- `new` creates and positions a documented empty StGit patch with matching trailers, updates manifest and ledger bookkeeping in the final bookkeeping patch, and leaves implementation edits to the operator.
+- `verify` fails closed on dirty state, wrong downstream branch, remote drift, base drift, patch-order drift, unapplied patches, undeclared per-patch paths, trailer drift, ledger drift, export drift, reconstruction drift, or missing source contracts.
+- `rebase` rejects a dirty worktree before fetch, lease capture, or recovery-tag creation and never stashes operator changes.
+- Before replay, `rebase` captures the old base and tip, records the exact downstream remote SHA, and creates a unique immutable annotated recovery tag without moving an existing tag.
+- `rebase` delegates replay to `stg rebase --merged`, preserves normal conflict state, verifies the resulting stack, and writes a Git-private no-color range-diff report that identifies old and new bases and tips.
+- Rebase never publishes; publication remains a separate explicit command after structural and consumer-specific review.
+- `publish` verifies first and atomically pushes the recovery tag and declared downstream branch with an exact `--force-with-lease=<ref>:<captured-sha>`; it never uses plain `--force` or an implicit lease.
+- Publication fails rather than falling back when atomic push is unsupported or the remote advanced, and success is confirmed by reading both remote refs before local pending state is cleared.
+- The test suite uses disposable real Git and StGit repositories to cover clone initialization, idempotency, tooling-only stacks, dirty and wrong-branch rejection, metadata/path/export drift, no-op and changed rebases, conflicts and recovery tags, exact-lease rejection, and successful publication.
+- Forkctl remains narrow Rust policy code over the supported `git` and `stg` CLIs and does not implement VCS or conflict semantics itself.
+- The next version is `0.0.3`, synchronized from `[workspace.package].version`, and is published through the existing local release path after all gates pass.
+- This work adds no release workflow or native asset matrix; those wait for the shared workflow collection and will use GitHub-hosted default runners because forkctl is public.
+- README, examples, embedded instructions, remote mise tasks, and manifest examples describe the same audited lifecycle and pass the version-synchronization gate.

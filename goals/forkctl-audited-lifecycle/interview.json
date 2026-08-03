@@ -1,0 +1,111 @@
+{
+  "stage": "interview",
+  "title": "Forkctl Audited Lifecycle",
+  "goalSlug": "forkctl-audited-lifecycle",
+  "questions": [
+    {
+      "id": "schema-compatibility",
+      "prompt": "How should the expanded manifest coexist with the schema-1 manifests already used by released consumers?",
+      "description": "The next version remains a patch release, while schema 1 has a live producer in Ghostty.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Keep schema 1 fully supported and introduce schema 2 for the audited lifecycle; reject only operations that require fields unavailable in schema 1.",
+      "recommendedOptionIds": ["dual-schema"],
+      "options": [
+        {
+          "id": "dual-schema",
+          "label": "Support schemas 1 and 2",
+          "description": "Preserves 0.0.2 consumers while making the stronger contract explicit. Recommended."
+        },
+        {
+          "id": "extend-schema-1",
+          "label": "Extend schema 1 in place",
+          "description": "Avoids a schema number change but weakens the meaning of existing schema-1 documents."
+        },
+        {
+          "id": "schema-2-only",
+          "label": "Require schema 2",
+          "description": "Simplest implementation, but intentionally breaks existing consumers in a patch release."
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "release-boundary",
+      "prompt": "What should happen after the forkctl-only implementation and tests pass?",
+      "description": "The shared release-workflow collection and native build matrix are explicitly deferred.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Prepare and publish 0.0.3 through the existing local crates.io/GitHub release path, while deferring only the new CI workflow and asset matrix.",
+      "recommendedOptionIds": ["publish-local"],
+      "options": [
+        {
+          "id": "publish-local",
+          "label": "Publish 0.0.3 locally",
+          "description": "Use the existing release path; add no workflow or matrix. Recommended if the feature should become consumable now."
+        },
+        {
+          "id": "prepare-only",
+          "label": "Prepare 0.0.3 only",
+          "description": "Commit and verify the versioned implementation but wait for the workflow collection before publishing."
+        },
+        {
+          "id": "implementation-only",
+          "label": "Do not bump yet",
+          "description": "Land implementation on main at 0.0.2 and decide release mechanics later."
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "new-command",
+      "prompt": "What should `forkctl new` leave behind for the operator?",
+      "description": "The command must keep the final bookkeeping patch last while creating a fully documented downstream patch.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Create and position an empty StGit patch with required trailers, update manifest and generated ledger in the bookkeeping patch, then leave implementation edits to the operator.",
+      "recommendedOptionIds": ["documented-empty-patch"],
+      "options": [
+        {
+          "id": "documented-empty-patch",
+          "label": "Create documented empty patch",
+          "description": "Establishes identity and audit state before implementation. Recommended."
+        },
+        {
+          "id": "metadata-only",
+          "label": "Update metadata only",
+          "description": "Do not create the StGit patch until the operator does so manually."
+        },
+        {
+          "id": "defer-new",
+          "label": "Defer `new`",
+          "description": "Ship status, verify, rebase, and publish first."
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "proposal-disposition",
+      "prompt": "How should the existing uncommitted 0.1/Zed proposal be handled?",
+      "description": "It currently conflicts with the forkctl-only patch-release direction and is linked from the README.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Revise it into the authoritative forkctl-only 0.0.3 design, removing the Zed migration and 0.1 release claims while preserving useful sourced research.",
+      "recommendedOptionIds": ["revise-authoritative"],
+      "options": [
+        {
+          "id": "revise-authoritative",
+          "label": "Revise into the 0.0.3 design",
+          "description": "Preserves useful research without keeping a contradictory plan. Recommended."
+        },
+        {
+          "id": "preserve-superseded",
+          "label": "Preserve as superseded research",
+          "description": "Keep it with an explicit superseded banner and write a separate implementation plan."
+        },
+        {
+          "id": "discard-proposal",
+          "label": "Discard it",
+          "description": "Remove the proposal and README link; derive the implementation only from the reviewed goal package."
+        }
+      ],
+      "required": true
+    }
+  ]
+}
