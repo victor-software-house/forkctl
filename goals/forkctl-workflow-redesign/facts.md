@@ -1,0 +1,26 @@
+# Forkctl Workflow Redesign — Facts
+
+- Forkctl remains a policy CLI over installed Git and StGit; it does not implement VCS mechanics.
+- The redesign has no compatibility contract with any prior forkctl manifest, CLI, task, local state, or API.
+- Patch intent is always named explicitly by the operator.
+- One clone has at most one active patch, stored in Git-private typed state.
+- A new patch begins as metadata-only local intent and is materialized on its first refresh, avoiding empty commits.
+- Staged index capture is the default; all-owned and explicit pathspec capture are opt-in.
+- Persistent ownership is named `scope` and uses `globset` semantics; one-shot capture uses Git pathspecs.
+- `patch check` is read-only and composable with any hook manager.
+- `patch refresh` delegates capture to StGit, accepts hook-modified index state, and owns generated evidence/bookkeeping.
+- `patch finish` verifies and clears active state; it does not create another commit.
+- Forkctl does not install or own native Git hooks.
+- VSH's default integration is ordinary forkctl commands composed through mise and Lefthook.
+- Production subprocesses clear Git repository-local environment variables before operating in explicit repositories.
+- Every mutation supports typed planning before execution where it can change files, refs, or local operation state.
+- Rebase and conflicted lower-patch refresh use one typed current-operation journal with status, continue, and abort.
+- Historical dropped patches are grouped by rebase operation and bound to one exact annotated recovery tag object.
+- Every source patch has a deterministic generated export; tooling patches have none.
+- CLI and local JSON API execute the same typed handlers.
+- JSON requests use dotted CLI command paths and command-specific typed arguments.
+- JSON errors have stable codes, structured details, retryability, and optional suggested commands.
+- Forkctl never mutates GitHub branch-protection rules; VSH provisions durable narrow policy externally.
+- The corrective release is 0.0.6 unless another release claims that version before implementation completes.
+- Macterm, Ghostty, and zmx are rebuilt sequentially onto the new contract after the released binary is proven.
+- PR #1 is closed unmerged after its valid findings are reimplemented in the new layered branch.
