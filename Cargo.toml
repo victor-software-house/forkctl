@@ -3,7 +3,7 @@ name = "forkctl"
 version.workspace = true
 edition = "2024"
 rust-version = "1.97"
-description = "Verify and rebase reusable StGit downstream patch stacks"
+description = "Control audited StGit downstream patch stacks"
 license = "MIT"
 repository = "https://github.com/victor-software-house/forkctl"
 homepage = "https://github.com/victor-software-house/forkctl"
@@ -19,7 +19,7 @@ members = ["xtask"]
 resolver = "3"
 
 [workspace.package]
-version = "0.0.2"
+version = "0.0.3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

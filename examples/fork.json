@@ -1,36 +1,57 @@
 {
   "schema": 1,
+  "downstream": {
+    "remote": "origin",
+    "branch": "main",
+    "backup_tag_prefix": "vsh/pre-sync"
+  },
   "upstream": {
     "remote": "upstream",
     "url": "https://github.com/example/project.git",
-    "ref": "upstream/main"
+    "fetch_ref": "refs/heads/main"
   },
-  "bases": {
+  "base": {
+    "label": "refs/tags/v1.2.3",
     "canonical": "0000000000000000000000000000000000000000",
     "stack": "0000000000000000000000000000000000000000"
   },
+  "ledger": "PATCHES.md",
+  "bookkeeping_patch": "fork-tooling",
   "patches": [
     {
       "name": "downstream-change",
+      "kind": "source",
+      "purpose": "Describe why this downstream change exists.",
+      "upstream_status": "not-submitted",
+      "drop_when": "Upstream provides the required behavior.",
+      "paths": [
+        "src/example.rs"
+      ],
       "export": "patches/downstream/0001-downstream-change.patch"
     },
     {
-      "name": "fork-tooling"
+      "name": "fork-tooling",
+      "kind": "tooling",
+      "purpose": "Own downstream fork policy and generated bookkeeping.",
+      "upstream_status": "inappropriate: downstream-only tooling",
+      "drop_when": "The downstream fork is retired.",
+      "paths": [
+        "AGENTS.md",
+        "FORK.md",
+        "PATCHES.md",
+        "mise.toml",
+        "mise.lock",
+        "patches/downstream/*"
+      ]
     }
   ],
   "allow": {
-    "base": [],
-    "tooling": [
-      "AGENTS.md",
-      "FORK.md",
-      "mise.toml",
-      "patches/downstream/*"
-    ]
+    "base": []
   },
   "required": [
     {
-      "path": "include/project.h",
-      "contains": "required_symbol"
+      "path": "FORK.md",
+      "contains": "mise run fork:verify"
     }
   ]
 }

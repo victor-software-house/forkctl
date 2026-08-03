@@ -16,7 +16,7 @@ fn instructions_work_outside_a_repository() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("mise run fork:init"));
-    assert!(stdout.contains("Do not put generic executable fork logic"));
+    assert!(stdout.contains("Do not put generic executable fork lifecycle logic"));
 }
 
 #[test]
@@ -51,9 +51,6 @@ fn invalid_manifest_fails_before_patch_commands() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8(output.stderr)
-            .unwrap()
-            .contains("unsupported manifest schema")
-    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("unsupported manifest schema"), "{stderr}");
 }

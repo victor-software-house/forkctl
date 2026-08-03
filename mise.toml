@@ -5,6 +5,7 @@ lockfile = true
 
 [tools]
 rust = "1.97.1"
+"cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
 lefthook = "2.1.10"
 gh = "2.95.0"
 

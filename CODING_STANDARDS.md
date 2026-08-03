@@ -8,7 +8,7 @@ Use the installed `git` and `stg` CLIs. Do not reproduce their storage, revision
 
 ### 1.2 Keep the public surface narrow
 
-The stack operations are `init`, `verify`, and `rebase`. Additional commands must be read-only or require a demonstrated cross-fork contract.
+The lifecycle operations are `init`, `status`, `new`, `verify`, `rebase`, and `publish`. New commands require another demonstrated cross-fork contract.
 
 ## 2. Dependencies
 
@@ -32,7 +32,7 @@ Write manifests and exported patches atomically. Stage only files declared by th
 
 ### 3.3 No hidden migrations
 
-Manifest schema changes are explicit. Do not retain fallback readers for obsolete schemas without a current producer and removal condition.
+The current manifest contract is `schema: 1`. Do not add compatibility readers or migrations for the pre-0.0.3 shape.
 
 ## 4. Verification
 
@@ -42,4 +42,4 @@ Formatting, Clippy with denied warnings, and tests must pass before release.
 
 ### 4.2 Consumer proof
 
-Every release must be exercised through mise from a clean fork clone, including metadata initialization and deterministic patch reconstruction.
+Every release must be exercised through mise against disposable real Git/StGit remotes, including metadata initialization, deterministic reconstruction, rebase evidence, exact-lease rejection, and successful publication.

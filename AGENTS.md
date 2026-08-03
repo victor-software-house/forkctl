@@ -11,13 +11,15 @@ Reusable downstream-fork maintenance for StGit patch stacks.
 
 ## Invariants
 
-- Keep exactly three stack operations: `init`, `verify`, and `rebase`; `instructions` is a read-only workflow reference for humans and coding agents.
+- Keep exactly these public lifecycle operations: `init`, `status`, `new`, `verify`, `rebase`, and `publish`; `instructions` is read-only workflow guidance.
+- `schema: 1` is the single manifest contract. Do not add a compatibility reader or migration fallback for the pre-0.0.3 shape.
 - No runtime language, package manager, config parser, or shell-library dependency beyond the mise-provisioned `forkctl`, `git`, and `stg` executables.
 - Remote task and release versions are immutable. Consumers pin the remote catalog by commit or release tag.
-- `verify` must fail closed on dirty worktrees, missing tools, remote drift, patch-order drift, undeclared paths, missing source contracts, or non-reconstructable exports.
-- `rebase` may update only declared base pins and exported source patches before refreshing the top tooling patch.
+- `verify` must fail closed on dirty worktrees, wrong branch/tracking, missing tools, remote drift, base drift, patch-order drift, unapplied or empty patches, undeclared per-patch paths, trailer/ledger/export drift, missing source contracts, or non-reconstructable exports.
+- Mutating commands never stash. Rebase creates recovery and exact-lease state before replay, never publishes, and preserves normal StGit conflict state.
+- `publish` requires verification and exact pending evidence, uses atomic explicit-ref publication with an exact force-with-lease, and has no non-atomic or plain-force fallback.
 - Keep `main.rs` as wiring; implementation modules stay bounded by responsibility.
-- Keep examples synchronized with the released task catalog and manifest schema.
+- Keep examples, generated instructions, and the task catalog synchronized with the manifest contract.
 - `[workspace.package].version` is the only version source. Never hand-edit task/example version copies; run `mise run version:sync` and let Lefthook stage the result.
 
 ## Checks

@@ -5,13 +5,18 @@ use anyhow::{Result, ensure};
 impl App {
     pub fn init(&mut self) -> Result<()> {
         self.require_clean()?;
+        self.require_declared_branch()?;
+        ensure!(
+            self.read_pending()?.is_none(),
+            "a forkctl operation is already pending"
+        );
+
         let upstream = &self.manifest.upstream;
         match capture(&self.repo, "git", ["remote", "get-url", &upstream.remote]) {
             Ok(actual) => ensure!(
                 actual == upstream.url,
-                "remote {} is {}, expected {}",
+                "remote {} is {actual}, expected {}",
                 upstream.remote,
-                actual,
                 upstream.url
             ),
             Err(_) => run(
@@ -26,6 +31,7 @@ impl App {
             ["remote", "set-url", "--push", &upstream.remote, "DISABLED"],
         )?;
         self.fetch_upstream(true)?;
+        self.fetch_base_label(true)?;
 
         let actual = self.stg_series()?;
         let expected = self.manifest.patch_names();

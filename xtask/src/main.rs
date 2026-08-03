@@ -25,7 +25,7 @@ fn run() -> Result<(), String> {
     let version = env!("CARGO_PKG_VERSION");
 
     sync_file(&root.join("tasks/fork.toml"), check, |contents| {
-        replace_values(contents, TOOL_MARKER, version, 3)
+        replace_values(contents, TOOL_MARKER, version, 6)
     })?;
     sync_file(&root.join("examples/mise.toml"), check, |contents| {
         replace_values(contents, REF_MARKER, version, 1)

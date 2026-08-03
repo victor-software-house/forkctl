@@ -1,84 +1,149 @@
-use super::{App, relative_to, write_atomic};
-use crate::process::{capture, output, run, succeeds};
+use super::{App, write_atomic};
+use crate::process::{capture, run};
+use crate::state::{PendingOperation, PendingState};
 use anyhow::{Context, Result, ensure};
-use std::ffi::{OsStr, OsString};
-use std::fs;
+use std::fmt::Write;
 use std::path::PathBuf;
 
-const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
-
 impl App {
-    pub fn rebase(&mut self) -> Result<()> {
+    pub fn rebase(&mut self, target: &str) -> Result<()> {
+        self.require_clean()?;
+        self.require_declared_branch()?;
+        if let Some(pending) = self.read_pending()? {
+            ensure!(
+                pending.operation == PendingOperation::Rebase,
+                "a {:?} operation is already pending",
+                pending.operation
+            );
+            ensure!(
+                pending.target_label.as_deref() == Some(target),
+                "pending rebase targets {}, not {target}",
+                pending.target_label.as_deref().unwrap_or("unknown")
+            );
+            return self.finish_rebase(pending);
+        }
+
         self.verify()?;
         self.fetch_upstream(false)?;
-        run(
-            &self.repo,
-            "stg",
-            ["rebase", "--merged", &self.manifest.upstream.git_ref],
-        )?;
+        let target_sha = self.resolve_target(target)?;
+        let mut pending = self.create_recovery(PendingOperation::Rebase)?;
+        pending.target_label = Some(target.to_string());
+        pending.target_sha = Some(target_sha.clone());
+        self.write_pending(&pending)?;
 
+        if let Err(error) = run(&self.repo, "stg", ["rebase", "--merged", &target_sha]) {
+            eprintln!(
+                "forkctl: rebase stopped; recovery tag: {}",
+                pending.backup_tag
+            );
+            eprintln!(
+                "forkctl: resolve with stg add --update, stg refresh, and stg goto {}; then rerun forkctl rebase --onto {target}",
+                self.manifest.bookkeeping_patch
+            );
+            return Err(error).context("StGit rebase stopped");
+        }
+        self.finish_rebase(pending)
+    }
+
+    fn finish_rebase(&mut self, mut pending: PendingState) -> Result<()> {
+        let target_sha = pending
+            .target_sha
+            .as_deref()
+            .context("pending rebase has no target SHA")?;
+        ensure!(
+            capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? == "0",
+            "rebase is incomplete; apply all patches before resuming"
+        );
         let new_base = capture(&self.repo, "stg", ["id", "{base}"])?;
-        let expected_top = &self
-            .manifest
-            .patches
-            .last()
-            .expect("validated patches")
-            .name;
+        ensure!(
+            new_base == target_sha,
+            "StGit base is {new_base}, expected {target_sha}"
+        );
         let actual_top = capture(&self.repo, "stg", ["top"])?;
         ensure!(
-            actual_top == *expected_top,
-            "top patch is {actual_top}, expected {expected_top}"
+            actual_top == self.manifest.bookkeeping_patch,
+            "top patch is {actual_top}, expected {}",
+            self.manifest.bookkeeping_patch
         );
 
-        let export_dir = tempfile::tempdir().context("create patch export directory")?;
-        let template_path = export_dir.path().join("patchexport.tmpl");
-        fs::write(&template_path, EXPORT_TEMPLATE)
-            .with_context(|| format!("write {}", template_path.display()))?;
-        let mut exported = Vec::new();
+        self.manifest.base.label = pending
+            .target_label
+            .clone()
+            .context("pending rebase has no target label")?;
+        self.manifest.base.stack.clone_from(&new_base);
+        self.manifest.base.canonical = capture(
+            &self.repo,
+            "git",
+            [
+                "merge-base",
+                &new_base,
+                self.upstream_tracking_ref().as_str(),
+            ],
+        )?;
+        let exports = self.write_exports()?;
+        self.write_manifest()?;
+        let ledger = self.write_ledger()?;
+        let paths = std::iter::once(self.manifest_path.clone())
+            .chain(std::iter::once(ledger))
+            .chain(exports)
+            .collect::<Vec<PathBuf>>();
+        self.stage_and_refresh_bookkeeping(&paths)?;
+
+        let new_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+        pending.new_base = Some(new_base.clone());
+        pending.new_tip = Some(new_tip.clone());
+        self.write_pending(&pending)?;
+        self.verify()?;
+
+        let range = capture(
+            &self.repo,
+            "git",
+            [
+                "range-diff",
+                "--no-color",
+                &format!("{}..{}", pending.old_base, pending.old_tip),
+                &format!("{new_base}..{new_tip}"),
+            ],
+        )?;
+        let report_path = self.report_path(&new_tip)?;
+        let report = self.render_report(&pending, &new_base, &new_tip, &range)?;
+        write_atomic(&report_path, report.as_bytes())?;
+        pending.report = Some(report_path.display().to_string());
+        self.write_pending(&pending)?;
+        println!("forkctl: rebased and verified at {new_base}");
+        println!("forkctl: recovery tag: {}", pending.backup_tag);
+        println!("forkctl: review report: {}", report_path.display());
+        println!("forkctl: run consumer semantic checks before forkctl publish");
+        Ok(())
+    }
+
+    fn report_path(&self, new_tip: &str) -> Result<PathBuf> {
+        let short = new_tip.get(..12).context("new tip is not a full SHA")?;
+        self.git_private_path(&format!("forkctl/rebases/{short}.md"))
+    }
+
+    fn render_report(
+        &self,
+        pending: &PendingState,
+        new_base: &str,
+        new_tip: &str,
+        range: &str,
+    ) -> Result<String> {
+        let mut export_lines = String::new();
         for patch in self.manifest.exported_patches() {
             let relative = patch.export.as_ref().expect("exported patch");
-            let patch_output = output(
-                &self.repo,
-                "stg",
-                [
-                    OsStr::new("export"),
-                    OsStr::new("--stdout"),
-                    OsStr::new("--template"),
-                    template_path.as_os_str(),
-                    OsStr::new(&patch.name),
-                ],
-            )?;
-            let target = self.repo.join(relative);
-            write_atomic(&target, &patch_output.stdout)?;
-            exported.push(target);
+            let hash = capture(&self.repo, "git", ["hash-object", relative])?;
+            writeln!(export_lines, "- `{relative}` — `{hash}`")?;
         }
-
-        self.manifest.bases.canonical.clone_from(&new_base);
-        self.manifest.bases.stack.clone_from(&new_base);
-        self.write_manifest()?;
-
-        let paths = std::iter::once(self.manifest_path.as_path())
-            .chain(exported.iter().map(PathBuf::as_path))
-            .map(|path| relative_to(&self.repo, path))
-            .collect::<Result<Vec<_>>>()?;
-        let mut add_args = vec![OsString::from("add"), OsString::from("--")];
-        add_args.extend(paths.iter().cloned().map(OsString::from));
-        run(&self.repo, "git", add_args)?;
-
-        let diff_args = vec![
-            OsString::from("diff"),
-            OsString::from("--cached"),
-            OsString::from("--quiet"),
-            OsString::from("--"),
-        ]
-        .into_iter()
-        .chain(paths.into_iter().map(OsString::from))
-        .collect::<Vec<_>>();
-        if !succeeds(&self.repo, "git", diff_args)? {
-            run(&self.repo, "stg", ["refresh", "--index"])?;
+        if export_lines.is_empty() {
+            export_lines.push_str("- None\n");
         }
-        self.verify()?;
-        println!("forkctl: rebased and verified at {new_base}");
-        Ok(())
+        Ok(format!(
+            "# Forkctl Rebase Review\n\n- Target: `{}`\n- Old base: `{}`\n- Old tip: `{}`\n- New base: `{new_base}`\n- New tip: `{new_tip}`\n- Recovery tag: `{}`\n- Structural verification: passed\n- Semantic verification: pending consumer checks\n\n## Exports\n\n{export_lines}\n## Range diff\n\n```diff\n{range}\n```\n",
+            pending.target_label.as_deref().unwrap_or("unknown"),
+            pending.old_base,
+            pending.old_tip,
+            pending.backup_tag
+        ))
     }
 }
