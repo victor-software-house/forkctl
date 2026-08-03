@@ -1,0 +1,121 @@
+# Forkctl Workflow Redesign — Requirements
+
+## Objective
+
+Deliver a from-scratch forkctl contract that makes explicit downstream patch work fast, safe, composable, and fully scriptable. An operator chooses patch intent; forkctl validates and performs the repetitive StGit, evidence, bookkeeping, and publication work.
+
+## Invariants
+
+1. Git commits/refs and StGit patches remain canonical repository mechanics.
+2. Forkctl never infers patch intent or owner from changed paths.
+3. One clone may have at most one explicitly active patch.
+4. Domain handlers return typed data only; input and output protocols never leak into repository logic.
+5. Pretty CLI and JSON/API output consume the same typed results and errors.
+6. Mutations never stash operator changes.
+7. Repository-wide verify, rebase, and publish fail on an unclean worktree, incomplete active patch, or unresolved operation.
+8. Every source patch has a deterministic generated export; tooling patches do not reconstruct product source.
+9. Recovery tags are immutable annotated objects and every historical removal names the exact tag object preserving its old stack.
+10. Publication is one atomic explicit-ref push with an exact lease and no fallback.
+11. Forkctl never edits provider branch-protection policy.
+12. No previous format or command receives compatibility support.
+
+## CLI Requirements
+
+### Global behavior
+
+- `--manifest PATH` selects the manifest; `FORK_MANIFEST` remains the environment alternative.
+- `--format pretty|json` selects one output representation. There is no `--json` alias.
+- `--color auto|always|never` controls pretty output only and respects `NO_COLOR`.
+- `--quiet` suppresses non-error pretty output; JSON remains complete.
+- Mutating commands that support planning expose `--dry-run`; planning executes all reads and validation but performs no writes, ref changes, or hooks.
+- Destructive recovery requires `--yes` in non-interactive contexts and displays the exact discarded state in pretty mode.
+- Invalid CLI syntax exits 2; actionable repository/policy failure exits 1; success exits 0. Machine callers use typed error codes rather than additional exit-code taxonomy.
+
+### Core lifecycle
+
+- With no manifest, `forkctl init` bootstraps a new contract from explicit upstream/downstream/base/document/bookkeeping arguments, requires the branch to equal the selected base, creates the initial bookkeeping patch, and writes the first verified manifest/ledger. It never imports or interprets legacy commits.
+- With a manifest, `forkctl init` idempotently hydrates StGit metadata and exact historical recovery refs in a fresh clone.
+- `forkctl status` reports repository identity, base/target, patch series, active patch, staged/unstaged paths, verification summary, and current operation without mutation.
+- `forkctl verify` performs the complete offline structural, audit, export, history, and reconstruction gate.
+- `forkctl rebase --onto REF` starts or completes a journaled upstream replay and never publishes.
+- `forkctl publish` requires complete verification and atomically publishes the branch and exact recovery tag under the recorded lease.
+- `forkctl instructions` emits the generated consumer/operator contract.
+
+### Patch family
+
+- `patch list` returns ordered patch summaries and active state.
+- `patch show [NAME]` returns one patch; omission selects the active patch and fails if none is active.
+- `patch create NAME` records complete patch metadata and selects it as the active draft without creating an empty commit; repeated `--scope GLOB` values declare ownership.
+- `patch select NAME` selects an existing patch locally and performs no repository mutation.
+- `patch edit [NAME]` updates purpose, upstream status, drop condition, kind, and ownership scope through explicit set/add/remove-scope arguments; it updates commit trailers and bookkeeping atomically.
+- `patch check [NAME]` validates staged paths against the named/active patch without mutation and can require an active patch for strict hook policies.
+- `patch refresh [NAME]` captures the index by default. `--all` captures the explicitly allowed working-tree set; repeated `--path PATHSPEC` captures only those paths. The modes are mutually exclusive.
+- `patch refresh` validates ownership before invoking `stg refresh --patch ... --index`, regenerates source exports/ledger/manifest, refreshes bookkeeping, restores the fully applied series, and returns a typed result.
+- `patch finish [NAME]` requires no remaining staged/unstaged changes, runs full verification, and clears active state. It does not create another commit.
+- `patch delete NAME` is not in the first implementation; upstream-merged deletion remains rebase-owned. Add manual deletion only after a concrete workflow requires it.
+
+### Operation family
+
+- `operation status` returns the current operation and exact next actions.
+- `operation continue` resumes the current operation after operator conflict resolution.
+- `operation abort --yes` restores the recorded recovery point through supported Git/StGit commands, verifies the restored stack, and clears current-operation state.
+- Completed operations remain represented by Git refs/reports/manifest history; forkctl does not build a generalized Jujutsu-style operation database.
+
+### Check and integration family
+
+- Forkctl's reusable hook primitive is `patch check --staged`; it receives optional path arguments but can query the index itself.
+- Pre-push integration calls ordinary `forkctl verify`.
+- Commit-message validation is provided as `patch check-message FILE [NAME]` only if implementation evidence shows it catches a gap not already covered by generated messages and full verification.
+- The repository publishes exact mise tasks for checks, refresh, verification, and hook installation/validation.
+- The repository publishes a small Lefthook preset or documented local snippet using those mise tasks. It never overwrites consumer hook configuration or claims `core.hooksPath`.
+
+## Manifest Requirements
+
+- The new manifest uses `schema: 1` as the first and only contract.
+- Downstream and upstream identities use full remote/branch/ref values.
+- Base target provenance stores kind, selector, resolved commit, and annotated tag object when applicable.
+- Patch records store name, kind, purpose, upstream status, drop condition, and complete ownership `scope` globs. Scope uses documented `globset` semantics: `*` stays within one path segment and `**` crosses directories.
+- Source export paths are deterministic from one configured export directory and patch order/name; they are not copied into every patch record.
+- One final tooling patch owns manifest, ledger, task/hook configuration, and generated exports.
+- Rebase history is operation-level: one target and one exact recovery object own a list of dropped patch snapshots/commits.
+- Required-text and allowed-base contracts remain declarative.
+- Direct manual manifest edits are unsupported during normal operation; `init`, `patch edit`, `rebase`, and generated bookkeeping own writes.
+
+## Hook and Process Requirements
+
+- Every production subprocess clears only repository-local variables returned by `git rev-parse --local-env-vars` before operating by explicit working directory. Transport/auth variables such as `GIT_SSH_COMMAND` remain available.
+- Tests launch forkctl with synthetic hook variables intact and prove nested clones and foreign repositories are isolated.
+- Checks never stage or rewrite files.
+- `patch refresh` may intentionally invoke StGit, whose pre-commit hook may modify the index; forkctl must consume the final post-hook index exactly as StGit does.
+- Hook policy is configurable by arguments/configuration. Forkctl provides strict VSH defaults without making strictness unavoidable for other operators.
+
+## JSON API Requirements
+
+- `api schema` emits JSON Schema 2020-12 for invocation and response.
+- `api call` reads one invocation and emits exactly one response; subprocess and human output never contaminate stdout.
+- Requests use a discriminated command string matching CLI paths, such as `patch.refresh` and `operation.abort`, with command-specific typed `arguments`.
+- Every mutation carries `mode: execute|plan`; read-only commands reject a non-execute mode as invalid rather than ignoring it.
+- Success responses include protocol version, command, typed result, notices, and optional operation ID.
+- Error responses include stable code, message, causes, structured details, retryability, and an optional suggested command.
+- Domain error codes distinguish invalid request, invalid manifest, dirty worktree, active-patch requirement, staged-path violation, patch absence, operation conflict, verification failure, remote advancement, publication-policy rejection, subprocess failure, and internal failure.
+- CLI adapters construct the same request types executed by `api call`; no command has a CLI-only handler.
+
+## Verification Requirements
+
+- Unit tests cover manifest/state validation, capture-mode parsing, deterministic export names, typed errors, and renderer snapshots.
+- Architecture tests reject output/view dependencies and raw subprocess construction outside the process module.
+- CLI/API parity tests cover every command and plan/execute mode.
+- Hook-context tests preserve synthetic repository-local `GIT_*` variables at forkctl process entry.
+- Real lifecycle tests cover create/select/edit/check/refresh/finish, lower-patch refresh, hook-modified index, ownership rejection, conflict recovery, abort, rebase, merged-patch history, fresh-clone history hydration, exact lease, branch-policy rejection, and atomic publication.
+- History tests delete, retarget, and substitute recovery refs and require all cases to fail.
+- Released-binary tests exercise the complete disposable lifecycle, not only `--version`.
+
+## Fleet Completion
+
+1. Release and independently verify the new forkctl patch version.
+2. Rebuild each consumer stack from its upstream base with the new `init` plus explicit `patch create`/`refresh`; do not add a generic legacy import command.
+3. Migrate Macterm to the new manifest, commands, hooks, and immutable catalog.
+4. Migrate Ghostty directly from its old format to the new contract with no reader or migration code retained.
+5. Migrate zmx's inherited downstream commits into named source/tooling patches.
+6. Verify each repository from a fresh private clone before advancing.
+7. Establish durable VSH branch-rule policy for the three approved forkctl repositories.
