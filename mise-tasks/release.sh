@@ -32,13 +32,33 @@ cp target/release/forkctl "$work/forkctl"
 asset="$work/forkctl_${version}_${os}_${arch}.tar.gz"
 tar czf "$asset" -C "$work" forkctl
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+published=false
+if cargo info "forkctl@$version" >/dev/null 2>&1; then
+  published=true
+fi
+if [ "$published" = false ] && [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+  printf 'release: CARGO_REGISTRY_TOKEN is required before creating release state\n' >&2
+  exit 1
+fi
 
 if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
-  [ "$(gh api "repos/$repo/commits/$tag" --jq .sha)" = "$head" ] || { printf 'release: existing tag targets another commit\n' >&2; exit 1; }
-  gh release upload "$tag" "$asset" --repo "$repo"
+  draft=$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft)
+  if [ "$draft" = true ]; then
+    target=$(gh release view "$tag" --repo "$repo" --json targetCommitish --jq .targetCommitish)
+    [ "$target" = "$head" ] || { printf 'release: existing draft targets another commit\n' >&2; exit 1; }
+  else
+    [ "$(gh api "repos/$repo/commits/$tag" --jq .sha)" = "$head" ] || { printf 'release: existing tag targets another commit\n' >&2; exit 1; }
+  fi
+  gh release upload "$tag" "$asset" --repo "$repo" --clobber
 else
+  draft=true
   gh release create "$tag" "$asset" --repo "$repo" --target "$head" --title "forkctl $version" --notes "Native forkctl release $version." --draft
-  cargo publish --locked
+fi
+
+if [ "$draft" = true ]; then
+  if [ "$published" = false ]; then
+    cargo publish --locked
+  fi
   gh release edit "$tag" --repo "$repo" --draft=false
 fi
 
