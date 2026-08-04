@@ -1053,7 +1053,7 @@ fn stg_capture(repo: &std::path::Path, args: [&str; 3]) -> String {
 }
 
 fn stg_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
-    let output = std::process::Command::new("stg")
+    let output = support::isolated_command("stg")
         .args(args)
         .current_dir(repo)
         .output()
