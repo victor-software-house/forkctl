@@ -4,7 +4,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 
 ## Execution Checkpoint — 2026-08-03
 
-The contract is approved and implementation is active on `feat/forkctl-workflow-protocol`. PR #1 is closed unmerged. The repository currently compiles cleanly, passes denied-warning Clippy, and passes 46 tests through `mise run verify`.
+The contract is approved and released as forkctl 0.0.6 from `bde4e163f0e077c3bbe1555d34b3fb325c460b24`. PR #1 remains closed unmerged; PR #2 was reviewed, rebased onto `main`, and merged. The clean repository compiles, passes denied-warning Clippy, and passes 46 tests through `mise run verify`.
 
 ### Implemented and verified
 
@@ -20,10 +20,12 @@ The contract is approved and implementation is active on `feat/forkctl-workflow-
 - Root `mise.toml` is the sole source for minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. `[workspace.package].version` remains the sole forkctl release source. `version:sync` regenerates the lockfile and all operational copies; `version:check` rejects drift.
 - Real mise tests prove raw-proxy help/cwd/stream/exit parity and bash/fish/Nushell/PowerShell/zsh mounted completion with live patch/ref candidates; real Lefthook pre-push and staged pre-commit composition passes.
 - Publication tests prove stale leases, conflicting tags, protected-branch rejection, and remotes without atomic capability leave both refs unchanged, retain the operation, return typed errors, and never retry without `--atomic`.
+- Forkctl 0.0.6 is published on crates.io and GitHub. The macOS arm64 asset digest `c2c435184d85c214ac3ea784cd812ef230221d9de958271e4644c5ebb1346c2d` was downloaded, compared, extracted, and executed. A clean `cargo install forkctl --version 0.0.6 --locked` reports 0.0.6.
+- The immutable `v0.0.6` remote task catalog loads from GitHub, provisions forkctl 0.0.6, renders direct colored help, and exposes mounted command completion through real mise/Usage.
 
 ### Remaining implementation blockers
 
-1. **Review and release** — split the currently uncommitted rewrite into coherent green commits, run architecture/security/release/silent-failure review, resolve findings, release 0.0.6, verify published artifacts, then migrate Macterm, Ghostty, and zmx sequentially.
+1. **Sequential fleet migration** — rebuild Macterm, Ghostty, and zmx onto 0.0.6 one repository at a time, run every repository-specific gate, publish atomically, and prove each fresh clone before starting the next.
 
 ### Execution order
 
