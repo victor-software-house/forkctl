@@ -190,6 +190,19 @@ Without a manifest, `init` requires explicit repository/base/document/bookkeepin
 
 With a manifest, `init` idempotently reconstructs StGit metadata and fetches only exact recovery refs named by history before running the full check.
 
+## Agent skill
+
+The portable [`forkctl` Agent Skill](skills/forkctl/SKILL.md) teaches compatible coding agents to use the installed CLI safely: explicit patch intent, staged capture, checks, operation recovery, rebase review, exact-lease publication, and typed automation.
+
+List or install it with the [Skills CLI](https://skills.sh/):
+
+```sh
+npx skills add victor-software-house/forkctl --list
+npx skills add victor-software-house/forkctl --skill forkctl
+```
+
+Add `--global` when the skill should be available outside one project, and use the agent selector offered by the installer when targeting a specific runtime.
+
 ## Direct installation
 
 ```sh

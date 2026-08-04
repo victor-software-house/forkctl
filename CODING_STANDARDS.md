@@ -53,6 +53,7 @@ The current manifest/API/local-state contract is `schema: 1`. There are no previ
 - JSON stdout is exactly one envelope; pretty errors use stderr.
 - Help, Usage spec, completions, and schemas are generated from Clap/Schemars types.
 - Stable error codes/details are chosen at domain boundaries, never by parsing arbitrary error strings when a typed classification is available.
+- The portable `skills/forkctl/SKILL.md` teaches workflow and safety invariants while deferring exact syntax to installed help/instructions. Validate it as an Agent Skill and through Skills CLI discovery whenever its content changes.
 
 ## 5. Verification
 
