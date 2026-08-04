@@ -50,6 +50,7 @@ An empty staged index succeeds. A nonempty index without a patch target fails. H
 ```text
 init · status · check · rebase · publish · instructions · completion
 patch list|show|create|select|edit|refresh|finish
+contract edit
 operation status|continue|abort
 api schema|call
 ```

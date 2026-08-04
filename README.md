@@ -65,6 +65,15 @@ mise run fork patch refresh -n             # semantic dry-run plan
 
 Persistent ownership uses `scope` globs (`*` stays within a segment; `**` crosses directories). One-shot capture uses Git pathspecs. Forkctl never guesses intent.
 
+Declarative contracts may be added after their files exist:
+
+```sh
+mise run fork contract edit -a 'vendor/**' -r 'FORK.md=forkctl check'
+mise run fork contract edit --clear -r 'FORK.md=forkctl check'
+```
+
+Without `--clear`, entries append uniquely. `--clear` explicitly replaces the complete contract set after validating all supplied required text.
+
 ## Check, rebase, and publish
 
 ```sh

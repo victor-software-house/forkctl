@@ -42,6 +42,9 @@ Patch
                        [-n|--dry-run]
   patch finish [NAME] [-n|--dry-run]
 
+Contract
+  contract edit [--clear] [-a|--allow-base GLOB]... [-r|--required-text PATH=TEXT]...
+
 Operation
   operation status
   operation continue [-n|--dry-run]
@@ -54,7 +57,7 @@ API
 
 ### Why core verbs remain top-level
 
-The repository is forkctl's implicit primary resource, so `repo status`, `stack rebase`, and `stack publish` add ceremony without disambiguation. Mature CLIs such as Git, StGit, and mise keep their primary verbs top-level and namespace secondary object families. `patch`, `operation`, and `api` are genuine families and earn subcommands.
+The repository is forkctl's implicit primary resource, so `repo status`, `stack rebase`, and `stack publish` add ceremony without disambiguation. Mature CLIs such as Git, StGit, and mise keep their primary verbs top-level and namespace secondary object families. `patch`, `contract`, `operation`, and `api` are genuine families and earn subcommands.
 
 ### Removed surface
 

@@ -48,6 +48,7 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 - `forkctl rebase --onto REF` starts or completes a journaled upstream replay and never publishes.
 - `forkctl publish` requires a successful full check and atomically publishes the branch and exact recovery tag under the recorded lease.
 - `forkctl instructions` emits the generated consumer/operator contract.
+- `forkctl contract edit` appends declarative allowed-base/required-text contracts, or explicitly clears and replaces the complete set; it validates required files/text before mutation and refreshes bookkeeping through the normal typed plan/execute path.
 
 ### Patch family
 

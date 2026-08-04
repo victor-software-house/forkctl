@@ -120,6 +120,20 @@ fn render_result(output: &mut String, result: &CommandResult) {
             output,
             [("patch", result.patch.clone()), ("check", "passed".into())],
         ),
+        CommandResult::ContractEdit(result) => fields(
+            output,
+            [
+                (
+                    "allowed base globs",
+                    result.contracts.allow_base.len().to_string(),
+                ),
+                (
+                    "required text assertions",
+                    result.contracts.required_text.len().to_string(),
+                ),
+                ("check", "passed".into()),
+            ],
+        ),
         CommandResult::Rebase(result) => render_rebase(output, result),
         CommandResult::Publish(result) => fields(
             output,
