@@ -4,7 +4,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 
 ## Execution Checkpoint — 2026-08-04
 
-The contract is approved and released through forkctl 0.0.8 from `0c90b0c85d40790e6f6605c6fbee6e6bb7e47bf4`. PR #1 remains closed unmerged; PR #2 was reviewed, rebased onto `main`, and merged. Macterm and Ghostty are migrated and published. During the final zmx migration, a live `ready_to_publish` recovery probe exposed that `patch create` and `patch select` could write active state during an operation, after which abort restored old history before failing its active-state check. Forkctl 0.0.9 is the minimal recovery-hardening release: active-state commands reject every in-flight operation, and abort rejects active state before any Git/StGit mutation.
+The contract is approved and released through forkctl 0.0.9 from `a88180ade726189efeb45b05baaaaf02585f5313`. PR #1 remains closed unmerged; PR #2 was reviewed, rebased onto `main`, and merged. Macterm and Ghostty are migrated and published. During the final zmx migration, a live `ready_to_publish` recovery probe exposed that `patch create` and `patch select` could write active state during an operation, after which abort restored old history before failing its active-state check. Forkctl 0.0.9 hardens that boundary: active-state commands reject every in-flight operation, and rebase abort rejects active state before any Git/StGit mutation while patch edit/refresh abort retains its active-intent restoration contract.
 
 ### Implemented and verified
 
@@ -23,11 +23,18 @@ The contract is approved and released through forkctl 0.0.8 from `0c90b0c85d4079
 - Forkctl 0.0.6 is published on crates.io and GitHub. The macOS arm64 asset digest `c2c435184d85c214ac3ea784cd812ef230221d9de958271e4644c5ebb1346c2d` was downloaded, compared, extracted, and executed. A clean `cargo install forkctl --version 0.0.6 --locked` reports 0.0.6.
 - The immutable `v0.0.6` remote task catalog loads from GitHub, provisions forkctl 0.0.6, renders direct colored help, and exposes mounted command completion through real mise/Usage.
 
+### 0.0.9 release evidence
+
+- The focused live regression and all 21 lifecycle tests pass, including the pre-existing patch-refresh abort contract.
+- Full format, denied-warning Clippy, workspace tests, version checks, and release build pass on `macbook-portable`.
+- GitHub release `v0.0.9` and crates.io `forkctl 0.0.9` resolve to `a88180ade726189efeb45b05baaaaf02585f5313`.
+- Downloaded macOS arm64 asset digest: `043eb4d5d439175c1e4cf2541b772f2ff6f660c24cf6701e5a4ff1eef42da526`.
+- Downloaded release binary, clean `cargo install --version 0.0.9 --locked`, and immutable `v0.0.9` mise catalog all report `forkctl 0.0.9`.
+
 ### Remaining implementation blockers
 
-1. **Release 0.0.9** — pass the focused recovery regression, full `mise run verify`, release build, publication, downloaded arm64 binary proof, and immutable catalog proof.
-2. **Fleet repin** — refresh only each repository's `fork-tooling` patch from catalog `v0.0.8` to `v0.0.9`, verify, atomically publish, and fresh-clone prove Macterm, Ghostty, and zmx.
-3. **zmx closeout** — publish the exact arm64 zmx release, remove Macterm's universal download/thinning path, rerun compatibility, and complete the fleet proof.
+1. **Fleet repin** — refresh only each repository's `fork-tooling` patch from catalog `v0.0.8` to `v0.0.9`, verify, atomically publish, and fresh-clone prove Macterm, Ghostty, and zmx.
+2. **zmx closeout** — publish the exact arm64 zmx release, remove Macterm's universal download/thinning path, rerun compatibility, and complete the fleet proof.
 
 ### Execution order
 
