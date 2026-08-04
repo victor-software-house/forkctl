@@ -105,6 +105,7 @@ impl App {
         let operation = self
             .read_operation()?
             .context("no forkctl operation is in progress")?;
+        self.load_operation_manifest()?;
         let plan = MutationPlan {
             command: "operation.abort".into(),
             reads: vec![self.operation_path()?.display().to_string()],
@@ -132,12 +133,14 @@ impl App {
         self.restore_operation_stack(&operation)?;
         self.verify_restored_operation_stack(&operation)?;
         self.manifest = None;
+        self.manifest_error = None;
         let rediscovered = App::discover(
             self.manifest_path
                 .strip_prefix(&self.repo)
                 .unwrap_or(&self.manifest_path),
         )?;
         self.manifest = rediscovered.manifest;
+        self.manifest_error = rediscovered.manifest_error;
         let check = self.check_restored_repository(matches!(
             operation.kind,
             OperationKind::PatchRefresh

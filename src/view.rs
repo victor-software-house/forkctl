@@ -155,7 +155,24 @@ fn render_result(output: &mut String, result: &CommandResult) {
             [
                 ("branch", result.branch.clone()),
                 ("head", result.head.clone()),
-                ("recovery", result.recovery_tag.clone()),
+                (
+                    "publication",
+                    if result.already_published {
+                        "already published".into()
+                    } else if result.fast_forward {
+                        "fast-forward".into()
+                    } else {
+                        "leased rewrite".into()
+                    },
+                ),
+                (
+                    "recovery",
+                    if result.recovery_tags.is_empty() {
+                        "not required".into()
+                    } else {
+                        result.recovery_tags.join(", ")
+                    },
+                ),
                 ("lease", result.expected_lease.clone()),
             ],
         ),

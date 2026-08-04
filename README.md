@@ -113,9 +113,18 @@ mise run fork publish
 
 Rebase creates an immutable annotated recovery tag, captures the remote lease and old ordered stack, delegates to `stg rebase --merged`, generates a Git-private range-diff report, and records dropped patches in operation-level recovery-bound history. It never publishes.
 
-`operation status`, `continue`, and `abort` expose the typed in-flight journal. `operation abort -n` reports the restoration plan; `operation abort -y` restores and checks old state before clearing the journal.
+`operation status`, `continue`, and `abort` expose the typed in-flight journal. `operation abort -n` reports the restoration plan; `operation abort -y` restores and checks old state before clearing the journal. While an operation is in flight, `status`, `operation status`, `operation continue`, and `operation abort` read the Git-private manifest snapshot, so an unreadable tracked manifest cannot block recovery.
 
-Publish performs one atomic explicit-ref push of branch plus recovery tag with an exact lease. There is no force, lease, or atomic fallback and no provider ruleset administration.
+Publish covers every unpublished downstream state, not only rebases:
+
+| Local state versus published branch | Publish behavior |
+|:--|:--|
+| identical | reports `already_published` and pushes nothing |
+| published tip is an ancestor | fast-forward push under an exact lease; no recovery tag required |
+| rewritten history | creates an immutable annotated recovery tag at the **overwritten published tip**, then pushes tag plus branch atomically under an exact lease |
+| rewritten history after a reviewed rebase | reuses the rebase recovery tag when it already preserves the overwritten tip, otherwise publishes both |
+
+Every rewrite requires exact evidence that it was computed against the current published tip: the reviewed rebase lease when an operation journal exists, otherwise the fetched downstream tracking ref. A remote that advanced beyond that evidence fails with `remote_advanced` and changes no ref. There is no force, lease, or atomic fallback and no provider ruleset administration.
 
 ## Hooks
 
@@ -213,7 +222,7 @@ Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and 
 
 Without a manifest, `init` requires explicit repository/base/document/bookkeeping arguments and `HEAD` exactly at the resolved base. Repeatable `--allow-base GLOB` and `--required-text PATH=TEXT` options initialize declarative contracts without manual manifest edits. It creates the initial bookkeeping patch and never imports legacy commits.
 
-With a manifest, `init` idempotently reconstructs StGit metadata and fetches only exact recovery refs named by history before running the full check.
+With a manifest, `init` idempotently reconstructs StGit metadata, skips history recovery tags already present locally at the recorded object, fetches only the exact missing recovery refs named by history, and reports an actionable error naming any recovery tag the downstream remote no longer serves before running the full check.
 
 ## Agent skill
 

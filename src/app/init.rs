@@ -9,11 +9,12 @@ use std::ffi::OsString;
 
 impl App {
     pub fn init(&mut self, args: InitArgs, mode: ExecutionMode) -> Result<CommandResult> {
-        if self.manifest.is_some() {
+        if self.manifest_present() {
             ensure!(
                 !args.is_bootstrap(),
                 "bootstrap options require an absent manifest"
             );
+            self.manifest()?;
             return self.hydrate(mode);
         }
         self.bootstrap(args, mode)
@@ -195,8 +196,14 @@ impl App {
         self.fetch_upstream(true)?;
         self.fetch_target(&manifest.base.target, true)?;
         for recovery in manifest.recovery_evidence() {
+            if self
+                .local_tag_object(&recovery.tag)
+                .is_some_and(|object| object == recovery.tag_object)
+            {
+                continue;
+            }
             let tag_ref = format!("refs/tags/{}", recovery.tag);
-            let refspec = format!("{tag_ref}:{tag_ref}");
+            let refspec = format!("+{tag_ref}:{tag_ref}");
             run(
                 &self.repo,
                 "git",
@@ -207,7 +214,13 @@ impl App {
                     &manifest.downstream.remote,
                     &refspec,
                 ],
-            )?;
+            )
+            .map_err(|error| {
+                crate::error::DomainError::check_failed(format!(
+                    "history recovery tag {} is unavailable from {}: {error}; restore the published recovery tag before hydrating this clone",
+                    recovery.tag, manifest.downstream.remote
+                ))
+            })?;
         }
         let actual = self.stg_series()?;
         let expected = manifest.patch_names();

@@ -815,6 +815,139 @@ fn publish_has_no_fallback_when_remote_lacks_atomic_push() {
     assert_operation_present(&fixture);
 }
 
+#[test]
+fn patch_work_publishes_under_an_exact_lease_with_recovery() {
+    let fixture = Fixture::new();
+    let bootstrap = fixture.forkctl_ok(&["--format", "json", "publish"]);
+    let bootstrap: serde_json::Value = serde_json::from_str(&bootstrap).unwrap();
+    assert_eq!(bootstrap["result"]["fast_forward"], true);
+    assert_eq!(bootstrap["result"]["already_published"], false);
+    assert!(
+        bootstrap["result"]["recovery_tags"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    let published_base = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let head = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    assert_ne!(head, published_base);
+
+    let publish = fixture.forkctl_ok(&["--format", "json", "publish"]);
+    let publish: serde_json::Value = serde_json::from_str(&publish).unwrap();
+    assert_eq!(publish["result"]["already_published"], false);
+    assert_eq!(publish["result"]["fast_forward"], false);
+    assert_eq!(publish["result"]["expected_lease"], published_base);
+    let recovery = publish["result"]["recovery_tags"].as_array().unwrap();
+    assert_eq!(recovery.len(), 1);
+    let tag = recovery[0]
+        .as_str()
+        .unwrap()
+        .split(" -> ")
+        .next()
+        .unwrap()
+        .to_string();
+
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"])
+            .split_whitespace()
+            .next()
+            .unwrap(),
+        head
+    );
+    assert_eq!(
+        git_capture_dynamic(
+            &fixture.repo,
+            &["rev-parse", &format!("refs/tags/{tag}^{{commit}}")]
+        ),
+        published_base,
+        "publication recovery tag must preserve the overwritten remote tip"
+    );
+    assert!(
+        !git_capture_dynamic(
+            &fixture.repo,
+            &["ls-remote", "origin", &format!("refs/tags/{tag}")]
+        )
+        .is_empty(),
+        "publication recovery tag must be published"
+    );
+
+    let again = fixture.forkctl_ok(&["--format", "json", "publish"]);
+    let again: serde_json::Value = serde_json::from_str(&again).unwrap();
+    assert_eq!(again["result"]["already_published"], true);
+}
+
+#[test]
+fn patch_work_rewrite_refuses_an_unfetched_remote_advance() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&["publish"]);
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_downstream(&fixture.repo, "remote advanced\n");
+    let remote_before =
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]);
+
+    let publish = fixture.forkctl(&["--format", "json", "publish"]);
+    assert!(!publish.status.success());
+    let publish: serde_json::Value = serde_json::from_slice(&publish.stdout).unwrap();
+    assert_eq!(publish["error"]["code"], "remote_advanced");
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        remote_before
+    );
+}
+
+#[test]
+fn recovery_commands_survive_an_unreadable_tracked_manifest() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
+    fixture.forkctl_ok(&["patch", "select", "lower"]);
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    assert!(!fixture.forkctl(&["patch", "refresh"]).status.success());
+
+    fs::create_dir_all(fixture.repo.join("patches")).unwrap();
+    fs::write(
+        fixture.repo.join("patches/fork.json"),
+        "<<<<<<< HEAD\nconflict\n=======\nmarkers\n>>>>>>> theirs\n",
+    )
+    .unwrap();
+
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["operation"]["kind"], "patch_refresh");
+    fixture.forkctl_ok(&["--format", "json", "status"]);
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+    assert_eq!(status["result"]["active_patch"]["patch"], "lower");
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn invalid_tracked_manifest_never_bootstraps_a_replacement() {
+    let fixture = Fixture::new();
+    fs::write(fixture.repo.join("patches/fork.json"), "not json\n").unwrap();
+
+    let init = fixture.forkctl(&["--format", "json", "init"]);
+    assert!(!init.status.success());
+    let init: serde_json::Value = serde_json::from_slice(&init.stdout).unwrap();
+    assert_eq!(init["error"]["code"], "manifest_invalid");
+
+    git_ok(&fixture.repo, ["add", "patches/fork.json"]);
+    git_ok(&fixture.repo, ["stash"]);
+    fs::write(fixture.repo.join("patches/fork.json"), "not json\n").unwrap();
+    git_ok(&fixture.repo, ["add", "patches/fork.json"]);
+    stg_ok_dynamic(&fixture.repo, &["refresh", "--index"]);
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check["error"]["code"], "manifest_invalid");
+}
+
 fn assert_operation_present(fixture: &Fixture) {
     let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
@@ -917,6 +1050,19 @@ fn capture(repo: &std::path::Path, program: &str, args: &[&str]) -> String {
 
 fn stg_capture(repo: &std::path::Path, args: [&str; 3]) -> String {
     capture(repo, "stg", &args)
+}
+
+fn stg_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
+    let output = std::process::Command::new("stg")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stg {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 fn git_capture(repo: &std::path::Path, args: [&str; 2]) -> String {

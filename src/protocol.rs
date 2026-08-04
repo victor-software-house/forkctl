@@ -647,8 +647,10 @@ pub struct RebaseResult {
 pub struct PublishResult {
     pub branch: String,
     pub head: String,
-    pub recovery_tag: String,
-    pub recovery_tag_object: String,
+    pub already_published: bool,
+    pub fast_forward: bool,
+    pub recovery_tags: Vec<String>,
+    pub pushed_refs: Vec<String>,
     pub expected_lease: String,
 }
 

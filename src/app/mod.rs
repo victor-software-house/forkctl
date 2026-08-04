@@ -27,6 +27,7 @@ pub struct App {
     pub(super) repo: PathBuf,
     pub(super) manifest_path: PathBuf,
     pub(super) manifest: Option<Manifest>,
+    pub(super) manifest_error: Option<String>,
 }
 
 impl App {
@@ -40,20 +41,18 @@ impl App {
         } else {
             repo.join(manifest_arg)
         };
-        let manifest = match fs::read(&manifest_path) {
-            Ok(bytes) => {
-                let manifest: Manifest = serde_json::from_slice(&bytes).map_err(|error| {
-                    DomainError::manifest_invalid(format!(
-                        "parse {}: {error}",
-                        manifest_path.display()
-                    ))
-                })?;
-                manifest
-                    .validate(&repo, &manifest_path)
-                    .map_err(|error| DomainError::manifest_invalid(error.to_string()))?;
-                Some(manifest)
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        let (manifest, manifest_error) = match fs::read(&manifest_path) {
+            Ok(bytes) => match serde_json::from_slice::<Manifest>(&bytes) {
+                Ok(manifest) => match manifest.validate(&repo, &manifest_path) {
+                    Ok(()) => (Some(manifest), None),
+                    Err(error) => (None, Some(error.to_string())),
+                },
+                Err(error) => (
+                    None,
+                    Some(format!("parse {}: {error}", manifest_path.display())),
+                ),
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None),
             Err(error) => {
                 return Err(error).with_context(|| format!("read {}", manifest_path.display()));
             }
@@ -62,16 +61,30 @@ impl App {
             repo,
             manifest_path,
             manifest,
+            manifest_error,
         })
     }
 
     pub(super) fn manifest(&self) -> Result<&Manifest> {
-        self.manifest
-            .as_ref()
-            .context("forkctl manifest is unavailable")
+        match (&self.manifest, &self.manifest_error) {
+            (Some(manifest), _) => Ok(manifest),
+            (None, Some(error)) => Err(DomainError::manifest_invalid(error.clone()).into()),
+            (None, None) => Err(DomainError::manifest_invalid(format!(
+                "no forkctl manifest at {}",
+                self.manifest_path.display()
+            ))
+            .into()),
+        }
+    }
+
+    pub(super) fn manifest_present(&self) -> bool {
+        self.manifest.is_some() || self.manifest_error.is_some()
     }
 
     pub(super) fn manifest_mut(&mut self) -> Result<&mut Manifest> {
+        if self.manifest.is_none() {
+            self.manifest()?;
+        }
         self.manifest
             .as_mut()
             .context("forkctl manifest is unavailable")
@@ -455,6 +468,21 @@ impl App {
         self.remote_ref_sha(&manifest.downstream.remote, &self.downstream_ref()?)
     }
 
+    pub(super) fn downstream_tracking_sha(&self) -> Result<String> {
+        let manifest = self.manifest()?;
+        capture(
+            &self.repo,
+            "git",
+            [
+                "rev-parse",
+                &format!(
+                    "refs/remotes/{}/{}",
+                    manifest.downstream.remote, manifest.downstream.branch
+                ),
+            ],
+        )
+    }
+
     pub(super) fn git_private_path(&self, relative: &str) -> Result<PathBuf> {
         git_private_path(&self.repo, relative)
     }
@@ -498,6 +526,7 @@ impl App {
             .with_context(|| format!("parse operation manifest snapshot {}", snapshot.display()))?;
         manifest.validate(&self.repo, &self.manifest_path)?;
         self.manifest = Some(manifest);
+        self.manifest_error = None;
         Ok(())
     }
 
@@ -528,11 +557,7 @@ impl App {
             return Err(DomainError::operation_in_progress(&operation).into());
         }
         let manifest = self.manifest()?;
-        let expected_remote_sha = if kind == OperationKind::Rebase {
-            self.downstream_sha()?
-        } else {
-            capture(&self.repo, "git", ["rev-parse", "@{upstream}"])?
-        };
+        let expected_remote_sha = self.downstream_sha()?;
         let old_base = capture(&self.repo, "stg", ["id", "{base}"])?;
         let old_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
         let old_patches = manifest
@@ -550,24 +575,7 @@ impl App {
             .context("system clock is before Unix epoch")?;
         let short = old_tip.get(..12).context("old tip is not a full SHA")?;
         let id = format!("{}-{short}", epoch.as_nanos());
-        let tag = format!("{}/{id}", manifest.downstream.recovery_tag_prefix);
-        run(
-            &self.repo,
-            "git",
-            [
-                "tag",
-                "-a",
-                &tag,
-                "-m",
-                &format!("forkctl recovery for {kind:?}"),
-                &old_tip,
-            ],
-        )?;
-        let tag_object = capture(
-            &self.repo,
-            "git",
-            ["rev-parse", &format!("refs/tags/{tag}")],
-        )?;
+        let (tag, tag_object) = self.create_recovery_tag(&id, &old_tip, &format!("{kind:?}"))?;
         let snapshot = self.operation_manifest_snapshot_path()?;
         write_atomic(&snapshot, &serde_json::to_vec_pretty(manifest)?)?;
         Ok(OperationState {
@@ -595,6 +603,50 @@ impl App {
         })
     }
 
+    pub(super) fn create_recovery_tag(
+        &self,
+        id: &str,
+        commit: &str,
+        purpose: &str,
+    ) -> Result<(String, String)> {
+        let tag = format!("{}/{id}", self.manifest()?.downstream.recovery_tag_prefix);
+        run(
+            &self.repo,
+            "git",
+            [
+                "tag",
+                "-a",
+                &tag,
+                "-m",
+                &format!("forkctl recovery for {purpose}"),
+                commit,
+            ],
+        )?;
+        let tag_object = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("refs/tags/{tag}")],
+        )?;
+        Ok((tag, tag_object))
+    }
+
+    pub(super) fn is_ancestor(&self, ancestor: &str, descendant: &str) -> Result<bool> {
+        succeeds(
+            &self.repo,
+            "git",
+            ["merge-base", "--is-ancestor", ancestor, descendant],
+        )
+    }
+
+    pub(super) fn local_tag_object(&self, tag: &str) -> Option<String> {
+        capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("refs/tags/{tag}")],
+        )
+        .ok()
+    }
+
     pub(super) fn file_object_id(&self, path: &Path) -> Result<String> {
         capture(
             &self.repo,
@@ -602,6 +654,14 @@ impl App {
             [OsStr::new("hash-object"), path.as_os_str()],
         )
     }
+}
+
+pub(super) fn recovery_id(commit: &str) -> Result<String> {
+    let epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before Unix epoch")?;
+    let short = commit.get(..12).context("commit is not a full SHA")?;
+    Ok(format!("{}-{short}", epoch.as_nanos()))
 }
 
 #[derive(Default)]

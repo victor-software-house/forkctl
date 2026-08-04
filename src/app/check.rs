@@ -398,12 +398,24 @@ impl App {
                 "-e",
                 &format!("{}^{{tag}}", recovery.tag_object),
             ],
-        )?;
+        )
+        .map_err(|error| {
+            DomainError::check_failed(format!(
+                "history recovery tag {} object {} is unavailable: {error}; restore the published recovery tag or run forkctl init to hydrate it",
+                recovery.tag, recovery.tag_object
+            ))
+        })?;
         let local_object = capture(
             &self.repo,
             "git",
             ["rev-parse", &format!("refs/tags/{}", recovery.tag)],
-        )?;
+        )
+        .map_err(|error| {
+            DomainError::check_failed(format!(
+                "history recovery tag {} is missing locally: {error}; run forkctl init to hydrate published recovery tags",
+                recovery.tag
+            ))
+        })?;
         ensure!(
             local_object == recovery.tag_object,
             "history recovery tag {} differs",

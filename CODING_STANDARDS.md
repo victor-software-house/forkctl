@@ -32,6 +32,8 @@ Use current stable pinned releases. Add a crate only when it removes more duplic
 
 Malformed manifests, dirty clean-only operations, scope drift, patch drift, history drift, operation drift, stale leases, and remote policy failures are typed errors. Never print success after a failed prerequisite.
 
+Failing closed must never disable recovery. When an operation journal exists, operation-scoped commands resolve declared state from the Git-private snapshot rather than refusing to run because tracked files are mid-conflict.
+
 ### 3.2 Atomic state
 
 Write tracked and Git-private JSON atomically. Refresh only explicitly selected patch and bookkeeping files. Never stash.
@@ -43,6 +45,10 @@ Every production child comes from `process.rs`, clears only repository-local var
 ### 3.4 No compatibility
 
 The current manifest/API/local-state contract is `schema: 1`. There are no previous formats from the implementation's perspective and no migration or fallback code.
+
+### 3.5 Publication evidence
+
+Leases and recovery points come from remote evidence, never from convenience. Capture the published tip with `ls-remote`, publish an annotated recovery tag for any tip a rewrite overwrites, and require exact evidence — the reviewed operation lease or the fetched downstream tracking ref — that the rewrite was computed against that exact tip.
 
 ## 4. CLI/API discipline
 
