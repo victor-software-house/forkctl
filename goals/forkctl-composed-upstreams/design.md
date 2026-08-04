@@ -204,7 +204,7 @@ Proposal commands are provider-neutral:
 
 Detailed CLI design must decide whether direct-provider `rebase` remains or is cleanly replaced by `sync`. No alias is implied.
 
-Every command receives one request/result/schema path through the existing typed protocol. Automation consumes JSON results rather than human text.
+Every command receives one request/result/schema path through the existing typed protocol. Automation consumes JSON results rather than human text. Pretty source, sync, proposal, and status prose/tables use the shared layout boundary and constrain themselves to detected terminal width; JSON and generated machine contracts remain byte-stable and never reflow.
 
 ## Proposal Objects
 

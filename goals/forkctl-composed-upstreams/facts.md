@@ -22,6 +22,7 @@
 - Proposal verification and promotion work from a clean clone without the preparation runner's local operation state.
 - A stale lease, modified candidate, substituted proposal object, or mismatched evidence blocks promotion.
 - GitHub proposal PRs are review surfaces; normal merge, squash, and rebase are not exact forkctl publication.
+- Pretty source, sync, proposal, and status output fits detected terminal width while JSON and generated machine contracts never reflow.
 - The initial GitHub integration uses separate versioned reusable proposal and explicit promotion workflows.
 - Privileged proposal workflows never execute mutable proposal-head code through `pull_request_target`.
 - Forkctl reports provider ruleset rejection and never creates or changes bypass policy.

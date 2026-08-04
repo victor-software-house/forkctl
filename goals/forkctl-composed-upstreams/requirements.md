@@ -73,7 +73,13 @@
 10. Review-branch cleanup shall happen only after verified promotion and provider-PR closeout.
 11. Provider branch or tag names alone shall never be trusted as proposal identity.
 
-## 7. GitHub Actions
+## 7. Presentation
+
+1. Pretty source, sync, proposal, status, and error prose/tables shall fit the detected terminal width, with `COLUMNS` as the non-TTY fallback.
+2. JSON and generated machine contracts shall never reflow.
+3. Narrow, standard, and wide subprocess tests shall enforce maximum visible line width without making wide output consume unnecessary space.
+
+## 8. GitHub Actions
 
 1. Forkctl shall expose typed JSON results sufficient for provider automation without parsing pretty output.
 2. GitHub integration shall use versioned reusable proposal and promotion workflows.
@@ -87,7 +93,7 @@
 10. The unattended path shall recommend a least-privilege GitHub App installation token.
 11. Forkctl shall report ruleset rejection but shall not create or modify bypass policy.
 
-## 8. Verification
+## 9. Verification
 
 Automated disposable Git/StGit fixtures shall prove:
 
@@ -106,6 +112,6 @@ Automated disposable Git/StGit fixtures shall prove:
 - stale lease, candidate tampering, proposal substitution, unsupported atomic push, and protected-branch rejection;
 - generated documentation/schema/help/completion parity.
 
-## 9. Deferred Requirements
+## 10. Deferred Requirements
 
 This goal shall not require mixed ordinary-repository ownership, canonical patch-file mode, bidirectional source pushback, SemVer source selection, automatic promotion on approval, or provider policy administration.
