@@ -436,6 +436,80 @@ fn operation_abort_restores_exact_old_stack_before_clearing_journal() {
 }
 
 #[test]
+fn active_patch_commands_and_abort_fail_before_mutating_an_operation() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let old_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    fixture.forkctl_ok(&["rebase", "--onto", "refs/heads/main"]);
+
+    let new_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    let operation_relative = git_capture_dynamic(
+        &fixture.repo,
+        &["rev-parse", "--git-path", "forkctl/operation.json"],
+    );
+    let operation_path = fixture.repo.join(operation_relative);
+    let operation_before = fs::read(&operation_path).unwrap();
+    let active_relative = git_capture_dynamic(
+        &fixture.repo,
+        &["rev-parse", "--git-path", "forkctl/active.json"],
+    );
+    let active_path = fixture.repo.join(active_relative);
+
+    let create = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "create",
+        "blocked",
+        "--kind",
+        "tooling",
+        "--purpose",
+        "Must not be created during an operation.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "The operation completes.",
+        "--scope",
+        "blocked.txt",
+    ]);
+    assert!(!create.status.success());
+    let create: serde_json::Value = serde_json::from_slice(&create.stdout).unwrap();
+    assert_eq!(create["error"]["code"], "operation_in_progress");
+
+    let select = fixture.forkctl(&["--format", "json", "patch", "select", "fork-tooling"]);
+    assert!(!select.status.success());
+    let select: serde_json::Value = serde_json::from_slice(&select.stdout).unwrap();
+    assert_eq!(select["error"]["code"], "operation_in_progress");
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), new_tip);
+    assert_eq!(fs::read(&operation_path).unwrap(), operation_before);
+    assert!(!active_path.exists());
+
+    fs::write(
+        &active_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "mode": "existing",
+            "patch": "fork-tooling"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let abort = fixture.forkctl(&["--format", "json", "operation", "abort", "--yes"]);
+    assert!(!abort.status.success());
+    let abort: serde_json::Value = serde_json::from_slice(&abort.stdout).unwrap();
+    assert_eq!(abort["error"]["code"], "active_patch_exists");
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), new_tip);
+    assert_eq!(fs::read(&operation_path).unwrap(), operation_before);
+    assert!(active_path.is_file());
+
+    fs::remove_file(active_path).unwrap();
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+    assert!(!operation_path.exists());
+}
+
+#[test]
 fn operation_rejects_deleted_and_substituted_recovery_tags() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");

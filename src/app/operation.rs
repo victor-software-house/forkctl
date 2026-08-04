@@ -104,6 +104,11 @@ impl App {
         if !confirmed {
             return Err(DomainError::invalid_request("operation abort requires --yes").into());
         }
+        if matches!(operation.kind, OperationKind::Rebase)
+            && let Some(active) = self.read_active()?
+        {
+            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
+        }
         self.restore_operation_stack(&operation)?;
         self.verify_restored_operation_stack(&operation)?;
         self.manifest = None;

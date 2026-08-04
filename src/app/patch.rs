@@ -74,6 +74,9 @@ impl App {
         args: PatchCreateArgs,
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
+        if let Some(operation) = self.read_operation()? {
+            return Err(DomainError::operation_in_progress(&operation).into());
+        }
         if let Some(active) = self.read_active()? {
             return Err(DomainError::active_patch_exists(active.name().to_string()).into());
         }
@@ -103,6 +106,9 @@ impl App {
     }
 
     pub fn patch_select(&self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
+        if let Some(operation) = self.read_operation()? {
+            return Err(DomainError::operation_in_progress(&operation).into());
+        }
         if self.manifest()?.patch(name).is_none() {
             return Err(DomainError::patch_not_found(
                 name,

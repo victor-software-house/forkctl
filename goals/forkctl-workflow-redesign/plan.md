@@ -2,9 +2,9 @@
 
 No implementation begins until `requirements.md` and `design.md` are accepted through `ask_user`.
 
-## Execution Checkpoint — 2026-08-03
+## Execution Checkpoint — 2026-08-04
 
-The contract is approved and released as forkctl 0.0.6 from `bde4e163f0e077c3bbe1555d34b3fb325c460b24`. PR #1 remains closed unmerged; PR #2 was reviewed, rebased onto `main`, and merged. The clean repository compiles, passes denied-warning Clippy, and passes 46 tests through `mise run verify`.
+The contract is approved and released through forkctl 0.0.8 from `0c90b0c85d40790e6f6605c6fbee6e6bb7e47bf4`. PR #1 remains closed unmerged; PR #2 was reviewed, rebased onto `main`, and merged. Macterm and Ghostty are migrated and published. During the final zmx migration, a live `ready_to_publish` recovery probe exposed that `patch create` and `patch select` could write active state during an operation, after which abort restored old history before failing its active-state check. Forkctl 0.0.9 is the minimal recovery-hardening release: active-state commands reject every in-flight operation, and abort rejects active state before any Git/StGit mutation.
 
 ### Implemented and verified
 
@@ -25,11 +25,13 @@ The contract is approved and released as forkctl 0.0.6 from `bde4e163f0e077c3bbe
 
 ### Remaining implementation blockers
 
-1. **Sequential fleet migration** — rebuild Macterm, Ghostty, and zmx onto 0.0.6 one repository at a time, run every repository-specific gate, publish atomically, and prove each fresh clone before starting the next.
+1. **Release 0.0.9** — pass the focused recovery regression, full `mise run verify`, release build, publication, downloaded arm64 binary proof, and immutable catalog proof.
+2. **Fleet repin** — refresh only each repository's `fork-tooling` patch from catalog `v0.0.8` to `v0.0.9`, verify, atomically publish, and fresh-clone prove Macterm, Ghostty, and zmx.
+3. **zmx closeout** — publish the exact arm64 zmx release, remove Macterm's universal download/thinning path, rerun compatibility, and complete the fleet proof.
 
 ### Execution order
 
-Complete the blockers above in order. Do not version-bump, publish, or migrate a consumer while any earlier blocker remains. After each blocker: run `mise run verify`, inspect the diff, update this checkpoint and the live task ledger, then commit only the coherent verified layer.
+Complete the blockers above in order. Do not publish zmx or migrate its consumer while any earlier blocker remains. After each blocker: run the repository's complete verification, inspect the diff, update this checkpoint and the live task ledger, then commit only the coherent verified layer.
 
 ## Phase 1 — Freeze the New Contract
 
