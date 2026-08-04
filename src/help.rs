@@ -1,3 +1,4 @@
+use crate::layout;
 use crate::protocol::ColorMode;
 use anstyle::{AnsiColor, Style};
 use clap::{Command, CommandFactory};
@@ -80,18 +81,22 @@ fn color_mode(args: &[String]) -> ColorMode {
 
 pub fn render(mut command: Command) -> String {
     command.build();
+    if let Some(width) = layout::terminal_width() {
+        command = command.term_width(usize::from(width));
+    }
     let mut output = String::new();
     let usage = command.render_usage().to_string();
-    let _ = write!(
-        output,
-        "{}{}{}\n\n",
+    let usage = format!(
+        "{}{}{}",
         HEADING.render(),
         usage.trim(),
         HEADING.render_reset()
     );
+    layout::push_line(&mut output, &usage);
+    output.push('\n');
     if let Some(about) = command.get_about() {
-        output.push_str(&about.to_string());
-        output.push_str("\n\n");
+        layout::push_line(&mut output, &about.to_string());
+        output.push('\n');
     }
     let subcommands = command
         .get_subcommands()
@@ -183,6 +188,7 @@ fn section(output: &mut String, title: &str, rows: Vec<Vec<String>>) {
     table
         .load_preset(UTF8_FULL_CONDENSED)
         .set_content_arrangement(ContentArrangement::Dynamic);
+    layout::constrain(&mut table);
     for row in rows {
         table.add_row(row);
     }

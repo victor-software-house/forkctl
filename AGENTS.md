@@ -8,7 +8,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - `src/cli.rs` is the Clap adapter and sole command/parameter grammar.
 - `src/protocol.rs` is the versioned Serde/Schemars request/result/notice/error/schema contract.
 - `src/app/` owns typed repository operations and never prints or chooses a view.
-- `src/view.rs` owns pretty command output; `src/help.rs` owns help derived from Clap metadata. Both share one semantic Anstyle/Comfy Table system.
+- `src/view.rs` owns pretty command output; `src/help.rs` owns help derived from Clap metadata; `src/layout.rs` owns shared terminal-width detection and wrapping. All use one semantic Anstyle/Comfy Table system.
 - `src/process.rs` is the only production child-process factory and clears Git repository-local hook variables for explicit cwd execution.
 - Git-private active/operation state lives under `$(git rev-parse --git-path forkctl/)`.
 - Askama templates own generated Markdown document structure.
@@ -32,6 +32,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - Keep core verbs top-level. Use `patch`, `operation`, and `api` subcommands only for distinct actions; modes of one operation are parameters, not optional subcommands.
 - Leaf parameters are orthogonal and composable, with repeatable values, visible defaults, and collision-audited short forms.
 - Help, Usage KDL, shell completion, CLI requests, and JSON Schema derive from the authoritative Clap/protocol types rather than copied literals.
+- Pretty help, result tables, notices, and errors fit the detected terminal width; redirected output may use the standard `COLUMNS` fallback. JSON and generated machine contracts never reflow.
 - The remote catalog exposes one mounted `fork` file task using `dir = "{{cwd}}"`, `raw_args = true`, exact task tools, the mise-documented self-mount `mise run --quiet fork -- --usage-spec=fork`, and `exec forkctl "$@"`.
 - VSH Lefthook defaults call `mise run fork check -s` on pre-commit and `mise run fork check -q` on pre-push; other managers call the same commands.
 

@@ -3,6 +3,7 @@ mod cli;
 mod completion;
 mod error;
 mod help;
+mod layout;
 mod ledger;
 mod manifest;
 mod process;

@@ -8,6 +8,50 @@ fn forkctl() -> Command {
     Command::new(env!("CARGO_BIN_EXE_forkctl"))
 }
 
+fn max_line_width(bytes: &[u8]) -> usize {
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or_default()
+}
+
+#[test]
+fn pretty_output_respects_terminal_width() {
+    for width in [40, 80, 120] {
+        let help = forkctl()
+            .env("COLUMNS", width.to_string())
+            .args(["--color", "never", "patch", "refresh", "--help"])
+            .output()
+            .unwrap();
+        assert!(help.status.success());
+        assert!(
+            max_line_width(&help.stdout) <= width,
+            "help exceeded {width} columns"
+        );
+    }
+
+    let fixture = Fixture::new();
+    let table = forkctl()
+        .env("COLUMNS", "40")
+        .args(["--color", "never", "patch", "list"])
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(table.status.success());
+    assert!(max_line_width(&table.stdout) <= 40);
+
+    let directory = tempfile::tempdir().unwrap();
+    let error = forkctl()
+        .env("COLUMNS", "40")
+        .args(["--color", "never", "status"])
+        .current_dir(directory.path())
+        .output()
+        .unwrap();
+    assert!(!error.status.success());
+    assert!(max_line_width(&error.stderr) <= 40);
+}
+
 fn complete_in(directory: &std::path::Path, words: &[&str], index: usize) -> std::process::Output {
     forkctl()
         .env("COMPLETE", "bash")

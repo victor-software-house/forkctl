@@ -8,7 +8,7 @@ fn command_and_domain_modules_do_not_render_or_print() {
     visit(&root, &mut |path| {
         if matches!(
             path.file_name().and_then(|name| name.to_str()),
-            Some("view.rs" | "help.rs" | "main.rs" | "cli.rs")
+            Some("view.rs" | "help.rs" | "layout.rs" | "main.rs" | "cli.rs")
         ) {
             return;
         }

@@ -778,7 +778,7 @@ fn git_capture_dynamic(repo: &std::path::Path, args: &[&str]) -> String {
 }
 
 fn git_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
-    let output = std::process::Command::new("git")
+    let output = support::isolated_command("git")
         .args(args)
         .current_dir(repo)
         .output()
@@ -792,7 +792,7 @@ fn git_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
 }
 
 fn capture(repo: &std::path::Path, program: &str, args: &[&str]) -> String {
-    let output = std::process::Command::new(program)
+    let output = support::isolated_command(program)
         .args(args)
         .current_dir(repo)
         .output()

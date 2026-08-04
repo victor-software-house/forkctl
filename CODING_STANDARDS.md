@@ -14,7 +14,7 @@ Forkctl never infers patch ownership. An operator creates/selects one active pat
 
 Domain/App operations return typed protocol values and errors. Clap and JSON are input adapters; pretty and JSON are output adapters. Domain modules never print, inspect TTY/color/output mode, construct tables, or import renderer crates.
 
-`src/protocol.rs` owns all wire/schema types. `src/cli.rs` owns the one command graph. `src/view.rs` and `src/help.rs` own the one visual system. Generated Markdown remains in Askama templates.
+`src/protocol.rs` owns all wire/schema types. `src/cli.rs` owns the one command graph. `src/view.rs`, `src/help.rs`, and `src/layout.rs` own the one visual system. Pretty prose and tables constrain themselves to the detected terminal width, with `COLUMNS` as the non-TTY fallback used by captured output and tests. Generated Markdown remains in Askama templates.
 
 ## 2. Dependencies
 
@@ -58,6 +58,6 @@ The current manifest/API/local-state contract is `schema: 1`. There are no previ
 
 Formatting, workspace Clippy `all`/`pedantic` with warnings denied, architecture boundaries, unit tests, CLI/API/schema/help/completion snapshots, and real disposable Git/StGit lifecycle tests must pass.
 
-Tests invoking forkctl from hook context preserve inherited repository-local `GIT_*` variables at process entry. Fixture helper commands may isolate themselves, but must never hide production contamination.
+Tests invoking forkctl from hook context preserve inherited repository-local `GIT_*` variables at process entry. Fixture helper commands must obtain their child processes from the single shared isolated factory in `tests/support`, never from a local `Command::new`, so a real `pre-push` run operates on the disposable repository; forkctl invocations stay unisolated so production contamination cannot be hidden.
 
 Every release is tested through direct and mounted mise grammar, real Lefthook, published native binary, fresh-clone recovery hydration, exact lease rejection, protected-branch rejection, and successful atomic publication.

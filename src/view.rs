@@ -1,3 +1,4 @@
+use crate::layout;
 use crate::protocol::{
     ApiError, ApiResponse, CheckResult, ColorMode, CommandResult, Notice, OperationStatusResult,
     PatchListResult, PatchShowResult, StatusResult,
@@ -90,13 +91,15 @@ fn render_success(
     }
     render_result(&mut output, result);
     for notice in notices {
-        let _ = writeln!(
-            output,
-            "{}notice{} · {:?} · {}",
-            WARNING.render(),
-            WARNING.render_reset(),
-            notice.code,
-            notice.message
+        layout::push_line(
+            &mut output,
+            &format!(
+                "{}notice{} · {:?} · {}",
+                WARNING.render(),
+                WARNING.render_reset(),
+                notice.code,
+                notice.message
+            ),
         );
     }
     output
@@ -425,42 +428,52 @@ fn render_operation(output: &mut String, result: &OperationStatusResult) {
 
 fn render_error(command: &str, error: &ApiError) -> String {
     let mut output = String::new();
-    let _ = writeln!(
-        output,
-        "{}forkctl · {command} · error{}",
-        FAILURE.render(),
-        FAILURE.render_reset()
+    layout::push_line(
+        &mut output,
+        &format!(
+            "{}forkctl · {command} · error{}",
+            FAILURE.render(),
+            FAILURE.render_reset()
+        ),
     );
-    let _ = writeln!(
-        output,
-        "{}{}{}",
-        FAILURE.render(),
-        error.message,
-        FAILURE.render_reset()
+    layout::push_line(
+        &mut output,
+        &format!(
+            "{}{}{}",
+            FAILURE.render(),
+            error.message,
+            FAILURE.render_reset()
+        ),
     );
-    let _ = writeln!(
-        output,
-        "{}code · {}{}",
-        MUTED.render(),
-        error.code,
-        MUTED.render_reset()
+    layout::push_line(
+        &mut output,
+        &format!(
+            "{}code · {}{}",
+            MUTED.render(),
+            error.code,
+            MUTED.render_reset()
+        ),
     );
     for cause in &error.causes {
-        let _ = writeln!(
-            output,
-            "{}caused by · {}{}",
-            MUTED.render(),
-            cause,
-            MUTED.render_reset()
+        layout::push_line(
+            &mut output,
+            &format!(
+                "{}caused by · {}{}",
+                MUTED.render(),
+                cause,
+                MUTED.render_reset()
+            ),
         );
     }
     if let Some(command) = &error.suggested_command {
-        let _ = writeln!(
-            output,
-            "{}next · {}{}",
-            HEADING.render(),
-            command,
-            HEADING.render_reset()
+        layout::push_line(
+            &mut output,
+            &format!(
+                "{}next · {}{}",
+                HEADING.render(),
+                command,
+                HEADING.render_reset()
+            ),
         );
     }
     output
@@ -485,21 +498,20 @@ fn section(output: &mut String, title: &str) {
 }
 
 fn success_line(output: &mut String, message: &str) {
-    let _ = writeln!(
+    layout::push_line(
         output,
-        "{}ok{} · {message}",
-        SUCCESS.render(),
-        SUCCESS.render_reset()
+        &format!(
+            "{}ok{} · {message}",
+            SUCCESS.render(),
+            SUCCESS.render_reset()
+        ),
     );
 }
 
 fn muted_line(output: &mut String, message: &str) {
-    let _ = writeln!(
+    layout::push_line(
         output,
-        "{}{}{}",
-        MUTED.render(),
-        message,
-        MUTED.render_reset()
+        &format!("{}{}{}", MUTED.render(), message, MUTED.render_reset()),
     );
 }
 
@@ -518,6 +530,7 @@ fn table(headers: &[&str], rows: impl IntoIterator<Item = Vec<String>>) -> Strin
         .load_preset(UTF8_FULL_CONDENSED)
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(headers);
+    layout::constrain(&mut table);
     for row in rows {
         table.add_row(row);
     }
