@@ -7,6 +7,7 @@ lockfile = true
 rust = "1.97.1"
 "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
 lefthook = "2.1.10"
+usage = "4.1.0"
 gh = "2.95.0"
 
 [tasks."format:fix"]
@@ -30,11 +31,11 @@ description = "Run unit tests"
 run = "cargo test --workspace --all-features"
 
 [tasks."version:sync"]
-description = "Synchronize task and example versions from Cargo.toml"
-run = "cargo run --quiet --package forkctl-xtask"
+description = "Regenerate the lockfile and all version pins from mise.toml and Cargo.toml"
+run = ["mise lock", "cargo run --quiet --package forkctl-xtask"]
 
 [tasks."version:check"]
-description = "Verify task and example versions match Cargo.toml"
+description = "Verify generated pins match mise.toml and Cargo.toml"
 run = "cargo run --quiet --package forkctl-xtask -- --check"
 
 [tasks.verify]

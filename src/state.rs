@@ -1,30 +1,74 @@
-use crate::manifest::BaseTarget;
+use crate::manifest::{BaseTarget, Patch, RecoveryEvidence};
+use crate::protocol::CaptureSource;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PendingOperation {
-    New,
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ActivePatchState {
+    Draft { metadata: Patch },
+    Existing { patch: String },
+}
+
+impl ActivePatchState {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Draft { metadata } => &metadata.name,
+            Self::Existing { patch } => patch,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperationKind {
+    PatchRefresh,
+    PatchEdit,
     Rebase,
 }
 
-#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatchCommitEvidence {
+    pub name: String,
+    pub commit: String,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReportEvidence {
     pub path: String,
     pub object_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OperationIntent {
+    PatchEdit {
+        patch: Patch,
+    },
+    PatchRefresh {
+        patch: Patch,
+        capture: CaptureSource,
+        captured_paths: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PendingState {
+pub struct OperationState {
     pub schema: u32,
-    pub operation: PendingOperation,
+    pub id: String,
+    pub kind: OperationKind,
+    pub phase: String,
+    pub started_at_unix_ms: u128,
     pub expected_remote_sha: String,
     pub old_base: String,
     pub old_tip: String,
-    pub old_patch_count: usize,
-    pub backup_tag: String,
+    pub old_patches: Vec<PatchCommitEvidence>,
+    pub recovery: RecoveryEvidence,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<OperationIntent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<BaseTarget>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -33,29 +77,6 @@ pub struct PendingState {
     pub new_tip: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub report: Option<ReportEvidence>,
-}
-
-impl PendingState {
-    pub fn new(
-        operation: PendingOperation,
-        expected_remote_sha: String,
-        old_base: String,
-        old_tip: String,
-        old_patch_count: usize,
-        backup_tag: String,
-    ) -> Self {
-        Self {
-            schema: 1,
-            operation,
-            expected_remote_sha,
-            old_base,
-            old_tip,
-            old_patch_count,
-            backup_tag,
-            target: None,
-            new_base: None,
-            new_tip: None,
-            report: None,
-        }
-    }
+    #[serde(default)]
+    pub next_actions: Vec<String>,
 }

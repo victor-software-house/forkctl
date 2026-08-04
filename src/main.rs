@@ -1,20 +1,23 @@
 mod app;
+mod cli;
+mod completion;
+mod error;
+mod help;
 mod ledger;
 mod manifest;
-mod pattern;
 mod process;
 mod protocol;
 mod report;
 mod state;
 mod view;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use app::App;
-use clap::{Args, Parser, Subcommand};
-use manifest::PatchKind;
+use clap::{CommandFactory, Parser};
+use cli::{Cli, CliAction, CompletionShell};
 use protocol::{
-    ApiError, ApiErrorCode, ApiInvocation, ApiRequest, ApiResponse, CommandResult,
-    InstructionsResult, NewPatchRequest, Outcome, OutputFormat, PROTOCOL_VERSION,
+    ApiError, ApiErrorCode, ApiInvocation, ApiRequest, ApiResponse, CommandResult, ErrorDetails,
+    ExecutionMode, InstructionsResult, Outcome, OutputFormat, PROTOCOL_VERSION,
 };
 use std::env;
 use std::io::Read;
@@ -24,191 +27,53 @@ use std::process::ExitCode;
 const DEFAULT_MANIFEST: &str = "patches/fork.json";
 const INSTRUCTIONS: &str = include_str!("instructions.md");
 
-#[derive(Parser)]
-#[command(version, about = "Maintain a declared StGit downstream patch stack")]
-struct Cli {
-    #[arg(long, global = true)]
-    manifest: Option<PathBuf>,
-
-    #[arg(long, global = true, value_enum, default_value = "pretty")]
-    output: OutputFormat,
-
-    #[arg(long, global = true)]
-    json: bool,
-
-    #[command(subcommand)]
-    operation: Operation,
-}
-
-#[derive(Subcommand)]
-enum Operation {
-    /// Reconstruct `StGit` metadata after cloning a fork.
-    Init,
-    /// Explain repository, stack, verification, and pending operation state.
-    Status,
-    /// Create, or finish, a documented downstream patch.
-    New(NewArgs),
-    /// Verify stack identity, audit metadata, exports, and source contracts.
-    Verify,
-    /// Rebase onto an explicit full upstream branch/tag ref or commit SHA.
-    Rebase {
-        #[arg(long)]
-        onto: String,
-    },
-    /// Publish the verified branch and recovery tag with an exact lease.
-    Publish,
-    /// Print the repository and agent workflow contract.
-    Instructions,
-    /// Use the versioned local JSON API.
-    Api {
-        #[command(subcommand)]
-        operation: ApiOperation,
-    },
-}
-
-#[derive(Subcommand)]
-enum ApiOperation {
-    /// Print JSON Schema for API invocation and response envelopes.
-    Schema,
-    /// Read one API invocation from stdin and emit one JSON response.
-    Call,
-}
-
-#[derive(Args)]
-struct NewArgs {
-    #[arg(long)]
-    finish: bool,
-    name: Option<String>,
-    #[arg(long, value_enum)]
-    kind: Option<PatchKind>,
-    #[arg(long)]
-    purpose: Option<String>,
-    #[arg(long)]
-    upstream_status: Option<String>,
-    #[arg(long)]
-    drop_when: Option<String>,
-    #[arg(long = "path")]
-    paths: Vec<String>,
-    #[arg(long)]
-    export: Option<String>,
-}
-
 fn main() -> ExitCode {
-    let cli = Cli::parse();
-    if let Operation::Api { operation } = &cli.operation {
-        return run_api(operation);
+    clap_complete::CompleteEnv::with_factory(Cli::command).complete();
+    match help::try_emit::<Cli>() {
+        Ok(true) => return ExitCode::SUCCESS,
+        Ok(false) => {}
+        Err(_) => return ExitCode::FAILURE,
     }
-
-    match cli_request(cli) {
-        Ok((manifest, request, output)) => {
-            let response = execute(manifest.as_deref(), request).map_or_else(
-                |error| ApiResponse::error(api_error(&error, ApiErrorCode::OperationFailed)),
-                ApiResponse::success,
+    let cli = Cli::parse();
+    let manifest = cli.manifest.as_ref().map(|path| path.display().to_string());
+    let output = cli.output;
+    let color = cli.color;
+    let quiet = cli.quiet;
+    match cli.into_action() {
+        Ok(CliAction::ApiSchema(kind)) => emit_schema(kind),
+        Ok(CliAction::ApiCall) => run_api_call(),
+        Ok(CliAction::Completion(shell)) => emit_completion(shell),
+        Ok(CliAction::Candidates(kind)) => emit_candidates(kind),
+        Ok(CliAction::UsageSpec(bin)) => emit_usage_spec(&bin),
+        Ok(CliAction::Request { request, mode }) => {
+            let command = request.command();
+            let response = execute(manifest.as_deref(), *request, mode).map_or_else(
+                |error| ApiResponse::error(command, mode, api_error(&error)),
+                |outcome| ApiResponse::success(command, mode, outcome),
             );
-            if emit_response(&response, output).is_ok() {
+            if emit_response(&response, output, color, quiet).is_ok() {
                 response_exit(&response)
             } else {
                 ExitCode::FAILURE
             }
         }
         Err(error) => {
-            let response = ApiResponse::error(api_error(&error, ApiErrorCode::InvalidRequest));
-            let _ = view::emit_pretty(&response);
-            ExitCode::FAILURE
+            let response = ApiResponse::error("cli", ExecutionMode::Execute, request_error(&error));
+            let _ = view::emit_pretty(&response, color, false);
+            ExitCode::from(2)
         }
     }
 }
 
-fn run_api(operation: &ApiOperation) -> ExitCode {
-    match operation {
-        ApiOperation::Schema => match view::emit_json(&protocol::schema_document()) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(_) => ExitCode::FAILURE,
-        },
-        ApiOperation::Call => {
-            let response = read_invocation()
-                .and_then(|invocation| {
-                    ensure!(
-                        invocation.protocol_version == PROTOCOL_VERSION,
-                        "unsupported protocol version: {}",
-                        invocation.protocol_version
-                    );
-                    execute(invocation.manifest.as_deref(), invocation.request)
-                })
-                .map_or_else(
-                    |error| {
-                        let code = if error
-                            .to_string()
-                            .starts_with("unsupported protocol version")
-                        {
-                            ApiErrorCode::UnsupportedProtocol
-                        } else {
-                            ApiErrorCode::InvalidRequest
-                        };
-                        ApiResponse::error(api_error(&error, code))
-                    },
-                    ApiResponse::success,
-                );
-            let emitted = view::emit_json(&response).is_ok();
-            if emitted {
-                response_exit(&response)
-            } else {
-                ExitCode::FAILURE
-            }
-        }
+fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> Result<Outcome> {
+    if request.is_read_only() && mode == ExecutionMode::Plan {
+        return Err(error::DomainError::invalid_request(format!(
+            "read-only command {} does not support plan mode",
+            request.command()
+        ))
+        .into());
     }
-}
-
-fn cli_request(cli: Cli) -> Result<(Option<String>, ApiRequest, OutputFormat)> {
-    let request = match cli.operation {
-        Operation::Init => ApiRequest::Init,
-        Operation::Status => ApiRequest::Status,
-        Operation::New(args) if args.finish => {
-            ensure!(
-                args.name.is_none()
-                    && args.kind.is_none()
-                    && args.purpose.is_none()
-                    && args.upstream_status.is_none()
-                    && args.drop_when.is_none()
-                    && args.paths.is_empty()
-                    && args.export.is_none(),
-                "--finish does not accept patch creation arguments"
-            );
-            ApiRequest::FinishNew
-        }
-        Operation::New(args) => ApiRequest::New(NewPatchRequest {
-            name: args.name.context("patch name is required")?,
-            kind: args.kind.context("--kind is required")?,
-            purpose: args.purpose.context("--purpose is required")?,
-            upstream_status: args
-                .upstream_status
-                .context("--upstream-status is required")?,
-            drop_when: args.drop_when.context("--drop-when is required")?,
-            paths: {
-                ensure!(!args.paths.is_empty(), "at least one --path is required");
-                args.paths
-            },
-            export: args.export,
-        }),
-        Operation::Verify => ApiRequest::Verify,
-        Operation::Rebase { onto } => ApiRequest::Rebase { onto },
-        Operation::Publish => ApiRequest::Publish,
-        Operation::Instructions => ApiRequest::Instructions,
-        Operation::Api { .. } => unreachable!("API operations handled before mapping"),
-    };
-    Ok((
-        cli.manifest.map(|path| path.display().to_string()),
-        request,
-        if cli.json {
-            OutputFormat::Json
-        } else {
-            cli.output
-        },
-    ))
-}
-
-fn execute(manifest: Option<&str>, request: ApiRequest) -> Result<Outcome> {
-    if matches!(request, ApiRequest::Instructions) {
+    if matches!(request, ApiRequest::Instructions(_)) {
         return Ok(Outcome::new(CommandResult::Instructions(
             InstructionsResult {
                 markdown: INSTRUCTIONS.to_string(),
@@ -219,32 +84,185 @@ fn execute(manifest: Option<&str>, request: ApiRequest) -> Result<Outcome> {
         .map(PathBuf::from)
         .or_else(|| env::var_os("FORK_MANIFEST").map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from(DEFAULT_MANIFEST));
-    let mut app = App::load(&manifest)?;
-    match request {
-        ApiRequest::Init => Ok(Outcome::new(CommandResult::Init(app.init()?))),
-        ApiRequest::Status => Ok(Outcome::new(CommandResult::Status(Box::new(app.status()?)))),
-        ApiRequest::New(request) => Ok(Outcome::new(CommandResult::New(app.new_patch(request)?))),
-        ApiRequest::FinishNew => Ok(Outcome::new(CommandResult::New(app.finish_new()?))),
-        ApiRequest::Verify => Ok(Outcome::new(CommandResult::Verify(app.verify()?))),
-        ApiRequest::Rebase { onto } => {
-            let result = app.rebase(&onto)?;
-            let notices = result
-                .dropped_patches
-                .iter()
-                .map(|patch| protocol::Notice {
-                    code: "upstream_merged_patch_dropped".into(),
-                    message: format!(
-                        "dropped upstream-merged patch {patch}; recorded in PATCHES.md history"
-                    ),
-                })
-                .collect();
-            Ok(Outcome::with_notices(
-                CommandResult::Rebase(result),
-                notices,
-            ))
+    let mut app = App::discover(&manifest)?;
+    let result = match request {
+        ApiRequest::Init(args) => app.init(args, mode)?,
+        ApiRequest::Status(_) => CommandResult::Status(Box::new(app.status()?)),
+        ApiRequest::Check(args) => CommandResult::Check(app.check(&args)?),
+        ApiRequest::PatchList(_) => CommandResult::PatchList(app.patch_list()?),
+        ApiRequest::PatchShow(args) => CommandResult::PatchShow(app.patch_show(&args)?),
+        ApiRequest::PatchCreate(args) => app.patch_create(args, mode)?,
+        ApiRequest::PatchSelect(args) => app.patch_select(&args.patch, mode)?,
+        ApiRequest::PatchEdit(args) => app.patch_edit(args, mode)?,
+        ApiRequest::PatchRefresh(args) => app.patch_refresh(args, mode)?,
+        ApiRequest::PatchFinish(args) => app.patch_finish(&args, mode)?,
+        ApiRequest::Rebase(args) => app.rebase(&args.onto, mode)?,
+        ApiRequest::Publish(_) => app.publish(mode)?,
+        ApiRequest::OperationStatus(_) => {
+            CommandResult::OperationStatus(Box::new(app.operation_status()?))
         }
-        ApiRequest::Publish => Ok(Outcome::new(CommandResult::Publish(app.publish()?))),
-        ApiRequest::Instructions => unreachable!("instructions handled without repository"),
+        ApiRequest::OperationContinue(_) => app.operation_continue(mode)?,
+        ApiRequest::OperationAbort(args) => app.operation_abort(args.confirmed, mode)?,
+        ApiRequest::Instructions(_) => unreachable!("instructions handled without repository"),
+    };
+    let operation_id = app.read_operation()?.map(|operation| operation.id);
+    Ok(Outcome::new(result).with_optional_operation(operation_id))
+}
+
+fn run_api_call() -> ExitCode {
+    let response = match read_invocation() {
+        Err(error) => ApiResponse::error("api.call", ExecutionMode::Execute, request_error(&error)),
+        Ok(invocation) if invocation.protocol_version != PROTOCOL_VERSION => ApiResponse::error(
+            invocation.request.command(),
+            invocation.mode,
+            ApiError {
+                code: ApiErrorCode::UnsupportedProtocol,
+                message: format!(
+                    "unsupported protocol version: {}",
+                    invocation.protocol_version
+                ),
+                causes: Vec::new(),
+                details: ErrorDetails::Request {
+                    field: Some("protocol_version".into()),
+                    issue: format!("expected {PROTOCOL_VERSION}"),
+                },
+                retryable: false,
+                suggested_command: Some("forkctl api schema".into()),
+            },
+        ),
+        Ok(invocation) => {
+            let command = invocation.request.command();
+            execute(
+                invocation.manifest.as_deref(),
+                invocation.request,
+                invocation.mode,
+            )
+            .map_or_else(
+                |error| ApiResponse::error(command, invocation.mode, api_error(&error)),
+                |outcome| ApiResponse::success(command, invocation.mode, outcome),
+            )
+        }
+    };
+    if view::emit_json(&response).is_ok() {
+        response_exit(&response)
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn emit_schema(kind: protocol::SchemaKind) -> ExitCode {
+    if view::emit_json(&protocol::schema_document(kind)).is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn emit_usage_spec(bin: &str) -> ExitCode {
+    if view::emit_text(&usage_spec(bin).to_string()).is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn usage_spec(bin: &str) -> usage::Spec {
+    let mut command = Cli::command();
+    command.set_bin_name(bin);
+    let mut spec = usage::Spec::from(&command);
+    spec.name = bin.to_string();
+    spec.bin = bin.to_string();
+    let candidate_command = if bin == "forkctl" {
+        "forkctl".to_string()
+    } else {
+        format!("mise run --quiet {bin} --")
+    };
+    add_usage_completions(&mut spec, &candidate_command);
+    spec
+}
+
+fn add_usage_completions(spec: &mut usage::Spec, candidate_command: &str) {
+    use usage::SpecComplete;
+    let entries: &[(&[&str], &str, &str)] = &[
+        (&["check"], "patch", "patch"),
+        (&["patch", "show"], "name", "patch"),
+        (&["patch", "select"], "name", "patch"),
+        (&["patch", "edit"], "name", "patch"),
+        (&["patch", "refresh"], "name", "patch"),
+        (&["patch", "finish"], "name", "patch"),
+        (&["rebase"], "onto", "ref"),
+        (&["init"], "base", "ref"),
+        (&["init"], "upstream_remote", "remote"),
+        (&["init"], "downstream_remote", "remote"),
+    ];
+    for (path, name, kind) in entries {
+        let mut command = &mut spec.cmd;
+        for segment in *path {
+            let Some(next) = command.subcommands.get_mut(*segment) else {
+                break;
+            };
+            command = next;
+        }
+        command.complete.insert(
+            (*name).to_string(),
+            SpecComplete::new(*name)
+                .run(format!("{candidate_command} __candidates {kind}"))
+                .descriptions(true),
+        );
+    }
+}
+
+fn emit_candidates(kind: completion::CandidateKind) -> ExitCode {
+    let output = completion::candidate_lines(kind).join("\n");
+    if output.is_empty() || view::emit_text(&output).is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn emit_completion(shell: CompletionShell) -> ExitCode {
+    use clap_complete::env::{Bash, Elvish, EnvCompleter, Fish, Powershell, Zsh};
+
+    let mut output = Vec::new();
+    let result = match shell {
+        CompletionShell::Bash => {
+            Bash.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+        }
+        CompletionShell::Elvish => {
+            Elvish.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+        }
+        CompletionShell::Fish => {
+            Fish.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+        }
+        CompletionShell::Nu => {
+            return match usage::complete::complete(&usage::complete::CompleteOptions {
+                usage_bin: "usage".to_string(),
+                shell: "nu".to_string(),
+                bin: "forkctl".to_string(),
+                cache_key: Some(env!("CARGO_PKG_VERSION").to_string()),
+                spec: Some(usage_spec("forkctl")),
+                usage_cmd: None,
+                include_bash_completion_lib: false,
+                source_file: None,
+            }) {
+                Ok(output) if view::emit_text(&output).is_ok() => ExitCode::SUCCESS,
+                _ => ExitCode::FAILURE,
+            };
+        }
+        CompletionShell::Powershell => {
+            Powershell.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+        }
+        CompletionShell::Zsh => {
+            Zsh.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+        }
+    };
+    match result.and_then(|()| {
+        let output = String::from_utf8(output).map_err(std::io::Error::other)?;
+        view::emit_text(&output)
+    }) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(_) => ExitCode::FAILURE,
     }
 }
 
@@ -256,21 +274,43 @@ fn read_invocation() -> Result<ApiInvocation> {
     serde_json::from_str(&input).context("parse API invocation")
 }
 
-fn api_error(error: &anyhow::Error, code: ApiErrorCode) -> ApiError {
-    let mut chain = error.chain();
-    let message = chain
-        .next()
-        .map_or_else(|| "unknown error".to_string(), ToString::to_string);
+fn request_error(error: &anyhow::Error) -> ApiError {
     ApiError {
-        code,
-        message,
-        causes: chain.map(ToString::to_string).collect(),
+        code: ApiErrorCode::InvalidRequest,
+        message: error.to_string(),
+        causes: error.chain().skip(1).map(ToString::to_string).collect(),
+        details: ErrorDetails::Request {
+            field: None,
+            issue: error.to_string(),
+        },
+        retryable: false,
+        suggested_command: None,
     }
 }
 
-fn emit_response(response: &ApiResponse, output: OutputFormat) -> std::io::Result<()> {
+fn api_error(error: &anyhow::Error) -> ApiError {
+    let causes = error.chain().skip(1).map(ToString::to_string).collect();
+    if let Some(domain) = error.downcast_ref::<error::DomainError>() {
+        return domain.to_api_error(causes);
+    }
+    ApiError {
+        code: ApiErrorCode::InternalError,
+        message: error.to_string(),
+        causes,
+        details: ErrorDetails::None,
+        retryable: false,
+        suggested_command: None,
+    }
+}
+
+fn emit_response(
+    response: &ApiResponse,
+    output: OutputFormat,
+    color: protocol::ColorMode,
+    quiet: bool,
+) -> std::io::Result<()> {
     match output {
-        OutputFormat::Pretty => view::emit_pretty(response),
+        OutputFormat::Pretty => view::emit_pretty(response, color, quiet),
         OutputFormat::Json => view::emit_json(response),
     }
 }
@@ -278,6 +318,20 @@ fn emit_response(response: &ApiResponse, output: OutputFormat) -> std::io::Resul
 fn response_exit(response: &ApiResponse) -> ExitCode {
     match response {
         ApiResponse::Success { .. } => ExitCode::SUCCESS,
+        ApiResponse::Error { error, .. } if matches!(error.code, ApiErrorCode::InvalidRequest) => {
+            ExitCode::from(2)
+        }
         ApiResponse::Error { .. } => ExitCode::FAILURE,
+    }
+}
+
+trait OutcomeExt {
+    fn with_optional_operation(self, operation_id: Option<String>) -> Self;
+}
+
+impl OutcomeExt for Outcome {
+    fn with_optional_operation(mut self, operation_id: Option<String>) -> Self {
+        self.operation_id = operation_id;
+        self
     }
 }

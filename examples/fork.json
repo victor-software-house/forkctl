@@ -3,7 +3,7 @@
   "downstream": {
     "remote": "origin",
     "branch": "main",
-    "backup_tag_prefix": "vsh/pre-sync"
+    "recovery_tag_prefix": "forkctl/recovery"
   },
   "upstream": {
     "remote": "upstream",
@@ -12,15 +12,17 @@
   },
   "base": {
     "target": {
-      "kind": "tag",
-      "selector": "refs/tags/v1.2.3",
-      "commit": "0000000000000000000000000000000000000000",
-      "tag_object": "1111111111111111111111111111111111111111"
+      "kind": "branch",
+      "selector": "refs/heads/main",
+      "commit": "0000000000000000000000000000000000000000"
     },
     "canonical": "0000000000000000000000000000000000000000",
     "stack": "0000000000000000000000000000000000000000"
   },
-  "ledger": "PATCHES.md",
+  "documents": {
+    "ledger": "PATCHES.md",
+    "exports": "patches/downstream"
+  },
   "bookkeeping_patch": "fork-tooling",
   "patches": [
     {
@@ -29,10 +31,7 @@
       "purpose": "Describe why this downstream change exists.",
       "upstream_status": "not-submitted",
       "drop_when": "Upstream provides the required behavior.",
-      "paths": [
-        "src/example.rs"
-      ],
-      "export": "patches/downstream/0001-downstream-change.patch"
+      "scope": ["src/**", "tests/**"]
     },
     {
       "name": "fork-tooling",
@@ -40,24 +39,23 @@
       "purpose": "Own downstream fork policy and generated bookkeeping.",
       "upstream_status": "inappropriate: downstream-only tooling",
       "drop_when": "The downstream fork is retired.",
-      "paths": [
+      "scope": [
         "AGENTS.md",
         "FORK.md",
         "PATCHES.md",
         "mise.toml",
         "mise.lock",
-        "patches/downstream/*"
+        "lefthook.yml",
+        "patches/fork.json",
+        "patches/downstream/**"
       ]
     }
   ],
   "history": [],
-  "allow": {
-    "base": []
-  },
-  "required": [
-    {
-      "path": "FORK.md",
-      "contains": "mise run fork:verify"
-    }
-  ]
+  "contracts": {
+    "allow_base": [],
+    "required_text": [
+      {"path": "FORK.md", "contains": "mise run fork check"}
+    ]
+  }
 }

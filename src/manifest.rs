@@ -1,5 +1,6 @@
 use anyhow::{Result, ensure};
 use clap::ValueEnum;
+use globset::GlobBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -11,15 +12,13 @@ pub struct Manifest {
     pub downstream: Downstream,
     pub upstream: Upstream,
     pub base: Base,
-    pub ledger: String,
+    pub documents: Documents,
     pub bookkeeping_patch: String,
     pub patches: Vec<Patch>,
     #[serde(default)]
-    pub history: Vec<PatchEvent>,
+    pub history: Vec<HistoryEvent>,
     #[serde(default)]
-    pub allow: Allow,
-    #[serde(default)]
-    pub required: Vec<RequiredText>,
+    pub contracts: Contracts,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
@@ -27,7 +26,7 @@ pub struct Manifest {
 pub struct Downstream {
     pub remote: String,
     pub branch: String,
-    pub backup_tag_prefix: String,
+    pub recovery_tag_prefix: String,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
@@ -44,6 +43,13 @@ pub struct Base {
     pub target: BaseTarget,
     pub canonical: String,
     pub stack: String,
+}
+
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Documents {
+    pub ledger: String,
+    pub exports: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
@@ -81,30 +87,40 @@ pub struct Patch {
     pub purpose: String,
     pub upstream_status: String,
     pub drop_when: String,
-    pub paths: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub export: Option<String>,
+    pub scope: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum HistoryEvent {
+    Rebase {
+        target: BaseTarget,
+        recovery: RecoveryEvidence,
+        dropped: Vec<DroppedPatch>,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchEvent {
-    pub kind: PatchEventKind,
-    pub patch: Patch,
-    pub commit: String,
-    pub target: BaseTarget,
+pub struct RecoveryEvidence {
+    pub tag: String,
+    pub tag_object: String,
+    pub old_base: String,
+    pub old_tip: String,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PatchEventKind {
-    UpstreamMerged,
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DroppedPatch {
+    pub patch: Patch,
+    pub commit: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Allow {
-    pub base: Vec<String>,
+pub struct Contracts {
+    pub allow_base: Vec<String>,
+    pub required_text: Vec<RequiredText>,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
@@ -117,10 +133,10 @@ pub struct RequiredText {
 impl Manifest {
     pub fn validate(&self, repo: &Path, manifest_path: &Path) -> Result<()> {
         self.validate_identity()?;
-        self.validate_patches(repo)?;
+        self.validate_patches()?;
         self.validate_bookkeeping(repo, manifest_path)?;
-        self.validate_history(repo)?;
-        self.validate_extra_paths(repo)?;
+        self.validate_history()?;
+        self.validate_contracts(repo)?;
         Ok(())
     }
 
@@ -134,13 +150,14 @@ impl Manifest {
             ("downstream remote", self.downstream.remote.as_str()),
             ("downstream branch", self.downstream.branch.as_str()),
             (
-                "backup tag prefix",
-                self.downstream.backup_tag_prefix.as_str(),
+                "recovery tag prefix",
+                self.downstream.recovery_tag_prefix.as_str(),
             ),
             ("upstream remote", self.upstream.remote.as_str()),
             ("upstream URL", self.upstream.url.as_str()),
             ("upstream fetch ref", self.upstream.fetch_ref.as_str()),
-            ("ledger", self.ledger.as_str()),
+            ("ledger", self.documents.ledger.as_str()),
+            ("exports directory", self.documents.exports.as_str()),
             ("bookkeeping patch", self.bookkeeping_patch.as_str()),
         ] {
             ensure!(!value.trim().is_empty(), "{label} is required");
@@ -150,9 +167,9 @@ impl Manifest {
             "upstream fetch_ref must be a full branch ref"
         );
         ensure!(
-            !self.downstream.backup_tag_prefix.starts_with("refs/")
-                && !self.downstream.backup_tag_prefix.ends_with('/'),
-            "backup_tag_prefix must be a tag-name prefix without refs/tags"
+            !self.downstream.recovery_tag_prefix.starts_with("refs/")
+                && !self.downstream.recovery_tag_prefix.ends_with('/'),
+            "recovery_tag_prefix must be a tag-name prefix without refs/tags"
         );
         for (label, value) in [
             ("canonical base", self.base.canonical.as_str()),
@@ -165,16 +182,30 @@ impl Manifest {
             self.base.target.commit == self.base.stack,
             "base target commit must equal stack base"
         );
+        validate_repo_path_text(&self.documents.ledger)?;
+        validate_repo_path_text(&self.documents.exports)?;
         Ok(())
     }
 
-    fn validate_patches(&self, repo: &Path) -> Result<()> {
+    fn validate_patches(&self) -> Result<()> {
         ensure!(!self.patches.is_empty(), "at least one patch is required");
         let mut names = HashSet::new();
-        let mut exports = HashSet::new();
         let mut seen_tooling = false;
         for patch in &self.patches {
-            validate_patch(repo, patch, &mut names, &mut exports, &mut seen_tooling)?;
+            patch.validate()?;
+            ensure!(
+                names.insert(&patch.name),
+                "duplicate patch name: {}",
+                patch.name
+            );
+            match patch.kind {
+                PatchKind::Source => ensure!(
+                    !seen_tooling,
+                    "source patch {} appears after tooling",
+                    patch.name
+                ),
+                PatchKind::Tooling => seen_tooling = true,
+            }
         }
         Ok(())
     }
@@ -182,7 +213,8 @@ impl Manifest {
     fn validate_bookkeeping(&self, repo: &Path, manifest_path: &Path) -> Result<()> {
         let manifest_relative = manifest_path.strip_prefix(repo)?.to_string_lossy();
         validate_repo_path(repo, &manifest_relative)?;
-        validate_repo_path(repo, &self.ledger)?;
+        validate_repo_path(repo, &self.documents.ledger)?;
+        validate_repo_path(repo, &self.documents.exports)?;
         let bookkeeping = self.patches.last().expect("patches validated as non-empty");
         ensure!(
             bookkeeping.name == self.bookkeeping_patch,
@@ -194,43 +226,33 @@ impl Manifest {
             "bookkeeping patch must be tooling"
         );
         for (label, path) in [
-            ("ledger", self.ledger.as_str()),
+            ("ledger", self.documents.ledger.as_str()),
             ("manifest", manifest_relative.as_ref()),
         ] {
             ensure!(
-                bookkeeping
-                    .paths
-                    .iter()
-                    .any(|pattern| path_matches(pattern, path)),
+                bookkeeping.owns(path),
                 "bookkeeping patch must own {label} {path}"
             );
         }
-        self.validate_exports(bookkeeping, &manifest_relative)
-    }
-
-    fn validate_exports(&self, bookkeeping: &Patch, manifest_path: &str) -> Result<()> {
-        for patch in &self.patches {
-            let Some(export) = patch.export.as_deref() else {
-                continue;
-            };
+        for export in self.source_exports() {
             ensure!(
-                !contains_glob(export),
-                "export path must be a concrete file: {export}"
+                bookkeeping.owns(&export.path),
+                "bookkeeping patch must own export {}",
+                export.path
             );
             ensure!(
-                bookkeeping
-                    .paths
+                export.path != manifest_relative && export.path != self.documents.ledger,
+                "export collides with manifest or ledger: {}",
+                export.path
+            );
+            ensure!(
+                !self
+                    .contracts
+                    .required_text
                     .iter()
-                    .any(|pattern| path_matches(pattern, export)),
-                "bookkeeping patch must own export {export}"
-            );
-            ensure!(
-                export != manifest_path && export != self.ledger,
-                "export collides with manifest or ledger: {export}"
-            );
-            ensure!(
-                !self.required.iter().any(|required| required.path == export),
-                "export collides with required contract: {export}"
+                    .any(|required| required.path == export.path),
+                "export collides with required contract: {}",
+                export.path
             );
             for owner in self
                 .patches
@@ -238,11 +260,9 @@ impl Manifest {
                 .filter(|candidate| candidate.name != self.bookkeeping_patch)
             {
                 ensure!(
-                    !owner
-                        .paths
-                        .iter()
-                        .any(|pattern| path_matches(pattern, export)),
-                    "export {export} overlaps patch {}",
+                    !owner.owns(&export.path),
+                    "export {} overlaps patch {}",
+                    export.path,
                     owner.name
                 );
             }
@@ -250,30 +270,42 @@ impl Manifest {
         Ok(())
     }
 
-    fn validate_history(&self, repo: &Path) -> Result<()> {
+    fn validate_history(&self) -> Result<()> {
         let mut identities = HashSet::new();
         for event in &self.history {
+            let HistoryEvent::Rebase {
+                target,
+                recovery,
+                dropped,
+            } = event;
+            target.validate()?;
+            recovery.validate(&self.downstream.recovery_tag_prefix)?;
             ensure!(
-                is_full_sha(&event.commit),
-                "history commit must be a full SHA"
+                !dropped.is_empty(),
+                "rebase history must contain dropped patches"
             );
-            event.target.validate()?;
-            validate_historical_patch(repo, &event.patch)?;
-            ensure!(
-                identities.insert((event.patch.name.as_str(), event.commit.as_str())),
-                "duplicate history event for {} at {}",
-                event.patch.name,
-                event.commit
-            );
+            for item in dropped {
+                item.patch.validate()?;
+                ensure!(
+                    is_full_sha(&item.commit),
+                    "history commit must be a full SHA"
+                );
+                ensure!(
+                    identities.insert((item.patch.name.as_str(), item.commit.as_str())),
+                    "duplicate history event for {} at {}",
+                    item.patch.name,
+                    item.commit
+                );
+            }
         }
         Ok(())
     }
 
-    fn validate_extra_paths(&self, repo: &Path) -> Result<()> {
-        for pattern in &self.allow.base {
-            validate_pattern(pattern)?;
+    fn validate_contracts(&self, repo: &Path) -> Result<()> {
+        for pattern in &self.contracts.allow_base {
+            validate_scope(pattern)?;
         }
-        for required in &self.required {
+        for required in &self.contracts.required_text {
             validate_repo_path(repo, &required.path)?;
             ensure!(
                 valid_metadata(&required.contains),
@@ -291,8 +323,8 @@ impl Manifest {
             .collect()
     }
 
-    pub fn exported_patches(&self) -> impl Iterator<Item = &Patch> {
-        self.patches.iter().filter(|patch| patch.export.is_some())
+    pub fn patch(&self, name: &str) -> Option<&Patch> {
+        self.patches.iter().find(|patch| patch.name == name)
     }
 
     pub fn insertion_index(&self, kind: PatchKind) -> usize {
@@ -305,6 +337,33 @@ impl Manifest {
             PatchKind::Tooling => self.patches.len() - 1,
         }
     }
+
+    pub fn export_path(&self, index: usize, patch: &Patch) -> Option<String> {
+        (patch.kind == PatchKind::Source).then(|| {
+            format!(
+                "{}/{:04}-{}.patch",
+                self.documents.exports.trim_end_matches('/'),
+                index + 1,
+                patch.name
+            )
+        })
+    }
+
+    pub fn source_exports(&self) -> Vec<SourceExport<'_>> {
+        self.patches
+            .iter()
+            .enumerate()
+            .filter_map(|(index, patch)| {
+                self.export_path(index, patch)
+                    .map(|path| SourceExport { patch, path })
+            })
+            .collect()
+    }
+}
+
+pub struct SourceExport<'a> {
+    pub patch: &'a Patch,
+    pub path: String,
 }
 
 impl BaseTarget {
@@ -349,6 +408,46 @@ impl BaseTarget {
 }
 
 impl Patch {
+    pub fn validate(&self) -> Result<()> {
+        ensure!(
+            valid_patch_name(&self.name),
+            "invalid patch name: {:?}",
+            self.name
+        );
+        for (label, value) in [
+            ("purpose", self.purpose.as_str()),
+            ("upstream_status", self.upstream_status.as_str()),
+            ("drop_when", self.drop_when.as_str()),
+        ] {
+            ensure!(
+                valid_metadata(value),
+                "invalid {label} for patch {}",
+                self.name
+            );
+        }
+        ensure!(
+            !self.scope.is_empty(),
+            "patch {} must declare scope",
+            self.name
+        );
+        let mut scope = HashSet::new();
+        for pattern in &self.scope {
+            validate_scope(pattern)?;
+            ensure!(
+                scope.insert(pattern),
+                "duplicate scope {pattern} in patch {}",
+                self.name
+            );
+        }
+        Ok(())
+    }
+
+    pub fn owns(&self, path: &str) -> bool {
+        self.scope
+            .iter()
+            .any(|pattern| scope_matches(pattern, path))
+    }
+
     pub fn message(&self) -> String {
         format!(
             "{}\n\nDownstream-Reason: {}\nUpstream-Status: {}\nDrop-When: {}",
@@ -357,85 +456,25 @@ impl Patch {
     }
 }
 
-fn validate_patch<'a>(
-    repo: &Path,
-    patch: &'a Patch,
-    names: &mut HashSet<&'a String>,
-    exports: &mut HashSet<&'a String>,
-    seen_tooling: &mut bool,
-) -> Result<()> {
-    validate_patch_fields(repo, patch)?;
-    ensure!(
-        names.insert(&patch.name),
-        "duplicate patch name: {}",
-        patch.name
-    );
-    match patch.kind {
-        PatchKind::Source => ensure!(
-            !*seen_tooling,
-            "source patch {} appears after tooling",
-            patch.name
-        ),
-        PatchKind::Tooling => {
-            *seen_tooling = true;
-            ensure!(
-                patch.export.is_none(),
-                "tooling patch {} cannot export",
-                patch.name
-            );
+impl RecoveryEvidence {
+    fn validate(&self, prefix: &str) -> Result<()> {
+        ensure!(
+            self.tag.starts_with(&format!("{prefix}/")),
+            "history recovery tag {} is outside prefix {prefix}",
+            self.tag
+        );
+        for (label, value) in [
+            ("recovery tag object", self.tag_object.as_str()),
+            ("history old base", self.old_base.as_str()),
+            ("history old tip", self.old_tip.as_str()),
+        ] {
+            ensure!(is_full_sha(value), "{label} must be a full SHA");
         }
+        Ok(())
     }
-    if let Some(path) = &patch.export {
-        validate_repo_path(repo, path)?;
-        ensure!(exports.insert(path), "duplicate export path: {path}");
-    }
-    Ok(())
 }
 
-fn validate_historical_patch(repo: &Path, patch: &Patch) -> Result<()> {
-    validate_patch_fields(repo, patch)?;
-    if let Some(path) = &patch.export {
-        validate_repo_path(repo, path)?;
-    }
-    Ok(())
-}
-
-fn validate_patch_fields(repo: &Path, patch: &Patch) -> Result<()> {
-    ensure!(
-        valid_patch_name(&patch.name),
-        "invalid patch name: {:?}",
-        patch.name
-    );
-    for (label, value) in [
-        ("purpose", patch.purpose.as_str()),
-        ("upstream_status", patch.upstream_status.as_str()),
-        ("drop_when", patch.drop_when.as_str()),
-    ] {
-        ensure!(
-            valid_metadata(value),
-            "invalid {label} for patch {}",
-            patch.name
-        );
-    }
-    ensure!(
-        !patch.paths.is_empty(),
-        "patch {} must declare paths",
-        patch.name
-    );
-    let mut paths = HashSet::new();
-    for path in &patch.paths {
-        validate_pattern(path)?;
-        ensure!(
-            paths.insert(path),
-            "duplicate path {path} in patch {}",
-            patch.name
-        );
-    }
-    let _ = repo;
-    Ok(())
-}
-
-fn is_full_sha(value: &str) -> bool {
+pub fn is_full_sha(value: &str) -> bool {
     value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
@@ -450,19 +489,16 @@ fn valid_metadata(value: &str) -> bool {
     !value.trim().is_empty() && value.trim() == value && !value.contains(['\n', '\r'])
 }
 
-fn contains_glob(value: &str) -> bool {
-    value.contains(['*', '?', '[', ']'])
-}
-
-fn validate_pattern(value: &str) -> Result<()> {
+fn validate_scope(value: &str) -> Result<()> {
     ensure!(
-        !value.is_empty() && !value.starts_with('/') && !value.contains(".."),
-        "invalid repository path pattern: {value}"
+        !value.is_empty() && !value.starts_with('/') && !value.split('/').any(|part| part == ".."),
+        "invalid repository scope: {value}"
     );
+    build_glob(value)?;
     Ok(())
 }
 
-fn validate_repo_path(repo: &Path, value: &str) -> Result<()> {
+fn validate_repo_path_text(value: &str) -> Result<()> {
     let path = Path::new(value);
     ensure!(
         !path.is_absolute()
@@ -471,15 +507,24 @@ fn validate_repo_path(repo: &Path, value: &str) -> Result<()> {
                 .all(|component| matches!(component, Component::Normal(_))),
         "path must be repository-relative: {value}"
     );
+    Ok(())
+}
+
+fn validate_repo_path(repo: &Path, value: &str) -> Result<()> {
+    validate_repo_path_text(value)?;
     ensure!(
-        repo.join(path).starts_with(repo),
+        repo.join(value).starts_with(repo),
         "path escapes repository: {value}"
     );
     Ok(())
 }
 
-fn path_matches(pattern: &str, path: &str) -> bool {
-    crate::pattern::matches(pattern, path)
+pub fn scope_matches(pattern: &str, path: &str) -> bool {
+    build_glob(pattern).is_ok_and(|glob| glob.compile_matcher().is_match(path))
+}
+
+fn build_glob(pattern: &str) -> Result<globset::Glob, globset::Error> {
+    GlobBuilder::new(pattern).literal_separator(true).build()
 }
 
 #[cfg(test)]
@@ -493,7 +538,7 @@ mod tests {
             downstream: Downstream {
                 remote: "origin".into(),
                 branch: "main".into(),
-                backup_tag_prefix: "vsh/pre-sync".into(),
+                recovery_tag_prefix: "forkctl/recovery".into(),
             },
             upstream: Upstream {
                 remote: "upstream".into(),
@@ -510,7 +555,10 @@ mod tests {
                 canonical: commit.clone(),
                 stack: commit,
             },
-            ledger: "PATCHES.md".into(),
+            documents: Documents {
+                ledger: "PATCHES.md".into(),
+                exports: "patches/downstream".into(),
+            },
             bookkeeping_patch: "fork-tooling".into(),
             patches: vec![Patch {
                 name: "fork-tooling".into(),
@@ -518,12 +566,14 @@ mod tests {
                 purpose: "Own downstream tooling.".into(),
                 upstream_status: "downstream-only".into(),
                 drop_when: "The fork is retired.".into(),
-                paths: vec!["fork.json".into(), "PATCHES.md".into(), "patches/*".into()],
-                export: None,
+                scope: vec![
+                    "fork.json".into(),
+                    "PATCHES.md".into(),
+                    "patches/downstream/**".into(),
+                ],
             }],
             history: Vec::new(),
-            allow: Allow::default(),
-            required: Vec::new(),
+            contracts: Contracts::default(),
         }
     }
 
@@ -536,10 +586,27 @@ mod tests {
     }
 
     #[test]
+    fn source_exports_are_deterministic() {
+        let mut value = manifest();
+        value.patches.insert(0, source_patch());
+        assert_eq!(
+            value.source_exports()[0].path,
+            "patches/downstream/0001-source.patch"
+        );
+    }
+
+    #[test]
+    fn glob_scope_distinguishes_segments() {
+        assert!(scope_matches("src/**", "src/app/mod.rs"));
+        assert!(!scope_matches("src/*.rs", "src/app/mod.rs"));
+        assert!(scope_matches("src/*.rs", "src/lib.rs"));
+    }
+
+    #[test]
     fn rejects_source_after_tooling() {
         let directory = tempfile::tempdir().unwrap();
         let mut value = manifest();
-        value.patches.push(source_patch(None));
+        value.patches.push(source_patch());
         assert!(
             value
                 .validate(directory.path(), &directory.path().join("fork.json"))
@@ -547,66 +614,14 @@ mod tests {
         );
     }
 
-    #[test]
-    fn inserts_before_the_correct_layer() {
-        let mut value = manifest();
-        value.patches.insert(0, source_patch(None));
-        assert_eq!(value.insertion_index(PatchKind::Source), 1);
-        assert_eq!(value.insertion_index(PatchKind::Tooling), 1);
-    }
-
-    #[test]
-    fn rejects_export_not_owned_by_bookkeeping() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut value = manifest();
-        value
-            .patches
-            .insert(0, source_patch(Some("exports/source.patch")));
-        assert!(
-            value
-                .validate(directory.path(), &directory.path().join("fork.json"))
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn rejects_export_colliding_with_source_path() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut value = manifest();
-        value
-            .patches
-            .insert(0, source_patch(Some("patches/source.patch")));
-        value.patches[0].paths.push("patches/*".into());
-        assert!(
-            value
-                .validate(directory.path(), &directory.path().join("fork.json"))
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn rejects_glob_export_path() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut value = manifest();
-        value
-            .patches
-            .insert(0, source_patch(Some("patches/*.patch")));
-        assert!(
-            value
-                .validate(directory.path(), &directory.path().join("fork.json"))
-                .is_err()
-        );
-    }
-
-    fn source_patch(export: Option<&str>) -> Patch {
+    fn source_patch() -> Patch {
         Patch {
             name: "source".into(),
             kind: PatchKind::Source,
             purpose: "Change source.".into(),
             upstream_status: "not-submitted".into(),
             drop_when: "Upstream changes.".into(),
-            paths: vec!["src/lib.rs".into()],
-            export: export.map(str::to_string),
+            scope: vec!["src/**".into()],
         }
     }
 }

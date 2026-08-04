@@ -1,31 +1,43 @@
-# Mise Fork Tasks
+# Forkctl Development Guide
 
-Reusable downstream-fork maintenance for StGit patch stacks.
+Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 
 ## Architecture
 
-- `forkctl` is a small Rust policy CLI. It delegates all repository and patch mechanics to `git` and `stg`; never reimplement either data model.
-- `tasks/fork.toml` is the mise-native remote task catalog. Every task declares all required tools and versions so consuming repositories need only mise.
-- A consuming fork owns one JSON manifest and its exported patch files. Generic executable logic stays here.
-- `src/patchexport.tmpl` pins StGit export formatting across StGit upgrades.
-- `templates/*.md` holds Askama-compiled editorial text for generated ledgers and rebase reports; Rust renderers own typed context and format-specific escaping.
-- `src/protocol.rs` is the versioned request/result/error/schema contract. `src/view.rs` is the only terminal renderer and owns one semantic visual theme.
+- Delegate repository and patch mechanics to installed `git` and `stg`; never reproduce either model.
+- `src/cli.rs` is the Clap adapter and sole command/parameter grammar.
+- `src/protocol.rs` is the versioned Serde/Schemars request/result/notice/error/schema contract.
+- `src/app/` owns typed repository operations and never prints or chooses a view.
+- `src/view.rs` owns pretty command output; `src/help.rs` owns help derived from Clap metadata. Both share one semantic Anstyle/Comfy Table system.
+- `src/process.rs` is the only production child-process factory and clears Git repository-local hook variables for explicit cwd execution.
+- Git-private active/operation state lives under `$(git rev-parse --git-path forkctl/)`.
+- Askama templates own generated Markdown document structure.
 
-## Invariants
+## Product invariants
 
-- Keep exactly these public lifecycle operations: `init`, `status`, `new`, `verify`, `rebase`, and `publish`; `instructions` is read-only workflow guidance.
-- `schema: 1` is the single manifest contract. Do not add a compatibility reader or migration fallback for the pre-0.0.3 shape.
-- No runtime language, package manager, config parser, or shell-library dependency beyond the mise-provisioned `forkctl`, `git`, and `stg` executables.
-- Remote task and release versions are immutable. Consumers pin the remote catalog by commit or release tag.
-- `verify` must fail closed on dirty worktrees, wrong branch/tracking, missing tools, remote drift, base drift, patch-order drift, unapplied or empty patches, undeclared per-patch paths, trailer/ledger/export drift, missing source contracts, or non-reconstructable exports.
-- Mutating commands never stash. Rebase creates recovery and exact-lease state before replay, never publishes, and preserves normal StGit conflict state.
-- `publish` requires verification and exact pending evidence, uses atomic explicit-ref publication with an exact force-with-lease, and has no non-atomic or plain-force fallback.
-- Keep `main.rs` as adapter wiring; implementation modules stay bounded by responsibility.
-- App/domain modules return typed protocol data only. They never print, construct tables, inspect TTY/color/output mode, or depend on view crates. The architecture test enforces this boundary.
-- Clap and JSON requests execute the same handlers. Pretty and JSON outputs consume the same typed results; Schemars derives the published API schema from those types.
-- All human output goes through the centralized Anstream/Anstyle/Comfy Table renderer. Do not mix library-default themes or command-local visual styles.
-- Keep examples, generated instructions, and the task catalog synchronized with the manifest and protocol contracts.
-- `[workspace.package].version` is the only version source. Never hand-edit task/example version copies; run `mise run version:sync` and let Lefthook stage the result.
+- Patch intent is explicit; forkctl never routes changes by filename inference.
+- One clone has at most one active patch.
+- `check` is the sole validation command: full repository by default, staged index with `-s`.
+- `patch refresh` captures staged by default and owns StGit targeting plus all generated bookkeeping.
+- Checks never stage or mutate.
+- Every source patch has one deterministic generated export; tooling patches have none.
+- One typed current-operation journal exposes status/continue/abort.
+- Historical dropped patches are bound to the exact annotated recovery tag object preserving the old stack.
+- Publish is one atomic explicit-ref push under one exact lease, with no fallback.
+- Forkctl does not install hooks, edit `core.hooksPath`, or administer provider branch policy.
+- No compatibility reader, alias, migration, or fallback exists for older forkctl contracts.
+
+## CLI and integration
+
+- Keep core verbs top-level. Use `patch`, `operation`, and `api` subcommands only for distinct actions; modes of one operation are parameters, not optional subcommands.
+- Leaf parameters are orthogonal and composable, with repeatable values, visible defaults, and collision-audited short forms.
+- Help, Usage KDL, shell completion, CLI requests, and JSON Schema derive from the authoritative Clap/protocol types rather than copied literals.
+- The remote catalog exposes one mounted `fork` file task using `dir = "{{cwd}}"`, `raw_args = true`, exact task tools, the mise-documented self-mount `mise run --quiet fork -- --usage-spec=fork`, and `exec forkctl "$@"`.
+- VSH Lefthook defaults call `mise run fork check -s` on pre-commit and `mise run fork check -q` on pre-push; other managers call the same commands.
+
+## Versioning
+
+`[workspace.package].version` is the only forkctl release-version source. Root `mise.toml` is the only source for the minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. `mise run version:sync` regenerates `mise.lock` and every operational copy; `version:check` rejects drift. Continue patch releases; do not introduce a minor bump without explicit operator direction.
 
 ## Checks
 
@@ -34,4 +46,4 @@ mise run verify
 mise run build
 ```
 
-Test the released remote catalog against a real disposable fork clone before publishing a version.
+Every release must additionally be exercised through the immutable mise catalog and the published binary against disposable real Git/StGit remotes, including bootstrap, active patch capture, hooks, abort/continue, rebase history hydration, stale lease, protected-branch rejection, and successful atomic publication.

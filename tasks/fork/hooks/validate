@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Version pins are generated from root mise.toml by `mise run version:sync`.
+#MISE description="Validate the consumer's composed Lefthook configuration, including forkctl checks"
+#MISE dir="{{cwd}}"
+#MISE tools = { lefthook = "2.1.10" }
+
+set -euo pipefail
+exec lefthook validate

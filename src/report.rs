@@ -36,7 +36,7 @@ struct ExportRow {
 }
 
 pub fn render(report: RebaseReport) -> Result<String> {
-    RebaseReportTemplate {
+    let mut output = RebaseReportTemplate {
         target: escape_inline(&report.target),
         old_base: escape_inline(&report.old_base),
         old_tip: escape_inline(&report.old_tip),
@@ -54,7 +54,11 @@ pub fn render(report: RebaseReport) -> Result<String> {
         range_diff: report.range_diff,
     }
     .render()
-    .context("render rebase report")
+    .context("render rebase report")?;
+    if !output.ends_with('\n') {
+        output.push('\n');
+    }
+    Ok(output)
 }
 
 fn escape_inline(value: &str) -> String {
