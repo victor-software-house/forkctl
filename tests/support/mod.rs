@@ -81,6 +81,8 @@ impl Fixture {
             "mise.toml",
             "--bookkeeping-path",
             "lefthook.yml",
+            "--required-text",
+            "base.txt=base",
         ]);
         fixture
     }

@@ -12,6 +12,16 @@ fn bootstrap_and_fresh_clone_hydration_are_idempotent() {
         "fork-tooling"
     );
     fixture.forkctl_ok(&["init"]);
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.repo.join("patches/fork.json")).unwrap()).unwrap();
+    assert_eq!(
+        manifest["contracts"]["required_text"][0]["path"],
+        "base.txt"
+    );
+    assert_eq!(
+        manifest["contracts"]["required_text"][0]["contains"],
+        "base"
+    );
 }
 
 #[test]

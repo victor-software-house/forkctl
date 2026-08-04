@@ -53,6 +53,8 @@ fn schema_bundle_exposes_all_contracts() {
         .unwrap();
     assert!(output.status.success());
     let schema: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(schema.to_string().contains("required_text"));
+    assert!(schema.to_string().contains("allow_base"));
     for key in [
         "manifest",
         "invocation",
@@ -73,6 +75,8 @@ fn usage_spec_contains_full_mounted_grammar() {
     assert!(spec.contains("cmd patch"));
     assert!(spec.contains("cmd refresh"));
     assert!(spec.contains("flag \"-s --staged\""));
+    assert!(spec.contains("flag \"-a --allow-base\""));
+    assert!(spec.contains("flag \"-r --required-text\""));
     assert!(spec.contains("complete patch run=\"mise run --quiet fork -- __candidates patch\""));
     assert!(spec.contains("complete onto run=\"mise run --quiet fork -- __candidates ref\""));
     assert!(
@@ -303,7 +307,12 @@ fn domain_failure_is_one_json_error_with_empty_stderr() {
 
 #[test]
 fn old_command_and_aliases_are_rejected() {
-    for args in [vec!["verify"], vec!["new", "x"], vec!["--json", "status"]] {
+    for args in [
+        vec!["verify"],
+        vec!["new", "x"],
+        vec!["--json", "status"],
+        vec!["init", "--required-text", "missing-separator"],
+    ] {
         let output = forkctl().args(args).output().unwrap();
         assert!(!output.status.success());
     }

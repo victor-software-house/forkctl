@@ -42,6 +42,8 @@ forkctl init [OPTIONS]
 | `-e` | `--exports` | yes | Generated source-export directory |
 | `-k` | `--bookkeeping-patch` | yes | Final tooling patch name |
 | `-p` | `--bookkeeping-path` | no/repeatable | Additional ownership scope for tooling files |
+| `-a` | `--allow-base` | no/repeatable | Allowed base-drift ownership glob |
+| `-r` | `--required-text` | no/repeatable | Required repository assertion as `PATH=TEXT` |
 | `-n` | `--dry-run` | no | Resolve and show bootstrap/hydration effects |
 
 If the manifest exists, bootstrap options are rejected. If absent, `HEAD` must equal the resolved base.

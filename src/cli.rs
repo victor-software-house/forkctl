@@ -1,4 +1,4 @@
-use crate::manifest::PatchKind;
+use crate::manifest::{PatchKind, RequiredText};
 use crate::protocol::{
     ApiRequest, CaptureSource, CheckArgs, CheckScope, ColorMode, EmptyArgs, ExecutionMode,
     InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs, PatchEditArgs, PatchName,
@@ -139,6 +139,12 @@ pub struct InitCliArgs {
     /// Additional bookkeeping ownership scope; repeatable.
     #[arg(short = 'p', long = "bookkeeping-path", help_heading = "Bookkeeping", value_hint = clap::ValueHint::AnyPath)]
     pub bookkeeping_scope: Vec<String>,
+    /// Base-drift ownership glob allowed below the patch stack; repeatable.
+    #[arg(short = 'a', long, help_heading = "Contracts")]
+    pub allow_base: Vec<String>,
+    /// Required repository text as PATH=TEXT; repeatable.
+    #[arg(short = 'r', long, help_heading = "Contracts", value_parser = parse_required_text)]
+    pub required_text: Vec<RequiredText>,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -356,6 +362,8 @@ impl Cli {
                     exports: args.exports,
                     bookkeeping_patch: args.bookkeeping_patch,
                     bookkeeping_scope: args.bookkeeping_scope,
+                    allow_base: args.allow_base,
+                    required_text: args.required_text,
                 })),
                 mode: mode(args.execution.dry_run),
             },
@@ -494,6 +502,19 @@ fn request(request: ApiRequest) -> CliAction {
         request: Box::new(request),
         mode: ExecutionMode::Execute,
     }
+}
+
+fn parse_required_text(value: &str) -> std::result::Result<RequiredText, String> {
+    let (path, contains) = value
+        .split_once('=')
+        .ok_or_else(|| "required text must use PATH=TEXT".to_string())?;
+    if path.trim().is_empty() || contains.trim().is_empty() {
+        return Err("required text path and text must be non-empty".into());
+    }
+    Ok(RequiredText {
+        path: path.to_string(),
+        contains: contains.to_string(),
+    })
 }
 
 fn mode(dry_run: bool) -> ExecutionMode {
