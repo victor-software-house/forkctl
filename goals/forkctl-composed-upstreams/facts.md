@@ -1,0 +1,28 @@
+# Forkctl Composed Upstreams — Facts
+
+- A composition-owned repository can declare two or more named Git sources.
+- Each source records one URL, tracked ref, exact resolved commit, and one or more exact file/directory projections.
+- Each projection maps one exact source root to one exact destination root.
+- Equal or parent/child-overlapping destinations are rejected before downstream mutation.
+- A missing projection root fails as stale configuration; deletion or rename beneath an existing mapped directory is a normal source change.
+- Synthetic bases contain projected source entries only and do not parent source commits.
+- Selected regular files, executable files, symbolic links, and Gitlinks preserve their Git bytes and modes.
+- LFS pointer blobs remain pointers.
+- Every synthetic base after the first has the previous synthetic base as its sole parent.
+- One ordered patch may modify paths projected from several sources and may add downstream-only paths.
+- Synchronizing no named source advances all sources; repeatable source selection advances only those sources as one atomic operation.
+- Source resolution, materialization, replay, generated evidence, and validation either complete together or remain recoverable without partial publication.
+- Read-only checks do not fetch or mutate source caches.
+- Rewrite is the default history strategy and publishes only under the captured exact lease.
+- Append is explicit, retains old patch generations, and produces the same final tree as rewrite while keeping the old published tip as an ancestor.
+- Proposal preparation does not move the downstream publication ref.
+- One immutable proposal binds candidate, old downstream lease, recovery object, source locks, synthetic base, manifest, and report evidence.
+- A review commit has the old downstream tip as its sole parent and the exact candidate tree, so the provider diff shows the net synchronization change.
+- The review commit is never the publication target; immutable proposal evidence keeps the exact candidate reachable.
+- Proposal verification and promotion work from a clean clone without the preparation runner's local operation state.
+- A stale lease, modified candidate, substituted proposal object, or mismatched evidence blocks promotion.
+- GitHub proposal PRs are review surfaces; normal merge, squash, and rebase are not exact forkctl publication.
+- The initial GitHub integration uses separate versioned reusable proposal and explicit promotion workflows.
+- Privileged proposal workflows never execute mutable proposal-head code through `pull_request_target`.
+- Forkctl reports provider ruleset rejection and never creates or changes bypass policy.
+- Independently evolving ordinary destination content is outside the first composition-owned milestone.
