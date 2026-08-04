@@ -297,7 +297,14 @@ impl App {
     }
 
     fn check_required_text(&self) -> Result<()> {
-        for required in &self.manifest()?.contracts.required_text {
+        self.validate_required_text(&self.manifest()?.contracts.required_text)
+    }
+
+    pub(super) fn validate_required_text(
+        &self,
+        required_text: &[crate::manifest::RequiredText],
+    ) -> Result<()> {
+        for required in required_text {
             let path = self.repo.join(&required.path);
             let contents =
                 fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;

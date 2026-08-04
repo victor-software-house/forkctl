@@ -201,6 +201,16 @@ Require no remaining changes, run full `check`, and clear active state.
 forkctl patch finish [-n|--dry-run] [NAME]
 ```
 
+## `contract edit`
+
+Append declarative contracts after their files exist, or clear and replace the complete set.
+
+```text
+forkctl contract edit [--clear] [-a|--allow-base GLOB]... [-r|--required-text PATH=TEXT]... [-n|--dry-run]
+```
+
+At least one contract option is required. Without `--clear`, values append uniquely. With `--clear`, existing allowed-base and required-text entries are removed before supplied values are added. Forkctl validates all required files/text and the resulting repository before refreshing bookkeeping.
+
 ## `rebase`
 
 Resolve an exact target, create recovery evidence, and replay the stack without publication.

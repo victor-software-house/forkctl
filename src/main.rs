@@ -96,6 +96,7 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         ApiRequest::PatchEdit(args) => app.patch_edit(args, mode)?,
         ApiRequest::PatchRefresh(args) => app.patch_refresh(args, mode)?,
         ApiRequest::PatchFinish(args) => app.patch_finish(&args, mode)?,
+        ApiRequest::ContractEdit(args) => app.contract_edit(args, mode)?,
         ApiRequest::Rebase(args) => app.rebase(&args.onto, mode)?,
         ApiRequest::Publish(_) => app.publish(mode)?,
         ApiRequest::OperationStatus(_) => {

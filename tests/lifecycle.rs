@@ -87,6 +87,51 @@ fn staged_check_rejects_out_of_scope_paths() {
 }
 
 #[test]
+fn contract_edit_preflights_and_refreshes_bookkeeping() {
+    let fixture = Fixture::new();
+    let manifest_path = fixture.repo.join("patches/fork.json");
+    let before = fs::read(&manifest_path).unwrap();
+
+    fixture.forkctl_ok(&[
+        "contract",
+        "edit",
+        "--clear",
+        "--allow-base",
+        "vendor/**",
+        "--required-text",
+        "base.txt=base",
+        "--dry-run",
+    ]);
+    assert_eq!(fs::read(&manifest_path).unwrap(), before);
+
+    fixture.forkctl_ok(&[
+        "contract",
+        "edit",
+        "--clear",
+        "--allow-base",
+        "vendor/**",
+        "--required-text",
+        "base.txt=base",
+    ]);
+    fixture.forkctl_ok(&["check"]);
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["contracts"]["allow_base"][0], "vendor/**");
+
+    let valid = fs::read(&manifest_path).unwrap();
+    let rejected = fixture.forkctl(&[
+        "--format",
+        "json",
+        "contract",
+        "edit",
+        "--required-text",
+        "missing.txt=required",
+    ]);
+    assert!(!rejected.status.success());
+    assert_eq!(fs::read(&manifest_path).unwrap(), valid);
+}
+
+#[test]
 fn patch_kind_change_reorders_series_and_exports() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "first-source", "first.txt", "first\n");

@@ -77,6 +77,7 @@ Bundle shape:
 | `init` | execute/plan | `InitArgs` |
 | `status` | execute | `{}` |
 | `check` | execute | `CheckArgs` |
+| `contract.edit` | execute/plan | `ContractEditArgs` |
 | `rebase` | execute/plan | `RebaseArgs` |
 | `publish` | execute/plan | `{}` |
 | `instructions` | execute | `{}` |
@@ -302,6 +303,7 @@ Plans are semantic effects, not echoed shell command strings.
 | `patch_refresh_plan` | complete capture and mutation effects |
 | `patch_finish` | cleared active state and full check result |
 | `patch_finish_plan` | outstanding blockers and local state effect |
+| `contract_edit` | resulting contracts, generated paths, full check result |
 | `rebase` | target, old/new base/tip, recovery object, report object, dropped patches, check result |
 | `rebase_plan` | resolved target, lease, recovery/ref/patch/evidence effects |
 | `publish` | branch, head, recovery tag/object, lease |

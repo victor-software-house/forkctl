@@ -1,8 +1,8 @@
 use crate::manifest::{PatchKind, RequiredText};
 use crate::protocol::{
-    ApiRequest, CaptureSource, CheckArgs, CheckScope, ColorMode, EmptyArgs, ExecutionMode,
-    InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs, PatchEditArgs, PatchName,
-    PatchRefreshArgs, PatchTarget, RebaseArgs, SchemaKind, ScopeEdit,
+    ApiRequest, CaptureSource, CheckArgs, CheckScope, ColorMode, ContractEditArgs, EmptyArgs,
+    ExecutionMode, InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs, PatchEditArgs,
+    PatchName, PatchRefreshArgs, PatchTarget, RebaseArgs, SchemaKind, ScopeEdit,
 };
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
@@ -74,6 +74,11 @@ pub enum Command {
     },
     /// Replay the declared stack onto an exact upstream target.
     Rebase(RebaseCliArgs),
+    /// Edit declarative repository contracts.
+    Contract {
+        #[command(subcommand)]
+        command: ContractCommand,
+    },
     /// Atomically publish the branch and recovery tag under an exact lease.
     Publish(DryRunArgs),
     /// Inspect, continue, or abort the current operation.
@@ -285,6 +290,33 @@ pub struct PatchRefreshCliArgs {
 }
 
 #[derive(Args)]
+#[command(group(
+    ArgGroup::new("contract_change")
+        .args(["clear", "allow_base", "required_text"])
+        .required(true)
+        .multiple(true)
+))]
+pub struct ContractEditCliArgs {
+    /// Clear all existing contracts before adding the supplied values.
+    #[arg(long, help_heading = "Contracts")]
+    pub clear: bool,
+    /// Add an allowed base-drift ownership glob; repeatable.
+    #[arg(short = 'a', long, help_heading = "Contracts")]
+    pub allow_base: Vec<String>,
+    /// Add a required repository assertion as PATH=TEXT; repeatable.
+    #[arg(short = 'r', long, help_heading = "Contracts", value_parser = parse_required_text)]
+    pub required_text: Vec<RequiredText>,
+    #[command(flatten)]
+    pub execution: DryRunArgs,
+}
+
+#[derive(Subcommand)]
+pub enum ContractCommand {
+    /// Append contracts or clear and replace the complete contract set.
+    Edit(ContractEditCliArgs),
+}
+
+#[derive(Args)]
 pub struct RebaseCliArgs {
     /// Full upstream branch/tag ref or commit SHA.
     #[arg(short = 'o', long, help_heading = "Target", add = crate::completion::ref_completer())]
@@ -380,6 +412,16 @@ impl Cli {
             Command::Rebase(args) => CliAction::Request {
                 request: Box::new(ApiRequest::Rebase(RebaseArgs { onto: args.onto })),
                 mode: mode(args.execution.dry_run),
+            },
+            Command::Contract { command } => match command {
+                ContractCommand::Edit(args) => CliAction::Request {
+                    request: Box::new(ApiRequest::ContractEdit(ContractEditArgs {
+                        clear: args.clear,
+                        allow_base: args.allow_base,
+                        required_text: args.required_text,
+                    })),
+                    mode: mode(args.execution.dry_run),
+                },
             },
             Command::Publish(args) => CliAction::Request {
                 request: Box::new(ApiRequest::Publish(EmptyArgs::default())),

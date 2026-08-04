@@ -1,4 +1,5 @@
 mod check;
+mod contract;
 mod init;
 mod operation;
 mod patch;

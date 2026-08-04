@@ -1,4 +1,4 @@
-use crate::manifest::{BaseTarget, Manifest, Patch, PatchKind, RequiredText};
+use crate::manifest::{BaseTarget, Contracts, Manifest, Patch, PatchKind, RequiredText};
 use crate::state::{ActivePatchState, OperationState};
 use clap::ValueEnum;
 use schemars::JsonSchema;
@@ -59,6 +59,8 @@ pub enum ApiRequest {
     PatchRefresh(PatchRefreshArgs),
     #[serde(rename = "patch.finish")]
     PatchFinish(PatchTarget),
+    #[serde(rename = "contract.edit")]
+    ContractEdit(ContractEditArgs),
     #[serde(rename = "rebase")]
     Rebase(RebaseArgs),
     #[serde(rename = "publish")]
@@ -86,6 +88,7 @@ impl ApiRequest {
             Self::PatchEdit(_) => "patch.edit",
             Self::PatchRefresh(_) => "patch.refresh",
             Self::PatchFinish(_) => "patch.finish",
+            Self::ContractEdit(_) => "contract.edit",
             Self::Rebase(_) => "rebase",
             Self::Publish(_) => "publish",
             Self::OperationStatus(_) => "operation.status",
@@ -257,6 +260,17 @@ pub struct PatchRefreshArgs {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct ContractEditArgs {
+    #[serde(default)]
+    pub clear: bool,
+    #[serde(default)]
+    pub allow_base: Vec<String>,
+    #[serde(default)]
+    pub required_text: Vec<RequiredText>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RebaseArgs {
     pub onto: String,
 }
@@ -300,6 +314,7 @@ pub enum CommandResult {
     PatchEdit(PatchEditResult),
     PatchRefresh(PatchRefreshResult),
     PatchFinish(PatchFinishResult),
+    ContractEdit(ContractEditResult),
     Rebase(Box<RebaseResult>),
     Publish(PublishResult),
     OperationStatus(Box<OperationStatusResult>),
@@ -564,6 +579,13 @@ pub struct PatchRefreshResult {
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 pub struct PatchFinishResult {
     pub patch: String,
+    pub check: CheckResult,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+pub struct ContractEditResult {
+    pub contracts: Contracts,
+    pub generated_paths: Vec<String>,
     pub check: CheckResult,
 }
 

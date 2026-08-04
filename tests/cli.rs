@@ -74,6 +74,8 @@ fn usage_spec_contains_full_mounted_grammar() {
     assert!(spec.contains("name fork"));
     assert!(spec.contains("cmd patch"));
     assert!(spec.contains("cmd refresh"));
+    assert!(spec.contains("cmd contract"));
+    assert!(spec.contains("cmd edit"));
     assert!(spec.contains("flag \"-s --staged\""));
     assert!(spec.contains("flag \"-a --allow-base\""));
     assert!(spec.contains("flag \"-r --required-text\""));
