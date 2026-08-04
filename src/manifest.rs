@@ -90,6 +90,37 @@ pub struct Patch {
     pub upstream_status: String,
     pub drop_when: String,
     pub scope: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<Check>,
+}
+
+/// One command that must succeed for the declaring patch to still hold.
+///
+/// `glob` defaults to the declaring patch's scope and may reach anywhere in the repository: the
+/// drift that breaks a long-lived fork is upstream introducing cases the patch never covered, in
+/// files the patch does not own. Scope governs what a patch may modify, never what it may check.
+#[derive(Debug, Clone, Deserialize, Eq, Hash, PartialEq, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Check {
+    pub name: String,
+    pub run: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub glob: Vec<String>,
+    #[serde(default)]
+    pub at: CheckStage,
+}
+
+/// Which applied tree a check observes.
+#[derive(
+    Debug, Clone, Copy, Default, Deserialize, Eq, Hash, PartialEq, schemars::JsonSchema, Serialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckStage {
+    /// The complete applied stack, in the repository itself.
+    #[default]
+    Stack,
+    /// The declaring patch's own commit, in a disposable clone.
+    Patch,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
@@ -99,6 +130,8 @@ pub enum HistoryEvent {
         target: BaseTarget,
         recovery: RecoveryEvidence,
         dropped: Vec<DroppedPatch>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path_changes: Vec<ReplayPathChange>,
     },
     PatchRemoved {
         record: DisabledPatch,
@@ -107,6 +140,15 @@ pub enum HistoryEvent {
         record: DisabledPatch,
         recovery: RecoveryEvidence,
     },
+}
+
+/// A surviving patch whose touched paths changed across replay.
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplayPathChange {
+    pub patch: String,
+    pub commit: String,
+    pub lost_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
@@ -351,12 +393,13 @@ impl Manifest {
                     target,
                     recovery,
                     dropped,
+                    path_changes,
                 } => {
                     target.validate()?;
                     recovery.validate(&self.downstream.recovery_tag_prefix)?;
                     ensure!(
-                        !dropped.is_empty(),
-                        "rebase history must contain dropped patches"
+                        !dropped.is_empty() || !path_changes.is_empty(),
+                        "rebase history must contain dropped patches or replay path changes"
                     );
                     for item in dropped {
                         item.patch.validate()?;
@@ -368,6 +411,31 @@ impl Manifest {
                             identities.insert((item.patch.name.as_str(), item.commit.as_str())),
                             "duplicate history event for {} at {}",
                             item.patch.name,
+                            item.commit
+                        );
+                    }
+                    for item in path_changes {
+                        ensure!(
+                            valid_patch_name(&item.patch),
+                            "invalid replayed patch name: {:?}",
+                            item.patch
+                        );
+                        ensure!(
+                            is_full_sha(&item.commit),
+                            "replayed patch history commit must be a full SHA"
+                        );
+                        ensure!(
+                            !item.lost_paths.is_empty(),
+                            "replayed patch {} must record lost paths",
+                            item.patch
+                        );
+                        for path in &item.lost_paths {
+                            validate_repo_path_text(path)?;
+                        }
+                        ensure!(
+                            identities.insert((item.patch.as_str(), item.commit.as_str())),
+                            "duplicate history event for {} at {}",
+                            item.patch,
                             item.commit
                         );
                     }
@@ -432,6 +500,10 @@ impl Manifest {
 
     pub fn patch(&self, name: &str) -> Option<&Patch> {
         self.patches.iter().find(|patch| patch.name == name)
+    }
+
+    pub fn check_count(&self) -> usize {
+        self.patches.iter().map(|patch| patch.checks.len()).sum()
     }
 
     pub fn insertion_index(&self, patch: &Patch) -> usize {
@@ -549,7 +621,52 @@ impl Patch {
                 self.name
             );
         }
+        self.validate_checks()?;
         Ok(())
+    }
+
+    fn validate_checks(&self) -> Result<()> {
+        let mut names = HashSet::new();
+        for check in &self.checks {
+            ensure!(
+                valid_patch_name(&check.name),
+                "invalid check name in patch {}: {:?}",
+                self.name,
+                check.name
+            );
+            ensure!(
+                names.insert(&check.name),
+                "duplicate check {} in patch {}",
+                check.name,
+                self.name
+            );
+            ensure!(
+                valid_metadata(&check.run),
+                "check {} in patch {} must declare one command line",
+                check.name,
+                self.name
+            );
+            let mut globs = HashSet::new();
+            for pattern in &check.glob {
+                validate_scope(pattern)?;
+                ensure!(
+                    globs.insert(pattern),
+                    "duplicate glob {pattern} in check {} of patch {}",
+                    check.name,
+                    self.name
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Files a check observes: its own globs, or the declaring patch's scope by default.
+    pub fn check_globs<'a>(&'a self, check: &'a Check) -> &'a [String] {
+        if check.glob.is_empty() {
+            &self.scope
+        } else {
+            &check.glob
+        }
     }
 
     pub fn owns(&self, path: &str) -> bool {
@@ -681,6 +798,7 @@ mod tests {
                     "PATCHES.md".into(),
                     "patches/downstream/**".into(),
                 ],
+                checks: Vec::new(),
             }],
             disabled_patches: Vec::new(),
             history: Vec::new(),
@@ -733,6 +851,7 @@ mod tests {
             upstream_status: "not-submitted".into(),
             drop_when: "Upstream changes.".into(),
             scope: vec!["src/**".into()],
+            checks: Vec::new(),
         }
     }
 }

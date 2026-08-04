@@ -82,6 +82,7 @@ impl App {
             purpose: "Own fork policy, generated evidence, and integration configuration.".into(),
             upstream_status: "inappropriate: downstream-only fork maintenance".into(),
             drop_when: "The downstream fork is retired.".into(),
+            checks: Vec::new(),
             scope,
         };
         let manifest = Manifest {

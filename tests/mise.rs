@@ -103,6 +103,14 @@ fn lefthook_composes_with_mounted_read_only_checks() {
         String::from_utf8_lossy(&refresh.stderr)
     );
 
+    let direct_check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(
+        direct_check.status.success(),
+        "direct check failed before mounted hook:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&direct_check.stdout),
+        String::from_utf8_lossy(&direct_check.stderr)
+    );
+
     let pre_push = catalog.lefthook(&["run", "pre-push"]);
     assert!(
         pre_push.status.success(),
@@ -146,9 +154,13 @@ impl MountedCatalog {
                 "",
             )
             .replace(
-                "exec forkctl",
-                &format!("exec {}", env!("CARGO_BIN_EXE_forkctl")),
+                "exec \"$(mise where github:victor-software-house/forkctl)/forkctl\" \"$@\"",
+                &format!("exec {} \"$@\"", env!("CARGO_BIN_EXE_forkctl")),
             );
+        assert!(
+            !source.contains("mise where github:victor-software-house/forkctl"),
+            "mounted test task still resolves the published forkctl binary"
+        );
         fs::write(&task_path, source).unwrap();
         let mut permissions = fs::metadata(&task_path).unwrap().permissions();
         permissions.set_mode(0o755);

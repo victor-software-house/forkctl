@@ -50,6 +50,18 @@ The current manifest/API/local-state contract is `schema: 1`. There are no previ
 
 Leases and recovery points come from remote evidence, never from convenience. Capture the published tip with `ls-remote`, publish an annotated recovery tag for any tip a rewrite overwrites, and require exact evidence — the reviewed operation lease or the fetched downstream tracking ref — that the rewrite was computed against that exact tip.
 
+### 3.6 Declared checks
+
+A patch may declare commands that must succeed for it to still hold. Globs default to the declaring patch's scope and may reach anywhere: the drift that breaks a long-lived fork is upstream introducing cases the patch never covered, in files it does not own and that may not have existed. Scope governs what a patch may modify; a check only reads.
+
+Exit status is the verdict, so any tool works and forkctl ships no checking tooling, embeds no parser or query language, and never rewrites source. Commands come from `process.rs` with repository-local Git variables cleared, an explicit cwd, and shell-quoted `{files}`; an expansion past the command-length budget is a typed error rather than a truncated command.
+
+A check whose globs match no tracked file is a failure. A command over an empty file list usually succeeds, which would let a rename disarm the check watching it.
+
+Checks observe the applied stack by default or the declaring patch's own commit with `at: patch`. Both stages execute with a disposable clone as cwd and no origin remote, so ordinary relative writes and accidental pushes cannot mutate the operator worktree. Declared commands remain trusted user-level code, not sandboxed hostile input.
+
+A rebase that leaves a surviving patch touching fewer paths records the lost paths as recovery-bound replay history. This evidence proves only that the patch's path set changed across replay; do not attribute the cause to upstream without stronger evidence.
+
 ## 4. CLI/API discipline
 
 - Modes of one action are flags/typed parameters, not optional subcommands.

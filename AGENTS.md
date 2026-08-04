@@ -24,6 +24,11 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - One typed current-operation journal exposes status/continue/abort.
 - Operation-scoped commands read the Git-private manifest snapshot, so an unreadable tracked manifest never blocks status, continue, or abort.
 - Historical dropped patches are bound to the exact annotated recovery tag object preserving the old stack.
+- A rebase that leaves a surviving patch touching fewer paths records the lost paths as recovery-bound replay evidence; path disappearance is never silent and never attributed to upstream without proof.
+- A patch may declare checks: commands that must exit zero, with `{files}` expanded from globs that default to the declaring patch's scope and may reach anywhere. Scope governs what a patch may modify, never what it may check.
+- A check whose globs match no tracked file fails as stale rather than passing vacuously, so a moved or deleted subject can never silently disarm it.
+- Checks observe the applied stack by default, or the declaring patch's own commit when declared `at: patch`; both stages run with a disposable clone as cwd and no origin remote. Declared commands are trusted user-level code, not a hostile-code sandbox.
+- Forkctl ships no checking tooling and embeds no parser, query language, or scripting runtime; a check names whatever the consumer provides.
 - Publish covers every unpublished downstream state: idempotent when identical, fast-forward when the published tip is an ancestor, and otherwise an annotated recovery tag at the overwritten published tip plus one atomic explicit-ref push under one exact lease, with no fallback.
 - An identical branch never clears a ready operation until every required remote recovery ref matches; missing evidence is repaired atomically and mismatched evidence fails closed.
 - Every rewrite publication requires exact evidence of the tip it overwrites: the reviewed rebase lease, or the fetched downstream tracking ref when no operation is in flight.

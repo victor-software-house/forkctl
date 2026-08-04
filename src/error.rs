@@ -127,6 +127,15 @@ impl DomainError {
         Self::new(ApiErrorCode::CheckFailed, message, ErrorDetails::None)
     }
 
+    pub fn declared_checks_failed(findings: Vec<crate::protocol::CheckFinding>) -> Self {
+        Self::new(
+            ApiErrorCode::CheckFailed,
+            format!("{} declared patch check(s) failed", findings.len()),
+            ErrorDetails::Check { findings },
+        )
+        .suggest("forkctl patch show PATCH")
+    }
+
     pub fn operation_conflict(
         message: impl Into<String>,
         operation: Option<&OperationState>,

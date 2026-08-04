@@ -1189,3 +1189,382 @@ fn make_executable(path: &std::path::Path) {
     permissions.set_mode(0o755);
     fs::set_permissions(path, permissions).unwrap();
 }
+
+#[test]
+fn rebase_records_replay_path_changes_without_claiming_cause() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "two-file-change",
+        "--kind",
+        "source",
+        "--purpose",
+        "Change downstream source.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream provides equivalent behavior.",
+        "--scope",
+        "kept.txt",
+        "--scope",
+        "shared.txt",
+    ]);
+    fs::write(fixture.repo.join("kept.txt"), "downstream only\n").unwrap();
+    fs::write(fixture.repo.join("shared.txt"), "shared content\n").unwrap();
+    git_ok(&fixture.repo, ["add", "kept.txt", "shared.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+
+    let upstream = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "upstream"]);
+    let work = fixture.repo.parent().unwrap().join("absorb-upstream");
+    git_ok(
+        fixture.repo.parent().unwrap(),
+        [
+            "clone",
+            "--quiet",
+            upstream.as_str(),
+            work.to_str().unwrap(),
+        ],
+    );
+    git_ok(&work, ["config", "user.name", "Forkctl Test"]);
+    git_ok(&work, ["config", "user.email", "forkctl@example.com"]);
+    fs::write(work.join("shared.txt"), "shared content\n").unwrap();
+    git_ok(&work, ["add", "shared.txt"]);
+    git_ok(&work, ["commit", "--quiet", "-m", "upstream adopts file"]);
+    git_ok(&work, ["push", "--quiet", "origin", "main"]);
+
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    assert_eq!(
+        response["result"]["path_changed_patches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["two-file-change"]
+    );
+    let ledger = fs::read_to_string(fixture.repo.join("PATCHES.md")).unwrap();
+    assert!(
+        ledger.contains("replay path change") && ledger.contains("shared.txt"),
+        "ledger lacks replay path-change history:\n{ledger}"
+    );
+    let manifest: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(fixture.repo.join("patches/fork.json")).unwrap())
+            .unwrap();
+    let path_change = &manifest["history"][0]["path_changes"][0];
+    assert_eq!(path_change["patch"], "two-file-change");
+    assert_eq!(
+        path_change["lost_paths"].as_array().unwrap(),
+        &vec![serde_json::Value::from("shared.txt")]
+    );
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn staged_check_reports_both_sides_of_a_rename() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "moving-change", "source.txt", "downstream\n");
+    fixture.forkctl_ok(&[
+        "patch",
+        "edit",
+        "moving-change",
+        "--add-scope",
+        "renamed.txt",
+    ]);
+    fixture.forkctl_ok(&["patch", "select", "moving-change"]);
+    git_ok(&fixture.repo, ["mv", "source.txt", "renamed.txt"]);
+    let staged = fixture.forkctl_ok(&["--format", "json", "check", "--staged"]);
+    let staged: serde_json::Value = serde_json::from_str(&staged).unwrap();
+    let checked = staged["result"]["checked_paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(checked, vec!["renamed.txt", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn declared_check_catches_an_upstream_case_the_patch_never_covered() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "guarded-spawn",
+        "--kind",
+        "source",
+        "--purpose",
+        "Route every terminal spawn through the downstream guard.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream guards terminal spawning.",
+        "--scope",
+        "crates/terminal/**",
+        "--scope",
+        "fork-rules/**",
+        "--check",
+        "unguarded-spawn=ast-grep scan --rule fork-rules/unguarded-spawn.yml {files}",
+        "--check-glob",
+        "unguarded-spawn=crates/**/*.rs",
+    ]);
+    fs::create_dir_all(fixture.repo.join("crates/terminal/src")).unwrap();
+    fs::create_dir_all(fixture.repo.join("fork-rules")).unwrap();
+    fs::write(
+        fixture.repo.join("fork-rules/unguarded-spawn.yml"),
+        concat!(
+            "id: unguarded-spawn\n",
+            "language: rust\n",
+            "severity: error\n",
+            "message: spawn_terminal bypasses the downstream guard\n",
+            "rule:\n",
+            "  all:\n",
+            "    - pattern: spawn_terminal($$$ARGS)\n",
+            "    - not:\n",
+            "        inside:\n",
+            "          kind: function_item\n",
+            "          has:\n",
+            "            field: name\n",
+            "            regex: ^spawn_terminal_guarded$\n",
+            "          stopBy: end\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        fixture.repo.join("crates/terminal/src/guard.rs"),
+        "pub fn spawn_terminal_guarded(cmd: &str) -> u32 {\n    spawn_terminal(cmd)\n}\n\nfn spawn_terminal(cmd: &str) -> u32 {\n    cmd.len() as u32\n}\n",
+    )
+    .unwrap();
+    git_ok(&fixture.repo, ["add", "crates", "fork-rules"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    let check = fixture.forkctl_ok(&["--format", "json", "check"]);
+    let check: serde_json::Value = serde_json::from_str(&check).unwrap();
+    assert_eq!(check["result"]["declared_checks"], 1);
+
+    // Upstream later adds a caller in a crate the patch does not own and that did not exist
+    // when the patch was written. The declared check must still notice.
+    let upstream = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "upstream"]);
+    let work = fixture.repo.parent().unwrap().join("upstream-new-case");
+    git_ok(
+        fixture.repo.parent().unwrap(),
+        [
+            "clone",
+            "--quiet",
+            upstream.as_str(),
+            work.to_str().unwrap(),
+        ],
+    );
+    git_ok(&work, ["config", "user.name", "Forkctl Test"]);
+    git_ok(&work, ["config", "user.email", "forkctl@example.com"]);
+    fs::create_dir_all(work.join("crates/panes/src")).unwrap();
+    fs::write(
+        work.join("crates/panes/src/split.rs"),
+        "pub fn open_split() -> u32 {\n    spawn_terminal(\"zsh\")\n}\n",
+    )
+    .unwrap();
+    git_ok(&work, ["add", "crates"]);
+    git_ok(&work, ["commit", "--quiet", "-m", "upstream adds a caller"]);
+    git_ok(&work, ["push", "--quiet", "origin", "main"]);
+
+    let failed = fixture.forkctl(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    assert!(!failed.status.success());
+    let failed: serde_json::Value = serde_json::from_slice(&failed.stdout).unwrap();
+    assert_eq!(failed["error"]["code"], "check_failed");
+    let findings = failed["error"]["details"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0]["code"], "check_command_failed");
+    assert_eq!(findings[0]["subject"], "guarded-spawn: unguarded-spawn");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("exited 1"),
+        "unexpected finding: {findings:?}"
+    );
+}
+
+#[test]
+fn declared_check_defaults_to_the_declaring_patch_scope() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "scoped-default",
+        "--kind",
+        "source",
+        "--purpose",
+        "Check only the files this patch owns.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream owns the files.",
+        "--scope",
+        "owned/**",
+        "--check",
+        "owned-only=test \"$(echo {files})\" = owned/kept.txt",
+        "--check",
+        "wider=test \"$(echo {files} | wc -w)\" -eq 2",
+        "--check-glob",
+        "wider=**/*.txt",
+    ]);
+    fs::create_dir_all(fixture.repo.join("owned")).unwrap();
+    fs::write(fixture.repo.join("owned/kept.txt"), "downstream\n").unwrap();
+    git_ok(&fixture.repo, ["add", "owned"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    let check = fixture.forkctl_ok(&["--format", "json", "check"]);
+    let check: serde_json::Value = serde_json::from_str(&check).unwrap();
+    assert_eq!(check["result"]["declared_checks"], 2);
+    let ledger = fs::read_to_string(fixture.repo.join("PATCHES.md")).unwrap();
+    assert!(
+        ledger.contains("| `scoped-default` | `owned-only` | stack | `owned/**` |"),
+        "ledger lacks the default-scope check row:\n{ledger}"
+    );
+}
+
+#[test]
+fn declared_checks_never_run_in_the_operator_worktree() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "isolated-checks",
+        "--kind",
+        "source",
+        "--purpose",
+        "Prove declared commands are isolated.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Checks are removed.",
+        "--scope",
+        "owned.txt",
+        "--check",
+        "stack-isolated=touch stack-leak.txt",
+        "--check",
+        "patch-isolated=touch patch-leak.txt",
+        "--check-at",
+        "patch-isolated=patch",
+    ]);
+    fs::write(fixture.repo.join("owned.txt"), "downstream\n").unwrap();
+    git_ok(&fixture.repo, ["add", "owned.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+
+    assert!(!fixture.repo.join("stack-leak.txt").exists());
+    assert!(!fixture.repo.join("patch-leak.txt").exists());
+}
+
+#[test]
+fn layer_check_observes_only_its_own_patch_commit() {
+    let fixture = Fixture::new();
+    // The lower patch asserts that the higher patch's file is absent, which is only true at its
+    // own layer. The same command would fail against the fully applied stack.
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "lower",
+        "--kind",
+        "source",
+        "--purpose",
+        "Own the lower file.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream owns it.",
+        "--scope",
+        "lower.txt",
+        "--check",
+        "higher-absent=test ! -f higher.txt",
+        "--check-at",
+        "higher-absent=patch",
+    ]);
+    fs::write(fixture.repo.join("lower.txt"), "lower\n").unwrap();
+    git_ok(&fixture.repo, ["add", "lower.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    create_source_patch(&fixture, "higher", "higher.txt", "higher\n");
+    fixture.forkctl_ok(&["check"]);
+
+    // The same command evaluated against the applied stack fails, and because `patch edit`
+    // runs the full check, the invalid declaration is rejected at declaration time.
+    let failed = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "edit",
+        "lower",
+        "--clear-checks",
+        "--check",
+        "higher-absent=test ! -f higher.txt",
+    ]);
+    assert!(!failed.status.success());
+    let failed: serde_json::Value = serde_json::from_slice(&failed.stdout).unwrap();
+    assert_eq!(failed["error"]["code"], "check_failed");
+    let findings = failed["error"]["details"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0]["code"], "check_command_failed");
+    assert_eq!(findings[0]["subject"], "lower: higher-absent");
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn declared_check_over_no_tracked_file_fails_as_stale() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let stale = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "edit",
+        "source-change",
+        "--check",
+        "vanished=grep -q downstream {files}",
+        "--check-glob",
+        "vanished=vendor/**/*.rs",
+    ]);
+    assert!(!stale.status.success());
+    let stale: serde_json::Value = serde_json::from_slice(&stale.stdout).unwrap();
+    let findings = stale["error"]["details"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0]["code"], "check_glob_stale");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("would pass over nothing"),
+        "unexpected finding: {findings:?}"
+    );
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn check_glob_naming_an_undeclared_check_is_rejected() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let rejected = fixture.forkctl(&[
+        "patch",
+        "edit",
+        "source-change",
+        "--check",
+        "present=grep -q downstream {files}",
+        "--check-glob",
+        "typo=source.txt",
+    ]);
+    assert!(!rejected.status.success());
+    assert!(
+        String::from_utf8_lossy(&rejected.stderr).contains("undeclared check: typo"),
+        "unexpected stderr: {}",
+        String::from_utf8_lossy(&rejected.stderr)
+    );
+    fixture.forkctl_ok(&["check"]);
+}

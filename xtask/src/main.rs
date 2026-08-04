@@ -10,6 +10,7 @@ const STGIT_TOOL_MARKER: &str = "\"cargo:stgit\" = { version = \"";
 const LEFTHOOK_TOOL_MARKER: &str = "lefthook = \"";
 const USAGE_TOOL_MARKER: &str = "usage = \"";
 const GH_TOOL_MARKER: &str = "gh = \"";
+const AST_GREP_TOOL_MARKER: &str = "ast-grep = \"";
 const RUST_VERSION_MARKER: &str = "rust-version = \"";
 
 struct ToolVersions {
@@ -19,6 +20,7 @@ struct ToolVersions {
     lefthook: String,
     usage: String,
     gh: String,
+    ast_grep: String,
 }
 
 fn main() {
@@ -78,6 +80,7 @@ fn read_tool_versions(path: &Path) -> Result<ToolVersions, String> {
         lefthook: read_value(&contents, LEFTHOOK_TOOL_MARKER)?,
         usage: read_value(&contents, USAGE_TOOL_MARKER)?,
         gh: read_value(&contents, GH_TOOL_MARKER)?,
+        ast_grep: read_value(&contents, AST_GREP_TOOL_MARKER)?,
     })
 }
 
@@ -103,6 +106,7 @@ fn check_lock(path: &Path, versions: &ToolVersions) -> Result<(), String> {
     let contents =
         fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
     for (tool, expected) in [
+        ("ast-grep", versions.ast_grep.as_str()),
         ("cargo:stgit", versions.stgit.as_str()),
         ("gh", versions.gh.as_str()),
         ("lefthook", versions.lefthook.as_str()),

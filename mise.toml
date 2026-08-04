@@ -9,6 +9,9 @@ rust = "1.97.1"
 lefthook = "2.1.10"
 usage = "4.1.0"
 gh = "2.95.0"
+# Test-only: the declared-check lifecycle test exercises a real ast-grep command. Consumers
+# name their own tools in their own mise.toml; forkctl ships no check tooling.
+ast-grep = "0.45.0"
 
 [tasks."format:fix"]
 description = "Format Rust sources"

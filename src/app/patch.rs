@@ -3,11 +3,12 @@ use crate::error::DomainError;
 use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
 use crate::process::{capture, run};
 use crate::protocol::{
-    CaptureSource, CommandResult, ExecutionMode, MutationPlan, PatchCreateArgs, PatchCreateResult,
-    PatchEditArgs, PatchEditResult, PatchFinishResult, PatchListResult, PatchRefreshArgs,
-    PatchRefreshResult, PatchSelectResult, PatchShowResult, PatchSummary, PatchTarget,
-    PatchTransitionArgs, PatchTransitionResult, ScopeEdit,
+    CaptureSource, CheckEdit, CommandResult, ExecutionMode, MutationPlan, PatchCreateArgs,
+    PatchCreateResult, PatchEditArgs, PatchEditResult, PatchFinishResult, PatchListResult,
+    PatchRefreshArgs, PatchRefreshResult, PatchSelectResult, PatchShowResult, PatchSummary,
+    PatchTarget, PatchTransitionArgs, PatchTransitionResult, ScopeEdit,
 };
+
 use crate::state::{ActivePatchState, OperationIntent, OperationKind, OperationState};
 use anyhow::{Context, Result, ensure};
 use std::collections::HashSet;
@@ -109,7 +110,9 @@ impl App {
             return Err(DomainError::active_patch_exists(active.name().to_string()).into());
         }
         let patch: Patch = args.into();
-        patch.validate()?;
+        patch
+            .validate()
+            .map_err(|error| DomainError::invalid_request(error.to_string()))?;
         ensure!(
             self.manifest()?.patch(&patch.name).is_none(),
             "patch already exists: {}",
@@ -211,8 +214,14 @@ impl App {
                 }
             }
         }
-        patch.validate()?;
-        let proposed = self.proposed_manifest_with_patch(patch.clone())?;
+        if let Some(edit) = args.checks {
+            apply_check_edit(&mut patch, edit);
+        }
+        patch
+            .validate()
+            .map_err(|error| DomainError::invalid_request(error.to_string()))?;
+        let old_kind = self.manifest()?.patch(&name).expect("patch exists").kind;
+        let proposed = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let plan = MutationPlan {
             command: "patch.edit".into(),
             reads: vec![self.manifest_path.display().to_string(), old_commit.clone()],
@@ -225,7 +234,6 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
-        let old_kind = self.manifest()?.patch(&name).expect("patch exists").kind;
         let mut operation = self.create_operation(OperationKind::PatchEdit, None)?;
         operation.phase = "editing".into();
         operation.intent = Some(OperationIntent::Edit {
@@ -268,7 +276,12 @@ impl App {
         operation: &OperationState,
         patch: Patch,
     ) -> Result<CommandResult> {
-        let proposed = self.proposed_manifest_with_patch(patch.clone())?;
+        // The manifest still holds the pre-edit entry, so its kind is the old kind.
+        let old_kind = self
+            .manifest()?
+            .patch(&patch.name)
+            .map_or(patch.kind, |existing| existing.kind);
+        let proposed = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let conflicts = capture(
             &self.repo,
             "git",
@@ -344,7 +357,11 @@ impl App {
         }))
     }
 
-    fn proposed_manifest_with_patch(&self, patch: Patch) -> Result<crate::manifest::Manifest> {
+    fn proposed_manifest_with_patch(
+        &self,
+        patch: Patch,
+        old_kind: crate::manifest::PatchKind,
+    ) -> Result<crate::manifest::Manifest> {
         let mut proposed = self.manifest()?.clone();
         let old_index = proposed
             .patches
@@ -361,7 +378,13 @@ impl App {
                 )
             })?;
         proposed.patches.remove(old_index);
-        let index = proposed.insertion_index(&patch);
+        // Only a kind change repositions a patch; an in-place edit must not move it, or the
+        // declared order would diverge from the series StGit still holds.
+        let index = if old_kind == patch.kind {
+            old_index
+        } else {
+            proposed.insertion_index(&patch)
+        };
         proposed.patches.insert(index, patch);
         proposed
             .validate(&self.repo, &self.manifest_path)
@@ -1030,4 +1053,23 @@ fn display_paths(repo: &std::path::Path, paths: &[PathBuf]) -> Vec<String> {
                 .into_owned()
         })
         .collect()
+}
+
+fn apply_check_edit(patch: &mut Patch, edit: CheckEdit) {
+    match edit {
+        CheckEdit::Set { checks } => patch.checks = checks,
+        CheckEdit::Add { checks } => {
+            for check in checks {
+                if let Some(existing) = patch
+                    .checks
+                    .iter_mut()
+                    .find(|existing| existing.name == check.name)
+                {
+                    *existing = check;
+                } else {
+                    patch.checks.push(check);
+                }
+            }
+        }
+    }
 }

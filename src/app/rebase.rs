@@ -1,5 +1,5 @@
 use super::{App, write_atomic};
-use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent};
+use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent, ReplayPathChange};
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, RebaseResult};
 use crate::report::{self, ExportEvidence, RebaseReport};
@@ -97,6 +97,7 @@ impl App {
             "bookkeeping patch must be top"
         );
         let dropped = self.drop_upstream_merged(&target, &operation)?;
+        let path_changes = self.replay_path_changes(&operation)?;
         let upstream_tracking = self.upstream_tracking_ref()?;
         let canonical = capture(
             &self.repo,
@@ -107,11 +108,12 @@ impl App {
         manifest.base.target = target.clone();
         manifest.base.stack.clone_from(&new_base);
         manifest.base.canonical = canonical;
-        if !dropped.items.is_empty() {
+        if !dropped.items.is_empty() || !path_changes.is_empty() {
             manifest.history.push(HistoryEvent::Rebase {
                 target: target.clone(),
                 recovery: operation.recovery.clone(),
                 dropped: dropped.items.clone(),
+                path_changes: path_changes.clone(),
             });
         }
         self.write_manifest()?;
@@ -162,8 +164,50 @@ impl App {
             report_path: report_path.display().to_string(),
             report_object_id,
             dropped_patches: dropped.names,
+            path_changed_patches: path_changes
+                .iter()
+                .map(|item| item.patch.clone())
+                .collect::<Vec<_>>(),
             check,
         })
+    }
+
+    /// Records paths a surviving patch no longer touches after replay.
+    ///
+    /// This is factual path-delta evidence only. It does not claim that upstream caused the
+    /// disappearance; conflict resolution or patch edits may produce the same result.
+    fn replay_path_changes(&self, operation: &OperationState) -> Result<Vec<ReplayPathChange>> {
+        let manifest = self.manifest()?;
+        let mut path_changes = Vec::new();
+        for patch in &manifest.patches {
+            if patch.name == manifest.bookkeeping_patch {
+                continue;
+            }
+            let Some(old) = operation
+                .old_patches
+                .iter()
+                .find(|evidence| evidence.name == patch.name)
+            else {
+                continue;
+            };
+            let old_paths = self.patch_paths(&old.commit)?;
+            let new_paths = self
+                .patch_paths(&self.patch_commit(&patch.name)?)?
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>();
+            let lost_paths = old_paths
+                .into_iter()
+                .filter(|path| !new_paths.contains(path))
+                .collect::<Vec<_>>();
+            if !lost_paths.is_empty() {
+                path_changes.push(ReplayPathChange {
+                    patch: patch.name.clone(),
+                    commit: old.commit.clone(),
+                    lost_paths,
+                });
+            }
+        }
+        Ok(path_changes)
     }
 
     fn drop_upstream_merged(

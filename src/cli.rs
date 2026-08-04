@@ -1,9 +1,9 @@
-use crate::manifest::{PatchKind, RequiredText};
+use crate::manifest::{Check, CheckStage, PatchKind, RequiredText};
 use crate::protocol::{
-    ApiRequest, CaptureSource, CheckArgs, CheckScope, ColorMode, ContractEditArgs, EmptyArgs,
-    ExecutionMode, InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs, PatchEditArgs,
-    PatchName, PatchRefreshArgs, PatchTarget, PatchTransitionArgs, RebaseArgs, SchemaKind,
-    ScopeEdit,
+    ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ColorMode, ContractEditArgs,
+    EmptyArgs, ExecutionMode, InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs,
+    PatchEditArgs, PatchName, PatchRefreshArgs, PatchTarget, PatchTransitionArgs, RebaseArgs,
+    SchemaKind, ScopeEdit,
 };
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
@@ -242,6 +242,15 @@ pub struct PatchCreateCliArgs {
     /// Persistent ownership glob; repeatable.
     #[arg(short = 's', long, required = true, help_heading = "Ownership")]
     pub scope: Vec<String>,
+    /// Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable.
+    #[arg(short = 'C', long = "check", help_heading = "Checks", value_parser = parse_check)]
+    pub checks: Vec<Check>,
+    /// Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable.
+    #[arg(short = 'g', long = "check-glob", help_heading = "Checks", value_parser = parse_named_value)]
+    pub check_globs: Vec<(String, String)>,
+    /// Evaluate a declared check at its own patch commit as NAME=patch; repeatable.
+    #[arg(long = "check-at", help_heading = "Checks", value_parser = parse_check_stage)]
+    pub check_stages: Vec<(String, CheckStage)>,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -287,6 +296,18 @@ pub struct PatchEditCliArgs {
         conflicts_with = "set_scope"
     )]
     pub remove_scope: Vec<String>,
+    /// Replace the complete check set before adding supplied checks.
+    #[arg(long, help_heading = "Checks")]
+    pub clear_checks: bool,
+    /// Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable.
+    #[arg(short = 'C', long = "check", help_heading = "Checks", value_parser = parse_check)]
+    pub checks: Vec<Check>,
+    /// Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable.
+    #[arg(short = 'g', long = "check-glob", help_heading = "Checks", value_parser = parse_named_value)]
+    pub check_globs: Vec<(String, String)>,
+    /// Evaluate a declared check at its own patch commit as NAME=patch; repeatable.
+    #[arg(long = "check-at", help_heading = "Checks", value_parser = parse_check_stage)]
+    pub check_stages: Vec<(String, CheckStage)>,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -328,7 +349,7 @@ pub struct ContractEditCliArgs {
     /// Add an allowed base-drift ownership glob; repeatable.
     #[arg(short = 'a', long, help_heading = "Contracts")]
     pub allow_base: Vec<String>,
-    /// Add a required repository assertion as PATH=TEXT; repeatable.
+    /// Add a required repository contract as PATH=TEXT; repeatable.
     #[arg(short = 'r', long, help_heading = "Contracts", value_parser = parse_required_text)]
     pub required_text: Vec<RequiredText>,
     #[command(flatten)]
@@ -469,6 +490,55 @@ impl Cli {
     }
 }
 
+fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
+    Ok({
+        let declared = declared_checks(args.checks, args.check_globs, args.check_stages)?;
+        ensure!(
+            args.kind.is_some()
+                || args.purpose.is_some()
+                || args.upstream_status.is_some()
+                || args.drop_when.is_some()
+                || !args.set_scope.is_empty()
+                || !args.add_scope.is_empty()
+                || !args.remove_scope.is_empty()
+                || args.clear_checks
+                || !declared.is_empty(),
+            "patch edit requires at least one metadata, scope, or check change"
+        );
+        let checks = if args.clear_checks {
+            Some(CheckEdit::Set { checks: declared })
+        } else if declared.is_empty() {
+            None
+        } else {
+            Some(CheckEdit::Add { checks: declared })
+        };
+        let scope = if args.set_scope.is_empty() {
+            (!args.add_scope.is_empty() || !args.remove_scope.is_empty()).then_some(
+                ScopeEdit::AddRemove {
+                    add: args.add_scope,
+                    remove: args.remove_scope,
+                },
+            )
+        } else {
+            Some(ScopeEdit::Set {
+                patterns: args.set_scope,
+            })
+        };
+        CliAction::Request {
+            request: Box::new(ApiRequest::PatchEdit(PatchEditArgs {
+                patch: args.name,
+                kind: args.kind,
+                purpose: args.purpose,
+                upstream_status: args.upstream_status,
+                drop_when: args.drop_when,
+                scope,
+                checks,
+            })),
+            mode: mode(args.execution.dry_run),
+        }
+    })
+}
+
 fn patch_action(command: PatchCommand) -> Result<CliAction> {
     Ok(match command {
         PatchCommand::List => request(ApiRequest::PatchList(EmptyArgs::default())),
@@ -481,6 +551,7 @@ fn patch_action(command: PatchCommand) -> Result<CliAction> {
                 upstream_status: args.upstream_status,
                 drop_when: args.drop_when,
                 scope: args.scope,
+                checks: declared_checks(args.checks, args.check_globs, args.check_stages)?,
             })),
             mode: mode(args.execution.dry_run),
         },
@@ -488,41 +559,7 @@ fn patch_action(command: PatchCommand) -> Result<CliAction> {
             request: Box::new(ApiRequest::PatchSelect(PatchName { patch: name })),
             mode: mode(execution.dry_run),
         },
-        PatchCommand::Edit(args) => {
-            ensure!(
-                args.kind.is_some()
-                    || args.purpose.is_some()
-                    || args.upstream_status.is_some()
-                    || args.drop_when.is_some()
-                    || !args.set_scope.is_empty()
-                    || !args.add_scope.is_empty()
-                    || !args.remove_scope.is_empty(),
-                "patch edit requires at least one metadata or scope change"
-            );
-            let scope = if args.set_scope.is_empty() {
-                (!args.add_scope.is_empty() || !args.remove_scope.is_empty()).then_some(
-                    ScopeEdit::AddRemove {
-                        add: args.add_scope,
-                        remove: args.remove_scope,
-                    },
-                )
-            } else {
-                Some(ScopeEdit::Set {
-                    patterns: args.set_scope,
-                })
-            };
-            CliAction::Request {
-                request: Box::new(ApiRequest::PatchEdit(PatchEditArgs {
-                    patch: args.name,
-                    kind: args.kind,
-                    purpose: args.purpose,
-                    upstream_status: args.upstream_status,
-                    drop_when: args.drop_when,
-                    scope,
-                })),
-                mode: mode(args.execution.dry_run),
-            }
-        }
+        PatchCommand::Edit(args) => patch_edit_action(args)?,
         PatchCommand::Refresh(args) => {
             let capture = if args.all {
                 CaptureSource::All
@@ -600,6 +637,64 @@ fn parse_required_text(value: &str) -> std::result::Result<RequiredText, String>
         path: path.to_string(),
         contains: contains.to_string(),
     })
+}
+
+fn parse_check(value: &str) -> std::result::Result<Check, String> {
+    let (name, run) = split_named(value, "COMMAND")?;
+    Ok(Check {
+        name,
+        run,
+        glob: Vec::new(),
+        at: CheckStage::default(),
+    })
+}
+
+fn parse_named_value(value: &str) -> std::result::Result<(String, String), String> {
+    split_named(value, "GLOB")
+}
+
+fn parse_check_stage(value: &str) -> std::result::Result<(String, CheckStage), String> {
+    let (name, stage) = split_named(value, "stack|patch")?;
+    let stage = match stage.as_str() {
+        "stack" => CheckStage::Stack,
+        "patch" => CheckStage::Patch,
+        other => return Err(format!("expected stack or patch, found {other}")),
+    };
+    Ok((name, stage))
+}
+
+fn split_named(value: &str, label: &str) -> std::result::Result<(String, String), String> {
+    let (name, rest) = value
+        .split_once('=')
+        .ok_or_else(|| format!("expected NAME={label}"))?;
+    if name.is_empty() || rest.is_empty() {
+        return Err(format!("expected NAME={label}"));
+    }
+    Ok((name.to_string(), rest.to_string()))
+}
+
+fn declared_checks(
+    mut checks: Vec<Check>,
+    globs: Vec<(String, String)>,
+    stages: Vec<(String, CheckStage)>,
+) -> Result<Vec<Check>> {
+    for (name, glob) in globs {
+        let check = checks
+            .iter_mut()
+            .find(|check| check.name == name)
+            .with_context(|| format!("--check-glob names an undeclared check: {name}"))?;
+        if !check.glob.contains(&glob) {
+            check.glob.push(glob);
+        }
+    }
+    for (name, stage) in stages {
+        let check = checks
+            .iter_mut()
+            .find(|check| check.name == name)
+            .with_context(|| format!("--check-at names an undeclared check: {name}"))?;
+        check.at = stage;
+    }
+    Ok(checks)
 }
 
 fn mode(dry_run: bool) -> ExecutionMode {

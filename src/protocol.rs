@@ -1,4 +1,4 @@
-use crate::manifest::{BaseTarget, Contracts, Manifest, Patch, PatchKind, RequiredText};
+use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchKind, RequiredText};
 use crate::state::{ActivePatchState, OperationState};
 use clap::ValueEnum;
 use schemars::JsonSchema;
@@ -214,6 +214,8 @@ pub struct PatchCreateArgs {
     pub upstream_status: String,
     pub drop_when: String,
     pub scope: Vec<String>,
+    #[serde(default)]
+    pub checks: Vec<Check>,
 }
 
 impl From<PatchCreateArgs> for Patch {
@@ -225,6 +227,7 @@ impl From<PatchCreateArgs> for Patch {
             upstream_status: value.upstream_status,
             drop_when: value.drop_when,
             scope: value.scope,
+            checks: value.checks,
         }
     }
 }
@@ -256,6 +259,16 @@ pub struct PatchEditArgs {
     pub drop_when: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<ScopeEdit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks: Option<CheckEdit>,
+}
+
+/// Replacement or additive edit of a patch's declared checks.
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CheckEdit {
+    Set { checks: Vec<Check> },
+    Add { checks: Vec<Check> },
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
@@ -499,6 +512,7 @@ pub struct CheckResult {
     pub canonical_base: Option<String>,
     pub stack_base: Option<String>,
     pub patch_count: Option<usize>,
+    pub declared_checks: Option<usize>,
     pub source_tree: Option<String>,
 }
 
@@ -640,6 +654,7 @@ pub struct RebaseResult {
     pub report_path: String,
     pub report_object_id: String,
     pub dropped_patches: Vec<String>,
+    pub path_changed_patches: Vec<String>,
     pub check: CheckResult,
 }
 

@@ -1,5 +1,6 @@
 mod check;
 mod contract;
+mod declared;
 mod init;
 mod operation;
 mod patch;
@@ -144,7 +145,8 @@ impl App {
             ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
         )?;
         let mut inventory = WorktreeInventory::default();
-        for entry in output.split('\0').filter(|entry| !entry.is_empty()) {
+        let mut fields = output.split('\0').filter(|entry| !entry.is_empty());
+        while let Some(entry) = fields.next() {
             if entry.len() < 4 {
                 continue;
             }
@@ -152,14 +154,24 @@ impl App {
             let x = bytes[0] as char;
             let y = bytes[1] as char;
             let path = entry[3..].to_string();
+            // Rename and copy entries carry their original path in the following field. Both
+            // sides are affected, so both are inventoried; reading the original as its own
+            // entry would strip three characters from a real repository path.
+            let origin = if matches!(x, 'R' | 'C') || matches!(y, 'R' | 'C') {
+                fields.next().map(str::to_string)
+            } else {
+                None
+            };
             if x == '?' && y == '?' {
                 inventory.untracked.push(path);
             } else {
                 if x != ' ' {
                     inventory.staged.push(path.clone());
+                    inventory.staged.extend(origin.clone());
                 }
                 if y != ' ' {
                     inventory.unstaged.push(path);
+                    inventory.unstaged.extend(origin);
                 }
             }
         }
