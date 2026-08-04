@@ -118,7 +118,7 @@ forkctl completion nu
 forkctl --usage-spec=fork
 ```
 
-Most long options have collision-audited mnemonic shorts. Leaf parameters are grouped by subject, metadata/scope, capture, execution, and output. Help is generated from Clap metadata into colored width-aware panels; no second parameter specification exists.
+Most long options have collision-audited mnemonic shorts. Leaf parameters are grouped by subject, metadata/scope, capture, execution, and output. Help is generated from Clap metadata into colored width-aware panels; no second parameter specification exists. Pretty help, result tables, notices, and errors wrap to the detected terminal width; captured non-TTY output may provide the standard `COLUMNS` fallback. JSON, schemas, Usage KDL, and completion scripts never reflow.
 
 Completion supports bash, elvish, fish, Nushell, PowerShell, and zsh, including commands, flags, enum values, files, local Git remotes/refs, live patch names, and current operation values. Candidate lookup is local and fail-silent.
 

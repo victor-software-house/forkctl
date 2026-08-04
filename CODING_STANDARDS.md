@@ -14,7 +14,7 @@ Forkctl never infers patch ownership. An operator creates/selects one active pat
 
 Domain/App operations return typed protocol values and errors. Clap and JSON are input adapters; pretty and JSON are output adapters. Domain modules never print, inspect TTY/color/output mode, construct tables, or import renderer crates.
 
-`src/protocol.rs` owns all wire/schema types. `src/cli.rs` owns the one command graph. `src/view.rs` and `src/help.rs` own the one visual system. Generated Markdown remains in Askama templates.
+`src/protocol.rs` owns all wire/schema types. `src/cli.rs` owns the one command graph. `src/view.rs`, `src/help.rs`, and `src/layout.rs` own the one visual system. Pretty prose and tables constrain themselves to the detected terminal width, with `COLUMNS` as the non-TTY fallback used by captured output and tests. Generated Markdown remains in Askama templates.
 
 ## 2. Dependencies
 
