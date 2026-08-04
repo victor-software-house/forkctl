@@ -62,6 +62,10 @@ Checks observe the applied stack by default or the declaring patch's own commit 
 
 A rebase that leaves a surviving patch touching fewer paths records the lost paths as recovery-bound replay history. This evidence proves only that the patch's path set changed across replay; do not attribute the cause to upstream without stronger evidence.
 
+### 3.7 Manifest codecs
+
+Manifest format is orthogonal to the schema. YAML is the default human representation; JSON is equally supported when selected by `.json`. Extension selects parser and writer, writes preserve format, and unknown extensions fail — no byte sniffing or fallback. Strict YAML rejects duplicate keys, merge keys, aliases, multiple documents, ambiguous booleans, inconsistent indentation, and excessive input. Machine-local state and API wire data remain JSON.
+
 ## 4. CLI/API discipline
 
 - Modes of one action are flags/typed parameters, not optional subcommands.

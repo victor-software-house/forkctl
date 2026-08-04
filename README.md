@@ -16,7 +16,7 @@ experimental = true
 lockfile = true
 
 [env]
-FORK_MANIFEST = "patches/fork.json"
+FORK_MANIFEST = "patches/fork.yaml"
 
 [task_config]
 includes = [
@@ -242,9 +242,11 @@ Completion supports bash, elvish, fish, Nushell, PowerShell, and zsh, including 
 ```sh
 forkctl status --format json
 forkctl api schema --kind bundle
-printf '%s' '{"protocol_version":1,"mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
+printf '%s' '{"protocol_version":1,"manifest":"patches/fork.yaml","mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
   | forkctl api call
 ```
+
+The API already accepts complete typed command arguments from JSON on stdin; `manifest` selects either a YAML or JSON manifest path. This is the generic programmatic interface — no second stdin argument grammar exists.
 
 Requests use dotted command names such as `patch.refresh` and `operation.abort`, command-specific typed arguments, and `mode: execute|plan`. Success, plan, notice, error, and error-detail types are schema-derived. JSON stdout is exactly one response and stderr is empty.
 
@@ -252,64 +254,60 @@ Schema kinds: `bundle`, `manifest`, `invocation`, `response`, `active-state`, `o
 
 ## Manifest
 
-```json
-{
-  "schema": 1,
-  "downstream": {
-    "remote": "origin",
-    "branch": "main",
-    "recovery_tag_prefix": "forkctl/recovery"
-  },
-  "upstream": {
-    "remote": "upstream",
-    "url": "https://github.com/example/project.git",
-    "fetch_ref": "refs/heads/main"
-  },
-  "base": {
-    "target": {
-      "kind": "branch",
-      "selector": "refs/heads/main",
-      "commit": "0000000000000000000000000000000000000000"
-    },
-    "canonical": "0000000000000000000000000000000000000000",
-    "stack": "0000000000000000000000000000000000000000"
-  },
-  "documents": {
-    "ledger": "PATCHES.md",
-    "exports": "patches/downstream"
-  },
-  "bookkeeping_patch": "fork-tooling",
-  "patches": [
-    {
-      "name": "downstream-change",
-      "kind": "source",
-      "purpose": "Describe why this downstream change exists.",
-      "upstream_status": "not-submitted",
-      "drop_when": "Upstream provides the required behavior.",
-      "scope": ["src/**", "tests/**"],
-      "checks": [
-        {
-          "name": "downstream-hook",
-          "run": "grep -q downstream_hook {files}",
-          "glob": [],
-          "at": "stack"
-        },
-        {
-          "name": "unguarded-call",
-          "run": "ast-grep scan --rule fork-rules/unguarded-call.yml {files}",
-          "glob": ["crates/**/*.rs"],
-          "at": "stack"
-        }
-      ]
-    }
-  ],
-  "history": [],
-  "contracts": {
-    "allow_base": [],
-    "required_text": []
-  }
-}
+YAML is the default human-authored format:
+
+```yaml
+%YAML 1.2
+---
+schema: 1
+downstream:
+  remote: origin
+  branch: main
+  recovery_tag_prefix: forkctl/recovery
+upstream:
+  remote: upstream
+  url: https://github.com/example/project.git
+  fetch_ref: refs/heads/main
+base:
+  target:
+    kind: branch
+    selector: refs/heads/main
+    commit: '0000000000000000000000000000000000000000'
+  canonical: '0000000000000000000000000000000000000000'
+  stack: '0000000000000000000000000000000000000000'
+documents:
+  ledger: PATCHES.md
+  exports: patches/downstream
+bookkeeping_patch: fork-tooling
+patches:
+  - name: downstream-change
+    kind: source
+    purpose: Describe why this downstream change exists.
+    upstream_status: not-submitted
+    drop_when: Upstream provides the required behavior.
+    scope:
+      - src/**
+      - tests/**
+    checks:
+      - name: downstream-hook
+        run: grep -q downstream_hook {files}
+        glob: []
+        at: stack
+      - name: unguarded-call
+        run: ast-grep scan --rule fork-rules/unguarded-call.yml {files}
+        glob:
+          - crates/**/*.rs
+        at: stack
+disabled_patches: []
+history: []
+contracts:
+  allow_base: []
+  required_text: []
 ```
+
+The extension selects the codec: `.yaml`/`.yml` reads and rewrites canonical YAML; `.json` reads and rewrites canonical JSON. Both deserialize into the same typed `Manifest`, execute the same handlers, and produce the same generated evidence. Unknown or missing extensions are rejected — forkctl never sniffs bytes or silently changes a file's format.
+
+YAML parsing rejects duplicate keys, merge keys, aliases/anchors, multiple documents, odd indentation, ambiguous booleans, excessive nesting, and manifests over 2 MiB. JSON remains available for generated consumers; YAML is the readable default. Git-private operation/active state, API stdin/stdout, pretty/JSON output selection, and JSON Schema remain JSON.
 
 Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` trailers. Source patches precede tooling patches. Every source export is generated deterministically as `<exports>/<order>-<name>.patch`; tooling patches have no export. The final tooling patch owns manifest, ledger, exports, and integration files.
 

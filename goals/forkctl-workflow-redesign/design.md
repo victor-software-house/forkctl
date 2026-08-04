@@ -235,7 +235,7 @@ The actual renderer wraps descriptions and rebalances columns to terminal width;
 When the manifest does not exist, `init` requires an explicit new-contract bootstrap:
 
 ```text
-forkctl --manifest patches/fork.json init \
+forkctl --manifest patches/fork.yaml init \
   --upstream-remote upstream \
   --upstream-url https://github.com/example/project.git \
   --upstream-ref refs/heads/main \
@@ -543,7 +543,7 @@ Architecture tests reject `Command::new` outside `process.rs` in production modu
 ```json
 {
   "protocol_version": 1,
-  "manifest": "patches/downstream/fork.json",
+  "manifest": "patches/downstream/fork.yaml",
   "mode": "execute",
   "request": {
     "command": "patch.refresh",

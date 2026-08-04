@@ -794,7 +794,7 @@ mod tests {
                 upstream_status: "downstream-only".into(),
                 drop_when: "The fork is retired.".into(),
                 scope: vec![
-                    "fork.json".into(),
+                    "fork.yaml".into(),
                     "PATCHES.md".into(),
                     "patches/downstream/**".into(),
                 ],
@@ -810,7 +810,7 @@ mod tests {
     fn accepts_tooling_only_stack() {
         let directory = tempfile::tempdir().unwrap();
         manifest()
-            .validate(directory.path(), &directory.path().join("fork.json"))
+            .validate(directory.path(), &directory.path().join("fork.yaml"))
             .unwrap();
     }
 
@@ -838,7 +838,7 @@ mod tests {
         value.patches.push(source_patch());
         assert!(
             value
-                .validate(directory.path(), &directory.path().join("fork.json"))
+                .validate(directory.path(), &directory.path().join("fork.yaml"))
                 .is_err()
         );
     }

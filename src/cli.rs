@@ -16,7 +16,7 @@ use std::path::PathBuf;
     arg_required_else_help = false
 )]
 pub struct Cli {
-    /// Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.json`.
+    /// Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.yaml`.
     #[arg(short = 'm', long, global = true, value_hint = clap::ValueHint::FilePath, help_heading = "Output")]
     pub manifest: Option<PathBuf>,
 

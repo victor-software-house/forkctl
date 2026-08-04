@@ -47,7 +47,7 @@ Bundle shape:
 ```json
 {
   "protocol_version": 1,
-  "manifest": "patches/fork.json",
+  "manifest": "patches/fork.yaml",
   "mode": "execute",
   "request": {
     "command": "patch.refresh",
@@ -272,7 +272,7 @@ Plan mode uses the same envelope with a command-specific plan result:
   "type": "patch_refresh_plan",
   "patch": "reliable-busy-close",
   "capture": {"source": "staged"},
-  "reads": ["Git index", "patches/fork.json"],
+  "reads": ["Git index", "patches/fork.yaml"],
   "writes": ["StGit patch reliable-busy-close", "PATCHES.md", "patch export"],
   "hooks": ["pre-commit via stg refresh"],
   "ref_updates": [],

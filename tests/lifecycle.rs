@@ -12,8 +12,7 @@ fn bootstrap_and_fresh_clone_hydration_are_idempotent() {
         "fork-tooling"
     );
     fixture.forkctl_ok(&["init"]);
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(fixture.repo.join("patches/fork.json")).unwrap()).unwrap();
+    let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
     assert_eq!(
         manifest["contracts"]["required_text"][0]["path"],
         "base.txt"
@@ -62,7 +61,7 @@ fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
 }
 
 #[test]
-fn patch_disable_enable_and_remove_preserve_audited_recovery() {
+fn yaml_manifest_preserves_disable_enable_and_remove_history() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "optional-feature", "optional.txt", "enabled\n");
     create_source_patch(&fixture, "later-feature", "later.txt", "later\n");
@@ -98,6 +97,11 @@ fn patch_disable_enable_and_remove_preserve_audited_recovery() {
             .iter()
             .any(|patch| patch["name"] == "optional-feature" && patch["state"] == "disabled")
     );
+    let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
+    assert_eq!(
+        manifest["disabled_patches"][0]["patch"]["name"],
+        "optional-feature"
+    );
     fixture.forkctl_ok(&["publish"]);
 
     fixture.forkctl_ok(&["patch", "enable", "optional-feature"]);
@@ -120,8 +124,15 @@ fn patch_disable_enable_and_remove_preserve_audited_recovery() {
     assert!(fixture.repo.join("later.txt").is_file());
     fixture.forkctl_ok(&["publish"]);
     fixture.forkctl_ok(&["check"]);
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(fixture.repo.join("patches/fork.json")).unwrap()).unwrap();
+    let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
+    assert!(manifest["disabled_patches"].as_array().unwrap().is_empty());
+    assert!(
+        manifest["history"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["kind"] == "patch_enabled")
+    );
     assert!(
         !manifest["patches"]
             .as_array()
@@ -166,7 +177,7 @@ fn staged_check_rejects_out_of_scope_paths() {
 #[test]
 fn contract_edit_preflights_and_refreshes_bookkeeping() {
     let fixture = Fixture::new();
-    let manifest_path = fixture.repo.join("patches/fork.json");
+    let manifest_path = fixture.repo.join("patches/fork.yaml");
     let before = fs::read(&manifest_path).unwrap();
 
     fixture.forkctl_ok(&[
@@ -191,8 +202,7 @@ fn contract_edit_preflights_and_refreshes_bookkeeping() {
         "base.txt=base",
     ]);
     fixture.forkctl_ok(&["check"]);
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    let manifest = read_manifest_value(&manifest_path);
     assert_eq!(manifest["contracts"]["allow_base"][0], "vendor/**");
 
     let valid = fs::read(&manifest_path).unwrap();
@@ -269,8 +279,7 @@ fn bookkeeping_patch_edit_remains_final_after_source_patches() {
             .collect::<Vec<_>>(),
         ["source-change", "fork-tooling"]
     );
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(fixture.repo.join("patches/fork.json")).unwrap()).unwrap();
+    let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
     assert!(
         manifest["patches"][1]["scope"]
             .as_array()
@@ -433,7 +442,7 @@ fn documented_staged_check_hook_accepts_source_and_bookkeeping_refreshes() {
     fs::write(
         &hook,
         format!(
-            "#!/bin/sh\nexec '{}' --manifest patches/fork.json check -s >/dev/null\n",
+            "#!/bin/sh\nexec '{}' --manifest patches/fork.yaml check -s >/dev/null\n",
             env!("CARGO_BIN_EXE_forkctl")
         ),
     )
@@ -499,7 +508,7 @@ fn hook_exported_git_environment_does_not_contaminate_nested_clone() {
     let fixture = Fixture::new();
     let git_dir = git_capture(&fixture.repo, ["rev-parse", "--git-dir"]);
     let output = support::forkctl_command(&fixture.repo)
-        .args(["--manifest", "patches/fork.json", "check"])
+        .args(["--manifest", "patches/fork.yaml", "check"])
         .env("GIT_DIR", fixture.repo.join(git_dir))
         .env("GIT_WORK_TREE", &fixture.repo)
         .output()
@@ -544,7 +553,7 @@ fn rebase_publish_and_fresh_clone_hydrate_exact_recovery() {
     git_ok(&clone, ["config", "user.name", "Forkctl Test"]);
     git_ok(&clone, ["config", "user.email", "forkctl@example.com"]);
     let output = support::forkctl_command(&clone)
-        .args(["--manifest", "patches/fork.json", "init"])
+        .args(["--manifest", "patches/fork.yaml", "init"])
         .output()
         .unwrap();
     assert!(
@@ -1024,7 +1033,7 @@ fn recovery_commands_survive_an_unreadable_tracked_manifest() {
 
     fs::create_dir_all(fixture.repo.join("patches")).unwrap();
     fs::write(
-        fixture.repo.join("patches/fork.json"),
+        fixture.repo.join("patches/fork.yaml"),
         "<<<<<<< HEAD\nconflict\n=======\nmarkers\n>>>>>>> theirs\n",
     )
     .unwrap();
@@ -1045,17 +1054,17 @@ fn recovery_commands_survive_an_unreadable_tracked_manifest() {
 #[test]
 fn invalid_tracked_manifest_never_bootstraps_a_replacement() {
     let fixture = Fixture::new();
-    fs::write(fixture.repo.join("patches/fork.json"), "not json\n").unwrap();
+    fs::write(fixture.repo.join("patches/fork.yaml"), "not: [valid\n").unwrap();
 
     let init = fixture.forkctl(&["--format", "json", "init"]);
     assert!(!init.status.success());
     let init: serde_json::Value = serde_json::from_slice(&init.stdout).unwrap();
     assert_eq!(init["error"]["code"], "manifest_invalid");
 
-    git_ok(&fixture.repo, ["add", "patches/fork.json"]);
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml"]);
     git_ok(&fixture.repo, ["stash"]);
-    fs::write(fixture.repo.join("patches/fork.json"), "not json\n").unwrap();
-    git_ok(&fixture.repo, ["add", "patches/fork.json"]);
+    fs::write(fixture.repo.join("patches/fork.yaml"), "not: [valid\n").unwrap();
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml"]);
     stg_ok_dynamic(&fixture.repo, &["refresh", "--index"]);
     let check = fixture.forkctl(&["--format", "json", "check"]);
     assert!(!check.status.success());
@@ -1184,6 +1193,11 @@ fn git_capture(repo: &std::path::Path, args: [&str; 2]) -> String {
     capture(repo, "git", &args)
 }
 
+fn read_manifest_value(path: &std::path::Path) -> serde_json::Value {
+    let contents = fs::read_to_string(path).unwrap();
+    serde_saphyr::from_str(&contents).unwrap()
+}
+
 fn make_executable(path: &std::path::Path) {
     use std::os::unix::fs::PermissionsExt;
     let mut permissions = fs::metadata(path).unwrap().permissions();
@@ -1251,9 +1265,7 @@ fn rebase_records_replay_path_changes_without_claiming_cause() {
         ledger.contains("replay path change") && ledger.contains("shared.txt"),
         "ledger lacks replay path-change history:\n{ledger}"
     );
-    let manifest: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(fixture.repo.join("patches/fork.json")).unwrap())
-            .unwrap();
+    let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
     let path_change = &manifest["history"][0]["path_changes"][0];
     assert_eq!(path_change["patch"], "two-file-change");
     assert_eq!(
@@ -1602,4 +1614,30 @@ fn fixture_processes_use_private_home_git_config_and_templates() {
         !hooks.exists() || fs::read_dir(&hooks).unwrap().next().is_none(),
         "Git's host template directory populated fixture hooks"
     );
+}
+
+#[test]
+fn json_manifest_is_a_first_class_lifecycle_codec() {
+    let fixture = Fixture::new_with_manifest("patches/fork.json");
+    let path = fixture.repo.join("patches/fork.json");
+    let initial: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(initial["schema"], 1);
+
+    fixture.forkctl_ok(&["contract", "edit", "--allow-base", "vendor/**"]);
+    let rewritten = fs::read(&path).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&rewritten).unwrap();
+    assert_eq!(value["contracts"]["allow_base"][0], "vendor/**");
+    assert!(
+        rewritten.starts_with(b"{"),
+        "JSON manifest was not preserved"
+    );
+
+    let api = fixture.api_call(
+        "execute",
+        &serde_json::json!({"command":"status","arguments":{}}),
+    );
+    assert!(api.status.success());
+    let response: serde_json::Value = serde_json::from_slice(&api.stdout).unwrap();
+    assert_eq!(response["status"], "success");
+    fixture.forkctl_ok(&["check"]);
 }

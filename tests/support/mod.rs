@@ -10,10 +10,15 @@ const FIXED_GIT_DATE: &str = "2001-02-03T04:05:06Z";
 pub struct Fixture {
     _directory: tempfile::TempDir,
     pub repo: PathBuf,
+    manifest: String,
 }
 
 impl Fixture {
     pub fn new() -> Self {
+        Self::new_with_manifest("patches/fork.yaml")
+    }
+
+    pub fn new_with_manifest(manifest: &str) -> Self {
         let directory = tempfile::tempdir().unwrap();
         prepare_sandbox(directory.path());
         let upstream_bare = directory.path().join("upstream.git");
@@ -58,6 +63,7 @@ impl Fixture {
         let fixture = Self {
             _directory: directory,
             repo,
+            manifest: manifest.to_string(),
         };
         fixture.forkctl_ok(&[
             "init",
@@ -94,7 +100,7 @@ impl Fixture {
     pub fn forkctl(&self, args: &[&str]) -> Output {
         forkctl_command(&self.repo)
             .arg("--manifest")
-            .arg("patches/fork.json")
+            .arg(&self.manifest)
             .args(args)
             .output()
             .unwrap()
@@ -114,7 +120,7 @@ impl Fixture {
     pub fn api_call(&self, mode: &str, request: &serde_json::Value) -> Output {
         let invocation = serde_json::json!({
             "protocol_version": 1,
-            "manifest": "patches/fork.json",
+            "manifest": self.manifest,
             "mode": mode,
             "request": request,
         });

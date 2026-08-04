@@ -6,6 +6,7 @@ mod help;
 mod layout;
 mod ledger;
 mod manifest;
+mod manifest_codec;
 mod process;
 mod protocol;
 mod report;
@@ -26,7 +27,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const DEFAULT_MANIFEST: &str = "patches/fork.json";
+const DEFAULT_MANIFEST: &str = "patches/fork.yaml";
 const INSTRUCTIONS: &str = include_str!("instructions.md");
 
 fn main() -> ExitCode {

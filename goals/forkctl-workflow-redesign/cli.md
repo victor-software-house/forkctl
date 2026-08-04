@@ -10,7 +10,7 @@ forkctl [GLOBAL OPTIONS] <COMMAND>
 
 | Short | Long | Value | Default | Meaning |
 |:--|:--|:--|:--|:--|
-| `-m` | `--manifest` | `PATH` | `FORK_MANIFEST`, then `patches/fork.json` | Manifest selection |
+| `-m` | `--manifest` | `PATH` | `FORK_MANIFEST`, then `patches/fork.yaml` | Manifest selection |
 | `-f` | `--format` | `pretty|json` | `pretty` | Complete output representation |
 | `-c` | `--color` | `auto|always|never` | `auto` | Pretty-output color policy |
 | `-q` | `--quiet` | — | false | Suppress successful pretty output |
@@ -49,7 +49,7 @@ forkctl init [OPTIONS]
 If the manifest exists, bootstrap options are rejected. If absent, `HEAD` must equal the resolved base.
 
 ```sh
-forkctl -m patches/fork.json init \
+forkctl -m patches/fork.yaml init \
   --upstream-remote upstream \
   -u https://github.com/example/project.git \
   --upstream-ref refs/heads/main \

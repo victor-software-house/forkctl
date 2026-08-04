@@ -50,6 +50,7 @@ semver = "=1.0.28"
 shell-words = "=1.1.1"
 tempfile = "=3.27.0"
 usage-lib = { version = "=4.1.0", default-features = false, features = ["clap"] }
+serde-saphyr = { version = "=1.0.0", default-features = false, features = ["serialize", "deserialize"] }
 
 [dev-dependencies]
 insta = { version = "=1.48.0", features = ["json"] }

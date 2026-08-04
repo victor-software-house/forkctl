@@ -1,0 +1,51 @@
+%YAML 1.2
+---
+schema: 1
+downstream:
+  remote: origin
+  branch: main
+  recovery_tag_prefix: forkctl/recovery
+upstream:
+  remote: upstream
+  url: https://github.com/example/project.git
+  fetch_ref: refs/heads/main
+base:
+  target:
+    kind: branch
+    selector: refs/heads/main
+    commit: '0000000000000000000000000000000000000000'
+  canonical: '0000000000000000000000000000000000000000'
+  stack: '0000000000000000000000000000000000000000'
+documents:
+  ledger: PATCHES.md
+  exports: patches/downstream
+bookkeeping_patch: fork-tooling
+patches:
+  - name: downstream-change
+    kind: source
+    purpose: Describe why this downstream change exists.
+    upstream_status: not-submitted
+    drop_when: Upstream provides the required behavior.
+    scope:
+      - src/**
+      - tests/**
+  - name: fork-tooling
+    kind: tooling
+    purpose: Own downstream fork policy and generated bookkeeping.
+    upstream_status: 'inappropriate: downstream-only tooling'
+    drop_when: The downstream fork is retired.
+    scope:
+      - AGENTS.md
+      - FORK.md
+      - PATCHES.md
+      - mise.toml
+      - mise.lock
+      - lefthook.yml
+      - patches/fork.yaml
+      - patches/downstream/**
+history: []
+contracts:
+  allow_base: []
+  required_text:
+    - path: FORK.md
+      contains: mise run fork check

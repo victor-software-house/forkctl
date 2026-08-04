@@ -14,7 +14,7 @@ experimental = true
 lockfile = true
 
 [env]
-FORK_MANIFEST = "patches/fork.json"
+FORK_MANIFEST = "patches/fork.yaml"
 
 [task_config]
 includes = [

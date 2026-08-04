@@ -11,6 +11,7 @@ mod status;
 use crate::error::DomainError;
 use crate::ledger;
 use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind};
+use crate::manifest_codec::ManifestFormat;
 use crate::process::{capture, output, run, succeeds};
 use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
 use anyhow::{Context, Result, ensure};
@@ -27,6 +28,7 @@ const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
 pub struct App {
     pub(super) repo: PathBuf,
     pub(super) manifest_path: PathBuf,
+    pub(super) manifest_format: ManifestFormat,
     pub(super) manifest: Option<Manifest>,
     pub(super) manifest_error: Option<String>,
 }
@@ -42,16 +44,14 @@ impl App {
         } else {
             repo.join(manifest_arg)
         };
+        let manifest_format = ManifestFormat::from_path(&manifest_path)?;
         let (manifest, manifest_error) = match fs::read(&manifest_path) {
-            Ok(bytes) => match serde_json::from_slice::<Manifest>(&bytes) {
+            Ok(bytes) => match manifest_format.parse(&bytes, &manifest_path) {
                 Ok(manifest) => match manifest.validate(&repo, &manifest_path) {
                     Ok(()) => (Some(manifest), None),
                     Err(error) => (None, Some(error.to_string())),
                 },
-                Err(error) => (
-                    None,
-                    Some(format!("parse {}: {error}", manifest_path.display())),
-                ),
+                Err(error) => (None, Some(error.to_string())),
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None),
             Err(error) => {
@@ -61,6 +61,7 @@ impl App {
         Ok(Self {
             repo,
             manifest_path,
+            manifest_format,
             manifest,
             manifest_error,
         })
@@ -404,9 +405,10 @@ impl App {
     }
 
     pub(super) fn write_manifest(&self) -> Result<()> {
-        let mut bytes = serde_json::to_vec_pretty(self.manifest()?)?;
-        bytes.push(b'\n');
-        write_atomic(&self.manifest_path, &bytes)
+        write_atomic(
+            &self.manifest_path,
+            &self.manifest_format.serialize(self.manifest()?)?,
+        )
     }
 
     pub(super) fn write_ledger(&self) -> Result<PathBuf> {

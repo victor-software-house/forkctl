@@ -27,7 +27,7 @@ fn mounted_mise_proxy_preserves_help_output_exit_and_cwd() {
         "--quiet",
         "fork",
         "--manifest",
-        "patches/fork.json",
+        "patches/fork.yaml",
         "--format",
         "json",
         "status",
