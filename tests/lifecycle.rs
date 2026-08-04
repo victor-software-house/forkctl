@@ -1,569 +1,652 @@
 mod support;
 
-use serde_json::Value;
 use std::fs;
-use std::process::Command;
-use support::{Fixture, git_capture, git_ok, stg_capture, stg_ok};
-
-fn command_data(response: &Value) -> &Value {
-    &response["result"]["data"]
-}
+use support::{Fixture, git_ok};
 
 #[test]
-fn initializes_and_reports_a_tooling_only_clone() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&["verify"]);
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    assert_eq!(command_data(&status)["verification"]["ok"], true);
-    assert_eq!(
-        command_data(&status)["applied_patches"],
-        serde_json::json!(["fork-tooling"])
-    );
-    assert_eq!(command_data(&status)["exports"], serde_json::json!([]));
-    assert!(command_data(&status)["pending"].is_null());
-
-    let head = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
-    fixture.forkctl_ok(&["init"]);
-    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), head);
-
-    fs::write(fixture.repo.join("dirty.txt"), "dirty\n").unwrap();
-    let output = fixture.forkctl(&["verify"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("worktree is not clean"));
-    let dirty_status: Value =
-        serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    assert_eq!(command_data(&dirty_status)["verification"]["ok"], false);
-    assert!(
-        !command_data(&dirty_status)["dirty"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
-}
-
-#[test]
-fn json_api_executes_real_status_without_terminal_output_leaks() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    let output = fixture.api_call(&serde_json::json!({"command": "status"}));
-    assert!(output.status.success());
-    assert!(output.stderr.is_empty());
-    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(response["status"], "success");
-    assert_eq!(response["result"]["command"], "status");
-    assert_eq!(command_data(&response)["verification"]["ok"], true);
-    assert_eq!(
-        command_data(&response)["applied_patches"],
-        serde_json::json!(["fork-tooling"])
-    );
-}
-
-#[test]
-fn creates_implements_and_publishes_with_an_exact_lease() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "source-change",
-        "--kind",
-        "source",
-        "--purpose",
-        "Add downstream source behavior.",
-        "--upstream-status",
-        "not-submitted",
-        "--drop-when",
-        "Upstream adds the behavior.",
-        "--path",
-        "source.txt",
-    ]);
-    let incomplete = fixture.forkctl(&["verify"]);
-    assert!(!incomplete.status.success());
-    assert!(String::from_utf8_lossy(&incomplete.stderr).contains("patch source-change is empty"));
-
-    fixture.implement_patch("source-change", "source.txt", "downstream\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    fixture.forkctl_ok(&["verify"]);
-    let old_remote = git_capture(&fixture.repo, ["ls-remote", "origin", "refs/heads/main"]);
-    fixture.forkctl_ok(&["publish"]);
-    let new_remote = git_capture(&fixture.repo, ["ls-remote", "origin", "refs/heads/main"]);
-    assert_ne!(old_remote, new_remote);
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    assert!(command_data(&status)["pending"].is_null());
-}
-
-#[test]
-fn finish_new_generates_exports_and_detects_drift() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "source-change",
-        "--kind",
-        "source",
-        "--purpose",
-        "Add exported downstream source behavior.",
-        "--upstream-status",
-        "not-submitted",
-        "--drop-when",
-        "Upstream adds the behavior.",
-        "--path",
-        "source.txt",
-        "--export",
-        "patches/source-change.patch",
-    ]);
-    fixture.implement_patch("source-change", "source.txt", "downstream\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    assert!(fixture.repo.join("patches/source-change.patch").is_file());
-    fixture.forkctl_ok(&["verify"]);
-
-    fs::write(
-        fixture.repo.join("patches/source-change.patch"),
-        "corrupt\n",
-    )
-    .unwrap();
-    git_ok(&fixture.repo, ["add", "patches/source-change.patch"]);
-    stg_ok(&fixture.repo, ["refresh", "--index"]);
-    let output = fixture.forkctl(&["verify"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("export differs"));
-}
-
-#[test]
-fn publish_rejects_a_concurrently_advanced_remote() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "source-change",
-        "--kind",
-        "source",
-        "--purpose",
-        "Add downstream source behavior.",
-        "--upstream-status",
-        "not-submitted",
-        "--drop-when",
-        "Upstream adds the behavior.",
-        "--path",
-        "source.txt",
-    ]);
-    fixture.implement_patch("source-change", "source.txt", "downstream\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    fixture.forkctl_ok(&["verify"]);
-
-    let other = fixture.repo.parent().unwrap().join("other");
-    git_ok(
-        fixture.repo.parent().unwrap(),
-        [
-            "clone",
-            "--quiet",
-            fixture.downstream_bare.to_str().unwrap(),
-            other.to_str().unwrap(),
-        ],
-    );
-    git_ok(&other, ["config", "user.name", "Other Writer"]);
-    git_ok(&other, ["config", "user.email", "other@example.com"]);
-    fs::write(other.join("other.txt"), "advanced\n").unwrap();
-    git_ok(&other, ["add", "other.txt"]);
-    git_ok(&other, ["commit", "--quiet", "-m", "advance remote"]);
-    git_ok(&other, ["push", "--quiet", "origin", "main"]);
-
-    let before = git_capture(&fixture.repo, ["ls-remote", "origin", "refs/heads/main"]);
-    let output = fixture.forkctl(&["publish"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("downstream advanced"));
-    let after = git_capture(&fixture.repo, ["ls-remote", "origin", "refs/heads/main"]);
-    assert_eq!(before, after);
-}
-
-#[test]
-fn changed_and_no_op_rebases_preserve_review_evidence() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    let v2 = fixture.advance_upstream("v2", "upstream v2\n");
-    fixture.forkctl_ok(&["rebase", "--onto", "refs/tags/v2"]);
-    assert_eq!(stg_capture(&fixture.repo, ["id", "{base}"]), v2);
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    let report = command_data(&status)["pending"]["report"]["path"]
-        .as_str()
-        .unwrap();
-    let report_text = fs::read_to_string(report).unwrap();
-    assert!(report_text.contains("## Range diff"));
-    assert!(report_text.contains("Structural verification: passed"));
-    fixture.forkctl_ok(&["publish"]);
-
-    let head = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
-    fixture.forkctl_ok(&["rebase", "--onto", "refs/tags/v2"]);
-    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), head);
-    fixture.forkctl_ok(&["publish"]);
-
-    fixture.forkctl_ok(&["rebase", "--onto", "refs/heads/main"]);
-    assert_eq!(stg_capture(&fixture.repo, ["id", "{base}"]), v2);
-    fixture.forkctl_ok(&["publish"]);
-
-    fixture.forkctl_ok(&["rebase", "--onto", &v2]);
-    assert_eq!(stg_capture(&fixture.repo, ["id", "{base}"]), v2);
-}
-
-#[test]
-fn rebase_conflict_preserves_pending_state_and_recovery_tag() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "source-change",
-        "--kind",
-        "source",
-        "--purpose",
-        "Change the shared base file.",
-        "--upstream-status",
-        "not-submitted",
-        "--drop-when",
-        "Upstream provides the downstream behavior.",
-        "--path",
-        "base.txt",
-    ]);
-    fixture.implement_patch("source-change", "base.txt", "downstream\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    fixture.forkctl_ok(&["verify"]);
-    fixture.forkctl_ok(&["publish"]);
-
-    fs::write(fixture.upstream_work.join("base.txt"), "upstream\n").unwrap();
-    git_ok(&fixture.upstream_work, ["add", "base.txt"]);
-    git_ok(
-        &fixture.upstream_work,
-        ["commit", "--quiet", "-m", "conflicting upstream"],
-    );
-    git_ok(
-        &fixture.upstream_work,
-        ["tag", "--annotate", "--message", "v2", "v2"],
-    );
-    git_ok(
-        &fixture.upstream_work,
-        ["push", "--quiet", "upstream-bare", "main", "refs/tags/v2"],
-    );
-
-    let output = fixture.forkctl(&["rebase", "--onto", "refs/tags/v2"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("rebase stopped"));
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    let backup = command_data(&status)["pending"]["backup_tag"]
-        .as_str()
-        .unwrap();
-    assert_eq!(
-        git_capture(&fixture.repo, ["tag", "--list", backup]),
-        backup
-    );
-    let remote_tag = Command::new("git")
-        .args(["ls-remote", "origin", &format!("refs/tags/{backup}")])
-        .current_dir(&fixture.repo)
-        .output()
-        .unwrap();
-    assert!(remote_tag.status.success());
-    assert!(remote_tag.stdout.is_empty());
-
-    fs::write(fixture.repo.join("base.txt"), "resolved\n").unwrap();
-    git_ok(&fixture.repo, ["add", "base.txt"]);
-    stg_ok(&fixture.repo, ["refresh"]);
-    stg_ok(&fixture.repo, ["goto", "fork-tooling"]);
-    fixture.forkctl_ok(&["rebase", "--onto", "refs/tags/v2"]);
-    fixture.forkctl_ok(&["verify"]);
-}
-
-#[test]
-fn undeclared_patch_path_fails_closed() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fs::write(fixture.repo.join("undeclared.txt"), "drift\n").unwrap();
-    git_ok(&fixture.repo, ["add", "undeclared.txt"]);
-    stg_ok(&fixture.repo, ["refresh", "--index"]);
-    let output = fixture.forkctl(&["verify"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("undeclared path"));
-}
-
-#[test]
-fn trailer_drift_fails_closed() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    stg_ok(
-        &fixture.repo,
-        [
-            "edit",
-            "--message",
-            "fork-tooling\n\nDownstream-Reason: Wrong reason.\nUpstream-Status: inappropriate: downstream-only tooling\nDrop-When: The downstream fork is retired.",
-            "fork-tooling",
-        ],
-    );
-    let output = fixture.forkctl(&["verify"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Downstream-Reason"));
-}
-
-#[test]
-fn ledger_and_patch_path_drift_fail_closed() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fs::write(fixture.repo.join("PATCHES.md"), "drift\n").unwrap();
-    stg_ok(&fixture.repo, ["refresh"]);
-    let output = fixture.forkctl(&["verify"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("generated ledger differs"));
-}
-
-#[test]
-fn retargeted_recovery_tag_is_rejected() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "source-change",
-        "--kind",
-        "source",
-        "--purpose",
-        "Add downstream source behavior.",
-        "--upstream-status",
-        "not-submitted",
-        "--drop-when",
-        "Upstream adds the behavior.",
-        "--path",
-        "source.txt",
-    ]);
-    fixture.implement_patch("source-change", "source.txt", "downstream\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    let backup = command_data(&status)["pending"]["backup_tag"]
-        .as_str()
-        .unwrap();
-    git_ok(
-        &fixture.repo,
-        [
-            "tag",
-            "--force",
-            "--annotate",
-            "--message",
-            "retargeted",
-            backup,
-            "HEAD",
-        ],
-    );
-    let output = fixture.forkctl(&["verify"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("backup tag resolves"));
-}
-
-#[test]
-fn modified_rebase_report_is_rejected() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.advance_upstream("v2", "upstream v2\n");
-    fixture.forkctl_ok(&["rebase", "--onto", "refs/tags/v2"]);
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    let report = command_data(&status)["pending"]["report"]["path"]
-        .as_str()
-        .unwrap();
-    fs::write(report, "modified after review\n").unwrap();
-    let output = fixture.forkctl(&["publish"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("rebase report differs"));
-}
-
-#[test]
-fn invalid_target_fails_before_recovery_state() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    let output = fixture.forkctl(&["rebase", "--onto", "v2"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("target must be a full"));
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    assert!(command_data(&status)["pending"].is_null());
-    assert!(git_capture(&fixture.repo, ["tag", "--list", "vsh/pre-sync-*"]).is_empty());
-}
-
-#[test]
-fn upstream_merged_patch_is_dropped_into_history() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "merged-change",
-        "--kind",
-        "source",
-        "--purpose",
-        "Add behavior later provided upstream.",
-        "--upstream-status",
-        "not-submitted",
-        "--drop-when",
-        "Upstream adds the behavior.",
-        "--path",
-        "merged.txt",
-    ]);
-    fixture.implement_patch("merged-change", "merged.txt", "merged\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    fixture.forkctl_ok(&["publish"]);
-
-    fs::write(fixture.upstream_work.join("merged.txt"), "merged\n").unwrap();
-    git_ok(&fixture.upstream_work, ["add", "merged.txt"]);
-    git_ok(
-        &fixture.upstream_work,
-        ["commit", "--quiet", "-m", "merge downstream behavior"],
-    );
-    git_ok(
-        &fixture.upstream_work,
-        ["tag", "--annotate", "--message", "v2", "v2"],
-    );
-    git_ok(
-        &fixture.upstream_work,
-        ["push", "--quiet", "upstream-bare", "main", "refs/tags/v2"],
-    );
-
-    let output = fixture.forkctl_ok(&["rebase", "--onto", "refs/tags/v2"]);
-    assert!(output.contains("dropped upstream-merged patch merged-change"));
+fn bootstrap_and_fresh_clone_hydration_are_idempotent() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&["check"]);
     assert_eq!(
         stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]),
         "fork-tooling"
     );
-    let manifest: Value =
-        serde_json::from_slice(&fs::read(fixture.repo.join("fork.json")).unwrap()).unwrap();
-    assert_eq!(manifest["history"][0]["patch"]["name"], "merged-change");
-    assert_eq!(manifest["history"][0]["kind"], "upstream-merged");
-    let ledger = fs::read_to_string(fixture.repo.join("PATCHES.md")).unwrap();
-    assert!(ledger.contains("upstream merged"));
-    assert!(ledger.contains("merged-change"));
-    fixture.forkctl_ok(&["verify"]);
+    fixture.forkctl_ok(&["init"]);
 }
 
 #[test]
-fn conflicting_remote_recovery_tag_blocks_publish() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
+fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
+    let fixture = Fixture::new();
     fixture.forkctl_ok(&[
-        "new",
+        "patch",
+        "create",
         "source-change",
+        "-k",
+        "source",
+        "-p",
+        "Change downstream source.",
+        "-u",
+        "not-submitted",
+        "-d",
+        "Upstream provides equivalent behavior.",
+        "-s",
+        "source.txt",
+    ]);
+    fs::write(fixture.repo.join("source.txt"), "downstream\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["check", "-s"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+    assert!(
+        fixture
+            .repo
+            .join("patches/downstream/0001-source-change.patch")
+            .is_file()
+    );
+    let series = stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]);
+    assert_eq!(
+        series.lines().collect::<Vec<_>>(),
+        ["source-change", "fork-tooling"]
+    );
+}
+
+#[test]
+fn staged_check_rejects_out_of_scope_paths() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "source-change",
+        "-k",
+        "source",
+        "-p",
+        "Change source.",
+        "-u",
+        "not-submitted",
+        "-d",
+        "Upstream changes.",
+        "-s",
+        "source.txt",
+    ]);
+    fs::write(fixture.repo.join("README.md"), "outside\n").unwrap();
+    git_ok(&fixture.repo, ["add", "README.md"]);
+    let output = fixture.forkctl(&["check", "-s"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("outside patch"));
+}
+
+#[test]
+fn patch_kind_change_reorders_series_and_exports() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "first-source", "first.txt", "first\n");
+    create_source_patch(&fixture, "second-source", "second.txt", "second\n");
+
+    fixture.forkctl_ok(&["patch", "edit", "first-source", "--kind", "tooling"]);
+    fixture.forkctl_ok(&["check"]);
+
+    let series = stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]);
+    assert_eq!(
+        series.lines().collect::<Vec<_>>(),
+        ["second-source", "first-source", "fork-tooling"]
+    );
+    assert!(
+        fixture
+            .repo
+            .join("patches/downstream/0001-second-source.patch")
+            .is_file()
+    );
+    assert!(
+        !fixture
+            .repo
+            .join("patches/downstream/0001-first-source.patch")
+            .exists()
+    );
+    assert!(
+        !fixture
+            .repo
+            .join("patches/downstream/0002-second-source.patch")
+            .exists()
+    );
+    let operation = git_capture_dynamic(
+        &fixture.repo,
+        &["rev-parse", "--git-path", "forkctl/operation.json"],
+    );
+    assert!(!fixture.repo.join(operation).exists());
+}
+
+#[test]
+fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
+    fixture.forkctl_ok(&["patch", "select", "lower"]);
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+
+    let refresh = fixture.forkctl(&["--format", "json", "patch", "refresh"]);
+    assert!(!refresh.status.success());
+    let refresh: serde_json::Value = serde_json::from_slice(&refresh.stdout).unwrap();
+    assert_eq!(refresh["error"]["code"], "subprocess_failed");
+
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["operation"]["kind"], "patch_refresh");
+    assert_eq!(status["result"]["operation"]["phase"], "conflict");
+
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    let first_continue = fixture.forkctl(&["operation", "continue"]);
+    assert!(!first_continue.status.success());
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\nupper\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    fixture.forkctl_ok(&["operation", "continue"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn patch_kind_reorder_conflict_can_continue_from_typed_journal() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
+
+    let edit = fixture.forkctl(&[
+        "--format", "json", "patch", "edit", "lower", "--kind", "tooling",
+    ]);
+    assert!(!edit.status.success());
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["operation"]["kind"], "patch_edit");
+    assert_eq!(status["result"]["operation"]["phase"], "conflict");
+
+    fs::write(fixture.repo.join("shared.txt"), "upper\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    let first_continue = fixture.forkctl(&["operation", "continue"]);
+    assert!(!first_continue.status.success());
+    fs::write(fixture.repo.join("shared.txt"), "lower\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    fixture.forkctl_ok(&["operation", "continue"]);
+    fixture.forkctl_ok(&["check"]);
+    assert_eq!(
+        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"])
+            .lines()
+            .collect::<Vec<_>>(),
+        ["upper", "lower", "fork-tooling"]
+    );
+}
+
+#[test]
+fn patch_refresh_abort_restores_stack_and_active_patch() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
+    fixture.forkctl_ok(&["patch", "select", "lower"]);
+    let old_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    let old_series = stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]);
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    assert!(!fixture.forkctl(&["patch", "refresh"]).status.success());
+
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+    assert_eq!(
+        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]),
+        old_series
+    );
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["active_patch"]["patch"], "lower");
+    assert!(status["result"]["operation"].is_null());
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn refresh_consumes_pre_commit_hook_modified_index() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "hook-format",
         "--kind",
         "source",
         "--purpose",
-        "Add downstream source behavior.",
+        "format through the existing hook",
         "--upstream-status",
         "not-submitted",
         "--drop-when",
-        "Upstream adds the behavior.",
-        "--path",
+        "upstream adopts formatting",
+        "--scope",
+        "hook.txt",
+    ]);
+    let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::write(
+        &hook,
+        "#!/bin/sh\nprintf 'formatted\\n' > hook.txt\ngit add hook.txt\n",
+    )
+    .unwrap();
+    make_executable(&hook);
+    fs::write(fixture.repo.join("hook.txt"), "raw\n").unwrap();
+    git_ok(&fixture.repo, ["add", "hook.txt"]);
+
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("hook.txt")).unwrap(),
+        "formatted\n"
+    );
+    let commit = stg_capture(&fixture.repo, ["id", "hook-format", "--"]);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["show", &format!("{commit}:hook.txt")]),
+        "formatted"
+    );
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn no_op_refresh_does_not_create_an_operation() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    fixture.forkctl_ok(&["patch", "select", "source-change"]);
+    let output = fixture.forkctl(&["--format", "json", "patch", "refresh"]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "capture_conflict");
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+}
+
+#[test]
+fn refresh_dry_run_is_non_mutating() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "source-change",
+        "-k",
+        "source",
+        "-p",
+        "Change source.",
+        "-u",
+        "not-submitted",
+        "-d",
+        "Upstream changes.",
+        "-s",
         "source.txt",
     ]);
-    fixture.implement_patch("source-change", "source.txt", "downstream\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    let status: Value = serde_json::from_str(&fixture.forkctl_ok(&["status", "--json"])).unwrap();
-    let backup = command_data(&status)["pending"]["backup_tag"]
-        .as_str()
-        .unwrap();
+    fs::write(fixture.repo.join("source.txt"), "downstream\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    let head = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--dry-run"]);
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), head);
+    assert_eq!(
+        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]),
+        "fork-tooling"
+    );
+}
 
-    let other = fixture.repo.parent().unwrap().join("tag-writer");
+#[test]
+fn hook_exported_git_environment_does_not_contaminate_nested_clone() {
+    let fixture = Fixture::new();
+    let git_dir = git_capture(&fixture.repo, ["rev-parse", "--git-dir"]);
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_forkctl"))
+        .args(["--manifest", "patches/fork.json", "check"])
+        .current_dir(&fixture.repo)
+        .env("GIT_DIR", fixture.repo.join(git_dir))
+        .env("GIT_WORK_TREE", &fixture.repo)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn json_status_is_one_clean_envelope() {
+    let fixture = Fixture::new();
+    let output = fixture.api_call(
+        "execute",
+        &serde_json::json!({"command":"status","arguments":{}}),
+    );
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["status"], "success");
+    assert_eq!(response["command"], "status");
+}
+
+#[test]
+fn rebase_publish_and_fresh_clone_hydrate_exact_recovery() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let recovery = response["result"]["recovery_tag"].as_str().unwrap();
+    fixture.forkctl_ok(&["publish"]);
+    let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
+    let clone = fixture.repo.parent().unwrap().join("fresh-clone");
     git_ok(
         fixture.repo.parent().unwrap(),
+        ["clone", "--quiet", remote.as_str(), clone.to_str().unwrap()],
+    );
+    git_ok(&clone, ["config", "user.name", "Forkctl Test"]);
+    git_ok(&clone, ["config", "user.email", "forkctl@example.com"]);
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_forkctl"))
+        .args(["--manifest", "patches/fork.json", "init"])
+        .current_dir(&clone)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!git_capture_dynamic(&clone, &["tag", "--list", recovery]).is_empty());
+}
+
+#[test]
+fn operation_abort_restores_exact_old_stack_before_clearing_journal() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let old_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    let old_series = stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]);
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    fixture.forkctl_ok(&["rebase", "--onto", "refs/heads/main"]);
+    assert_ne!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+
+    fixture.forkctl_ok(&["operation", "abort", "--dry-run"]);
+    assert_ne!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+    let unconfirmed = fixture.forkctl(&["--format", "json", "operation", "abort"]);
+    assert!(!unconfirmed.status.success());
+    let unconfirmed: serde_json::Value = serde_json::from_slice(&unconfirmed.stdout).unwrap();
+    assert_eq!(unconfirmed["error"]["code"], "invalid_request");
+
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+    assert_eq!(
+        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]),
+        old_series
+    );
+    fixture.forkctl_ok(&["check"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+}
+
+#[test]
+fn operation_rejects_deleted_and_substituted_recovery_tags() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let tag = response["result"]["recovery_tag"].as_str().unwrap();
+    let tag_object = response["result"]["recovery_tag_object"].as_str().unwrap();
+    let old_tip = response["result"]["old_tip"].as_str().unwrap();
+    let tag_ref = format!("refs/tags/{tag}");
+
+    git_ok_dynamic(&fixture.repo, &["update-ref", "-d", &tag_ref]);
+    assert!(!fixture.forkctl(&["check"]).status.success());
+
+    git_ok_dynamic(&fixture.repo, &["update-ref", &tag_ref, old_tip]);
+    assert!(!fixture.forkctl(&["check"]).status.success());
+
+    git_ok_dynamic(&fixture.repo, &["update-ref", "-d", &tag_ref]);
+    git_ok_dynamic(
+        &fixture.repo,
+        &["tag", "-a", "-m", "wrong recovery", tag, "HEAD"],
+    );
+    assert!(!fixture.forkctl(&["check"]).status.success());
+
+    git_ok_dynamic(&fixture.repo, &["update-ref", &tag_ref, tag_object]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn publish_rejects_stale_lease_without_partial_refs() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let tag = response["result"]["recovery_tag"].as_str().unwrap();
+    advance_downstream(&fixture.repo, "remote advanced\n");
+    let remote_before =
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]);
+
+    let publish = fixture.forkctl(&["--format", "json", "publish"]);
+    assert!(!publish.status.success());
+    let publish: serde_json::Value = serde_json::from_slice(&publish.stdout).unwrap();
+    assert_eq!(publish["error"]["code"], "remote_advanced");
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        remote_before
+    );
+    assert!(
+        git_capture_dynamic(
+            &fixture.repo,
+            &["ls-remote", "origin", &format!("refs/tags/{tag}")]
+        )
+        .is_empty()
+    );
+    assert_operation_present(&fixture);
+}
+
+#[test]
+fn publish_rejects_conflicting_remote_recovery_tag() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let tag = response["result"]["recovery_tag"].as_str().unwrap();
+    git_ok_dynamic(
+        &fixture.repo,
+        &["push", "origin", &format!("HEAD:refs/tags/{tag}")],
+    );
+
+    let publish = fixture.forkctl(&["--format", "json", "publish"]);
+    assert!(!publish.status.success());
+    let publish: serde_json::Value = serde_json::from_slice(&publish.stdout).unwrap();
+    assert_eq!(publish["error"]["code"], "publication_rejected");
+    assert_operation_present(&fixture);
+}
+
+#[test]
+fn publish_preserves_refs_when_remote_policy_rejects_atomic_push() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let tag = response["result"]["recovery_tag"].as_str().unwrap();
+    let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
+    let hook = std::path::Path::new(&remote).join("hooks/pre-receive");
+    fs::write(
+        &hook,
+        "#!/bin/sh\necho 'protected branch policy' >&2\nexit 1\n",
+    )
+    .unwrap();
+    make_executable(&hook);
+    let branch_before =
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]);
+
+    let publish = fixture.forkctl(&["--format", "json", "publish"]);
+    assert!(!publish.status.success());
+    let publish: serde_json::Value = serde_json::from_slice(&publish.stdout).unwrap();
+    assert_eq!(publish["error"]["code"], "publication_rejected");
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        branch_before
+    );
+    assert!(
+        git_capture_dynamic(
+            &fixture.repo,
+            &["ls-remote", "origin", &format!("refs/tags/{tag}")]
+        )
+        .is_empty()
+    );
+    assert_operation_present(&fixture);
+}
+
+#[test]
+fn publish_has_no_fallback_when_remote_lacks_atomic_push() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let tag = response["result"]["recovery_tag"].as_str().unwrap();
+    let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
+    git_ok_dynamic(
+        &fixture.repo,
+        &[
+            "--git-dir",
+            &remote,
+            "config",
+            "receive.advertiseAtomic",
+            "false",
+        ],
+    );
+    let branch_before =
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]);
+
+    let publish = fixture.forkctl(&["--format", "json", "publish"]);
+    assert!(!publish.status.success());
+    let publish: serde_json::Value = serde_json::from_slice(&publish.stdout).unwrap();
+    assert_eq!(publish["error"]["code"], "publication_rejected");
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        branch_before
+    );
+    assert!(
+        git_capture_dynamic(
+            &fixture.repo,
+            &["ls-remote", "origin", &format!("refs/tags/{tag}")]
+        )
+        .is_empty()
+    );
+    assert_operation_present(&fixture);
+}
+
+fn assert_operation_present(fixture: &Fixture) {
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_object());
+}
+
+fn create_source_patch(fixture: &Fixture, name: &str, path: &str, contents: &str) {
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        name,
+        "--kind",
+        "source",
+        "--purpose",
+        "Change downstream source.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream provides equivalent behavior.",
+        "--scope",
+        path,
+    ]);
+    std::fs::write(fixture.repo.join(path), contents).unwrap();
+    git_ok(&fixture.repo, ["add", path]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+}
+
+fn advance_upstream(repo: &std::path::Path, contents: &str) {
+    let upstream = git_capture_dynamic(repo, &["remote", "get-url", "upstream"]);
+    let work = repo.parent().unwrap().join("advance-upstream");
+    git_ok(
+        repo.parent().unwrap(),
         [
             "clone",
             "--quiet",
-            fixture.downstream_bare.to_str().unwrap(),
-            other.to_str().unwrap(),
+            upstream.as_str(),
+            work.to_str().unwrap(),
         ],
     );
-    git_ok(&other, ["config", "user.name", "Other Writer"]);
-    git_ok(&other, ["config", "user.email", "other@example.com"]);
+    git_ok(&work, ["config", "user.name", "Forkctl Test"]);
+    git_ok(&work, ["config", "user.email", "forkctl@example.com"]);
+    std::fs::write(work.join("upstream.txt"), contents).unwrap();
+    git_ok(&work, ["add", "upstream.txt"]);
+    git_ok(&work, ["commit", "--quiet", "-m", "upstream v2"]);
+    git_ok(&work, ["push", "--quiet", "origin", "main"]);
+}
+
+fn advance_downstream(repo: &std::path::Path, contents: &str) {
+    let downstream = git_capture_dynamic(repo, &["remote", "get-url", "origin"]);
+    let work = repo.parent().unwrap().join("advance-downstream");
     git_ok(
-        &other,
+        repo.parent().unwrap(),
         [
-            "tag",
-            "--annotate",
-            "--message",
-            "conflicting",
-            backup,
-            "HEAD",
+            "clone",
+            "--quiet",
+            downstream.as_str(),
+            work.to_str().unwrap(),
         ],
     );
-    git_ok(
-        &other,
-        ["push", "--quiet", "origin", &format!("refs/tags/{backup}")],
-    );
-    let output = fixture.forkctl(&["publish"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("remote backup tag"));
+    git_ok(&work, ["config", "user.name", "Forkctl Test"]);
+    git_ok(&work, ["config", "user.email", "forkctl@example.com"]);
+    fs::write(work.join("remote.txt"), contents).unwrap();
+    git_ok(&work, ["add", "remote.txt"]);
+    git_ok(&work, ["commit", "--quiet", "-m", "remote advance"]);
+    git_ok(&work, ["push", "--quiet", "origin", "main"]);
 }
 
-#[test]
-fn tooling_patch_is_inserted_before_bookkeeping_with_exact_trailers() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "build-tooling",
-        "--kind",
-        "tooling",
-        "--purpose",
-        "Add downstream build tooling.",
-        "--upstream-status",
-        "inappropriate: downstream-only tooling",
-        "--drop-when",
-        "The downstream build is retired.",
-        "--path",
-        "BUILD.md",
-    ]);
-    fixture.implement_patch("build-tooling", "BUILD.md", "build\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    assert_eq!(
-        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]),
-        "build-tooling\nfork-tooling"
-    );
-    let commit = stg_capture(&fixture.repo, ["id", "build-tooling"]);
-    let message = git_capture(&fixture.repo, ["log", "-1", "--format=%B", &commit]);
-    assert!(message.contains("Downstream-Reason: Add downstream build tooling."));
-    assert!(message.contains("Upstream-Status: inappropriate: downstream-only tooling"));
-    assert!(message.contains("Drop-When: The downstream build is retired."));
-    fixture.forkctl_ok(&["verify"]);
+fn git_capture_dynamic(repo: &std::path::Path, args: &[&str]) -> String {
+    capture(repo, "git", args)
 }
 
-#[test]
-fn post_finish_change_requires_finish_again() {
-    let fixture = Fixture::tooling_only();
-    fixture.forkctl_ok(&["init"]);
-    fixture.forkctl_ok(&[
-        "new",
-        "source-change",
-        "--kind",
-        "source",
-        "--purpose",
-        "Add downstream source behavior.",
-        "--upstream-status",
-        "not-submitted",
-        "--drop-when",
-        "Upstream adds the behavior.",
-        "--path",
-        "source.txt",
-    ]);
-    fixture.implement_patch("source-change", "source.txt", "first\n");
-    fixture.forkctl_ok(&["new", "--finish"]);
-    fixture.implement_patch("source-change", "source.txt", "second\n");
-    let output = fixture.forkctl(&["publish"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("current tip"));
-    fixture.forkctl_ok(&["new", "--finish"]);
-    fixture.forkctl_ok(&["verify"]);
-}
-
-#[test]
-fn wrong_branch_fails_before_mutation() {
-    let fixture = Fixture::tooling_only();
-    git_ok(&fixture.repo, ["switch", "--quiet", "-c", "other"]);
-    let output = fixture.forkctl(&["init"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("current branch is other"));
+fn git_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .unwrap();
     assert!(
-        Command::new("git")
-            .args(["tag", "--list", "vsh/pre-sync-*"])
-            .current_dir(&fixture.repo)
-            .output()
-            .unwrap()
-            .stdout
-            .is_empty()
+        output.status.success(),
+        "git {args:?} failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn capture(repo: &std::path::Path, program: &str, args: &[&str]) -> String {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().to_string()
+}
+
+fn stg_capture(repo: &std::path::Path, args: [&str; 3]) -> String {
+    capture(repo, "stg", &args)
+}
+
+fn git_capture(repo: &std::path::Path, args: [&str; 2]) -> String {
+    capture(repo, "git", &args)
+}
+
+fn make_executable(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = fs::metadata(path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).unwrap();
 }

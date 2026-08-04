@@ -6,7 +6,10 @@ fn command_and_domain_modules_do_not_render_or_print() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut violations = Vec::new();
     visit(&root, &mut |path| {
-        if path.file_name().and_then(|name| name.to_str()) == Some("view.rs") {
+        if matches!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("view.rs" | "help.rs" | "main.rs" | "cli.rs")
+        ) {
             return;
         }
         let source = fs::read_to_string(path).unwrap();

@@ -1,20 +1,12 @@
 # forkctl
 
-Audited, mise-provisioned lifecycle control for downstream forks carried as [StGit](https://stacked-git.github.io/) patch stacks.
+Explicit, audited lifecycle control for downstream forks carried as [StGit](https://stacked-git.github.io/) patch stacks.
 
-Forkctl is a small Rust policy CLI over real `git` and `stg` commands. Git remains canonical history; StGit remains responsible for patch mechanics and conflicts. Forkctl declares policy, verifies reproducibility, records review evidence, and publishes rewritten history only under an exact lease.
+Forkctl is a Rust policy CLI over real `git` and `stg` commands. The operator declares patch intent; forkctl owns staged capture, targeted refresh, generated exports/ledger/manifest, recovery evidence, exact-lease publication, and typed CLI/API output.
 
-Every command handler returns a typed protocol value. Clap commands and JSON requests are equal adapters over those handlers; command/domain modules never print, detect terminals, or construct tables. One centralized Anstyle/Comfy Table view renders consistent pipe-safe human output, while Serde emits the same values as JSON and Schemars generates the full local API schema. Generated ledger and rebase-report documents remain compile-time, type-checked Askama templates.
-
-The repository publishes:
-
-- `forkctl` — the CLI;
-- `tasks/fork.toml` — immutable remote mise tasks for `fork:init`, `fork:status`, `fork:new`, `fork:verify`, `fork:rebase`, and `fork:publish`;
-- `examples/` — copy-ready manifest and mise configuration.
+Clap and the local JSON API execute the same typed handlers. Domain modules never print, detect terminals, or construct tables. A centralized Anstyle/Comfy Table renderer owns pretty output and colored width-aware help; Serde/Schemars own the versioned JSON contract and JSON Schema 2020-12.
 
 ## Consumer setup
-
-A fork owns one manifest, generated `PATCHES.md`, and any declared patch exports. Pin the task catalog to an immutable release or commit:
 
 ```toml
 min_version = "2026.7.7"
@@ -24,49 +16,115 @@ experimental = true
 lockfile = true
 
 [env]
-FORK_MANIFEST = "patches/downstream/fork.json"
+FORK_MANIFEST = "patches/fork.json"
 
 [task_config]
 includes = [
-  "git::https://github.com/victor-software-house/forkctl.git//tasks/fork.toml?ref=<immutable-ref>",
+  "git::https://github.com/victor-software-house/forkctl.git//tasks/fork?ref=<immutable-ref>",
   "mise-tasks",
 ]
 ```
 
-`task_config.includes` replaces mise's default task directories, so list `mise-tasks` when the repository also has local file tasks.
-
-## Workflow
+The remote catalog exposes one mounted task with the full forkctl grammar:
 
 ```sh
-mise run fork:init
-mise run fork:status
-mise run fork:new -- downstream-change \
-  --kind source \
-  --purpose "Describe why the downstream change exists." \
-  --upstream-status "not-submitted" \
-  --drop-when "Upstream provides the required behavior." \
-  --path src/example.rs
-mise run fork:verify
-mise run fork:rebase -- --onto refs/tags/v1.2.4
-mise run fork:publish
+mise run fork --help
+mise run fork status
+mise run fork check
+mise run fork patch refresh
 ```
 
-`fork:new` creates a documented empty patch. Add and refresh its implementation, restore the bookkeeping patch, then run `mise run fork:new -- --finish` to regenerate declared exports and verify it. Rebase creates an annotated recovery tag and Git-private no-color range-diff report but never publishes. Publish verifies again and atomically pushes the recovery tag plus branch with an explicit `--force-with-lease=<ref>:<sha>`.
+The task uses `dir = "{{cwd}}"`, exact task-local tools, `exec forkctl "$@"`, and a Usage spec generated directly from Clap. `task_config.includes` replaces mise's default task directories, so retain `mise-tasks` only when the repository has local file tasks.
 
-`forkctl instructions` prints the agent/operator contract without requiring a Git repository.
-
-## Output and local API
+## Patch workflow
 
 ```sh
-forkctl status --output pretty
-forkctl status --output json
-forkctl status --json                 # compatibility alias
-forkctl api schema
-printf '%s' '{"protocol_version":1,"manifest":"patches/downstream/fork.json","request":{"command":"status"}}' \
+mise run fork patch create downstream-change \
+  -k source \
+  -p 'Describe why this downstream change exists.' \
+  -u not-submitted \
+  -d 'Upstream provides the required behavior.' \
+  -s 'src/**' -s 'tests/**'
+
+# edit normally
+git add src/example.rs tests/example.rs
+mise run fork check -s
+mise run fork patch refresh
+mise run fork patch finish
+```
+
+`patch create` records metadata-only active intent. `patch refresh` captures the index by default, targets the correct StGit patch, runs the consumer pre-commit hook, regenerates deterministic evidence, refreshes bookkeeping, and leaves the patch active for more edits. `patch finish` requires no remaining changes, runs the full check, and clears active state.
+
+Explicit alternatives:
+
+```sh
+mise run fork patch refresh --all
+mise run fork patch refresh -p src/example.rs -p tests/example.rs
+mise run fork patch refresh -n             # semantic dry-run plan
+```
+
+Persistent ownership uses `scope` globs (`*` stays within a segment; `**` crosses directories). One-shot capture uses Git pathspecs. Forkctl never guesses intent.
+
+## Check, rebase, and publish
+
+```sh
+mise run fork status
+mise run fork check                         # full clean-repository audit
+mise run fork check -s                      # staged index against active patch
+mise run fork rebase -o refs/heads/main
+mise run fork operation status
+mise run fork operation continue
+mise run fork publish
+```
+
+Rebase creates an immutable annotated recovery tag, captures the remote lease and old ordered stack, delegates to `stg rebase --merged`, generates a Git-private range-diff report, and records dropped patches in operation-level recovery-bound history. It never publishes.
+
+`operation status`, `continue`, and `abort` expose the typed in-flight journal. `operation abort -n` reports the restoration plan; `operation abort -y` restores and checks old state before clearing the journal.
+
+Publish performs one atomic explicit-ref push of branch plus recovery tag with an exact lease. There is no force, lease, or atomic fallback and no provider ruleset administration.
+
+## Hooks
+
+Forkctl exposes ordinary read-only checks and does not own a hook manager:
+
+```yaml
+pre-commit:
+  commands:
+    forkctl-staged:
+      run: mise run fork check -s
+pre-push:
+  commands:
+    forkctl-check:
+      run: mise run fork check -q
+```
+
+Checks never stage or rewrite. Forkctl's production process layer clears Git repository-local hook variables before nested/foreign repository commands while preserving transport and authentication variables.
+
+## CLI, help, and completion
+
+```sh
+forkctl patch refresh --help
+forkctl completion zsh
+forkctl completion nu
+forkctl --usage-spec=fork
+```
+
+Most long options have collision-audited mnemonic shorts. Leaf parameters are grouped by subject, metadata/scope, capture, execution, and output. Help is generated from Clap metadata into colored width-aware panels; no second parameter specification exists.
+
+Completion supports bash, elvish, fish, Nushell, PowerShell, and zsh, including commands, flags, enum values, files, local Git remotes/refs, live patch names, and current operation values. Candidate lookup is local and fail-silent.
+
+## Local JSON API
+
+```sh
+forkctl status --format json
+forkctl api schema --kind bundle
+printf '%s' '{"protocol_version":1,"mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
   | forkctl api call
 ```
 
-Pretty and JSON output consume the same typed result. JSON stdout is exactly one versioned success/error envelope; Git/StGit subprocess output is captured and cannot contaminate it. `api schema` emits JSON Schema 2020-12 for invocation and response envelopes.
+Requests use dotted command names such as `patch.refresh` and `operation.abort`, command-specific typed arguments, and `mode: execute|plan`. Success, plan, notice, error, and error-detail types are schema-derived. JSON stdout is exactly one response and stderr is empty.
+
+Schema kinds: `bundle`, `manifest`, `invocation`, `response`, `active-state`, `operation`.
 
 ## Manifest
 
@@ -76,7 +134,7 @@ Pretty and JSON output consume the same typed result. JSON stdout is exactly one
   "downstream": {
     "remote": "origin",
     "branch": "main",
-    "backup_tag_prefix": "vsh/pre-sync"
+    "recovery_tag_prefix": "forkctl/recovery"
   },
   "upstream": {
     "remote": "upstream",
@@ -85,15 +143,17 @@ Pretty and JSON output consume the same typed result. JSON stdout is exactly one
   },
   "base": {
     "target": {
-      "kind": "tag",
-      "selector": "refs/tags/v1.2.3",
-      "commit": "0000000000000000000000000000000000000000",
-      "tag_object": "1111111111111111111111111111111111111111"
+      "kind": "branch",
+      "selector": "refs/heads/main",
+      "commit": "0000000000000000000000000000000000000000"
     },
     "canonical": "0000000000000000000000000000000000000000",
     "stack": "0000000000000000000000000000000000000000"
   },
-  "ledger": "PATCHES.md",
+  "documents": {
+    "ledger": "PATCHES.md",
+    "exports": "patches/downstream"
+  },
   "bookkeeping_patch": "fork-tooling",
   "patches": [
     {
@@ -102,68 +162,32 @@ Pretty and JSON output consume the same typed result. JSON stdout is exactly one
       "purpose": "Describe why this downstream change exists.",
       "upstream_status": "not-submitted",
       "drop_when": "Upstream provides the required behavior.",
-      "paths": ["src/example.rs"],
-      "export": "patches/downstream/0001-downstream-change.patch"
-    },
-    {
-      "name": "fork-tooling",
-      "kind": "tooling",
-      "purpose": "Own downstream fork policy and generated bookkeeping.",
-      "upstream_status": "inappropriate: downstream-only tooling",
-      "drop_when": "The downstream fork is retired.",
-      "paths": ["FORK.md", "PATCHES.md", "mise.toml", "patches/downstream/*"]
+      "scope": ["src/**", "tests/**"]
     }
   ],
   "history": [],
-  "allow": { "base": [] },
-  "required": [
-    { "path": "FORK.md", "contains": "mise run fork:verify" }
-  ]
+  "contracts": {
+    "allow_base": [],
+    "required_text": []
+  }
 }
 ```
 
-Every patch commit must carry trailers matching its manifest metadata:
+Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` trailers. Source patches precede tooling patches. Every source export is generated deterministically as `<exports>/<order>-<name>.patch`; tooling patches have no export. The final tooling patch owns manifest, ledger, exports, and integration files.
 
-```text
-Downstream-Reason: Describe why this downstream change exists.
-Upstream-Status: not-submitted
-Drop-When: Upstream provides the required behavior.
-```
+## Bootstrap and clone hydration
 
-Source patches precede tooling patches. The final tooling patch owns manifest, ledger, export, and task bookkeeping. A tooling-only stack is valid. Export destinations are concrete, bookkeeping-owned, and disjoint from source/contract paths.
+Without a manifest, `init` requires explicit repository/base/document/bookkeeping arguments and `HEAD` exactly at the resolved base. It creates the initial bookkeeping patch and never imports legacy commits.
 
-Targets are typed historical selections: full commit SHAs, full `refs/heads/*` branch refs, or full `refs/tags/*` tag refs. Resolved commits remain immutable even when a selected branch later advances. Annotated tag objects are persisted and verified when available.
-
-When `stg rebase --merged` produces an empty non-bookkeeping patch, forkctl removes it and appends its full metadata, former commit, and target to manifest-backed `PATCHES.md` history.
-
-## Verification and recovery
-
-Verification fails closed on dirty state, wrong branch/tracking, remote drift, base drift, patch order, unapplied or empty patches, undeclared per-patch paths, trailer drift, ledger drift, export drift, reconstruction drift, and missing source contracts.
-
-If rebase conflicts, forkctl preserves the normal StGit state, pending lease, Git-private manifest snapshot, and recovery tag. Resolve explicitly:
-
-```sh
-stg add --update
-stg refresh
-stg goto <bookkeeping-patch>
-mise run fork:rebase -- --onto <same-ref>
-```
-
-Forkctl never stashes or resolves conflict content.
+With a manifest, `init` idempotently reconstructs StGit metadata and fetches only exact recovery refs named by history before running the full check.
 
 ## Direct installation
-
-Mise tasks provision exact Rust, StGit, and forkctl versions. For direct use:
 
 ```sh
 cargo install forkctl --locked
 ```
 
-Provide supported `git` and `stg` executables on `PATH`.
-
-## Version synchronization
-
-`[workspace.package].version` in `Cargo.toml` is the sole version source. `mise run version:sync` updates the six task tool pins and `examples/mise.toml`. Lefthook synchronizes and stages them before commits; `mise run verify` rejects drift.
+Provide supported `git` and `stg` executables on `PATH`; the mounted mise task provisions exact versions automatically.
 
 ## Development
 
@@ -174,4 +198,4 @@ mise run verify
 mise run build
 ```
 
-The gate runs rustfmt, workspace-wide Clippy `all` and `pedantic` with warnings denied, unit tests, and disposable real Git/StGit lifecycle tests. No test requires a consumer repository or network access.
+`[workspace.package].version` is the sole forkctl release source. Root `mise.toml` is the sole source for the minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. After changing either source, run `mise run version:sync`; it regenerates `mise.lock` and every operational pin. The verification gate rejects drift and runs rustfmt, denied-warning workspace Clippy, API/schema/help/completion tests, and disposable real Git/StGit lifecycle tests.

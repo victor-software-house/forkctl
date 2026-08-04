@@ -1,4 +1,3 @@
-use serde_json::json;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -6,29 +5,37 @@ use std::process::{Command, Output, Stdio};
 
 pub struct Fixture {
     _directory: tempfile::TempDir,
-    pub upstream_work: PathBuf,
-    pub downstream_bare: PathBuf,
     pub repo: PathBuf,
 }
 
 impl Fixture {
-    pub fn tooling_only() -> Self {
+    pub fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
         let upstream_bare = directory.path().join("upstream.git");
         let downstream_bare = directory.path().join("downstream.git");
         init_bare(directory.path(), &upstream_bare);
-        init_bare(directory.path(), &downstream_bare);
-
         let upstream_work = directory.path().join("upstream-work");
-        let (base, tag_object) = create_upstream(directory.path(), &upstream_work, &upstream_bare);
-        create_tooling_commit(
-            &upstream_work,
-            &upstream_bare,
-            &downstream_bare,
-            &base,
-            &tag_object,
+        create_upstream(directory.path(), &upstream_work, &upstream_bare);
+        git_ok(
+            directory.path(),
+            [
+                "clone",
+                "--bare",
+                "--quiet",
+                upstream_bare.to_str().unwrap(),
+                downstream_bare.to_str().unwrap(),
+            ],
         );
-
+        git_ok(
+            directory.path(),
+            [
+                "--git-dir",
+                downstream_bare.to_str().unwrap(),
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/main",
+            ],
+        );
         let repo = directory.path().join("consumer");
         git_ok(
             directory.path(),
@@ -40,19 +47,48 @@ impl Fixture {
             ],
         );
         configure_identity(&repo);
-
-        Self {
+        git_ok(
+            &repo,
+            ["remote", "add", "upstream", upstream_bare.to_str().unwrap()],
+        );
+        let fixture = Self {
             _directory: directory,
-            upstream_work,
-            downstream_bare,
             repo,
-        }
+        };
+        fixture.forkctl_ok(&[
+            "init",
+            "--upstream-remote",
+            "upstream",
+            "--upstream-url",
+            upstream_bare.to_str().unwrap(),
+            "--upstream-ref",
+            "refs/heads/main",
+            "--downstream-remote",
+            "origin",
+            "--downstream-branch",
+            "main",
+            "--base",
+            "refs/heads/main",
+            "--ledger",
+            "PATCHES.md",
+            "--exports",
+            "patches/downstream",
+            "--bookkeeping-patch",
+            "fork-tooling",
+            "--bookkeeping-path",
+            "FORK.md",
+            "--bookkeeping-path",
+            "mise.toml",
+            "--bookkeeping-path",
+            "lefthook.yml",
+        ]);
+        fixture
     }
 
     pub fn forkctl(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_forkctl"))
             .arg("--manifest")
-            .arg("fork.json")
+            .arg("patches/fork.json")
             .args(args)
             .current_dir(&self.repo)
             .output()
@@ -63,18 +99,18 @@ impl Fixture {
         let output = self.forkctl(args);
         assert!(
             output.status.success(),
-            "{} {args:?} failed:\nstdout: {}\nstderr: {}",
-            env!("CARGO_BIN_EXE_forkctl"),
+            "forkctl {args:?} failed:\nstdout: {}\nstderr: {}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
     }
 
-    pub fn api_call(&self, request: &serde_json::Value) -> Output {
+    pub fn api_call(&self, mode: &str, request: &serde_json::Value) -> Output {
         let invocation = serde_json::json!({
             "protocol_version": 1,
-            "manifest": "fork.json",
+            "manifest": "patches/fork.json",
+            "mode": mode,
             "request": request,
         });
         let mut child = Command::new(env!("CARGO_BIN_EXE_forkctl"))
@@ -92,35 +128,6 @@ impl Fixture {
             .write_all(serde_json::to_string(&invocation).unwrap().as_bytes())
             .unwrap();
         child.wait_with_output().unwrap()
-    }
-
-    pub fn advance_upstream(&self, tag: &str, contents: &str) -> String {
-        fs::write(self.upstream_work.join("upstream.txt"), contents).unwrap();
-        git_ok(&self.upstream_work, ["add", "upstream.txt"]);
-        git_ok(&self.upstream_work, ["commit", "--quiet", "-m", tag]);
-        git_ok(
-            &self.upstream_work,
-            ["tag", "--annotate", "--message", tag, tag],
-        );
-        git_ok(
-            &self.upstream_work,
-            [
-                "push",
-                "--quiet",
-                "upstream-bare",
-                "main",
-                &format!("refs/tags/{tag}"),
-            ],
-        );
-        git_capture(&self.upstream_work, ["rev-parse", "HEAD"])
-    }
-
-    pub fn implement_patch(&self, name: &str, path: &str, contents: &str) {
-        stg_ok(&self.repo, ["goto", name]);
-        fs::write(self.repo.join(path), contents).unwrap();
-        git_ok(&self.repo, ["add", path]);
-        stg_ok(&self.repo, ["refresh", "--index"]);
-        stg_ok(&self.repo, ["push", "--all"]);
     }
 }
 
@@ -141,7 +148,7 @@ fn init_bare(directory: &Path, path: &Path) {
     );
 }
 
-fn create_upstream(directory: &Path, work: &Path, bare: &Path) -> (String, String) {
+fn create_upstream(directory: &Path, work: &Path, bare: &Path) {
     git_ok(
         directory,
         [
@@ -155,109 +162,22 @@ fn create_upstream(directory: &Path, work: &Path, bare: &Path) -> (String, Strin
     fs::write(work.join("base.txt"), "base\n").unwrap();
     git_ok(work, ["add", "base.txt"]);
     git_ok(work, ["commit", "--quiet", "-m", "base"]);
-    git_ok(work, ["tag", "--annotate", "--message", "v1", "v1"]);
-    git_ok(
-        work,
-        ["remote", "add", "upstream-bare", bare.to_str().unwrap()],
-    );
-    git_ok(
-        work,
-        ["push", "--quiet", "upstream-bare", "main", "refs/tags/v1"],
-    );
-    (
-        git_capture(work, ["rev-parse", "HEAD"]),
-        git_capture(work, ["rev-parse", "refs/tags/v1"]),
-    )
+    git_ok(work, ["remote", "add", "origin", bare.to_str().unwrap()]);
+    git_ok(work, ["push", "--quiet", "-u", "origin", "main"]);
 }
 
-fn create_tooling_commit(
-    work: &Path,
-    upstream: &Path,
-    downstream: &Path,
-    base: &str,
-    tag_object: &str,
-) {
-    fs::write(
-        work.join("FORK.md"),
-        "Run `mise run fork:verify` before publication.\n",
-    )
-    .unwrap();
-    let manifest = json!({
-        "schema": 1,
-        "downstream": {
-            "remote": "origin",
-            "branch": "main",
-            "backup_tag_prefix": "vsh/pre-sync"
-        },
-        "upstream": {
-            "remote": "upstream",
-            "url": upstream.to_string_lossy(),
-            "fetch_ref": "refs/heads/main"
-        },
-        "base": {
-            "target": {
-                "kind": "tag",
-                "selector": "refs/tags/v1",
-                "commit": base,
-                "tag_object": tag_object
-            },
-            "canonical": base,
-            "stack": base
-        },
-        "ledger": "PATCHES.md",
-        "bookkeeping_patch": "fork-tooling",
-        "patches": [{
-            "name": "fork-tooling",
-            "kind": "tooling",
-            "purpose": "Own downstream fork policy and bookkeeping.",
-            "upstream_status": "inappropriate: downstream-only tooling",
-            "drop_when": "The downstream fork is retired.",
-            "paths": ["fork.json", "PATCHES.md", "FORK.md", "patches/*"]
-        }],
-        "history": [],
-        "allow": {"base": []},
-        "required": [{"path": "FORK.md", "contains": "mise run fork:verify"}]
-    });
-    fs::write(
-        work.join("fork.json"),
-        format!("{}\n", serde_json::to_string_pretty(&manifest).unwrap()),
-    )
-    .unwrap();
-    fs::write(
-        work.join("PATCHES.md"),
-        ledger(
-            "refs/tags/v1",
-            base,
-            &[LedgerPatch {
-                name: "fork-tooling",
-                kind: "tooling",
-                purpose: "Own downstream fork policy and bookkeeping.",
-                upstream_status: "inappropriate: downstream-only tooling",
-                drop_when: "The downstream fork is retired.",
-            }],
-        ),
-    )
-    .unwrap();
-    git_ok(work, ["add", "FORK.md", "fork.json", "PATCHES.md"]);
-    git_ok(
-        work,
-        [
-            "commit",
-            "--quiet",
-            "-m",
-            "fork-tooling\n\nDownstream-Reason: Own downstream fork policy and bookkeeping.\nUpstream-Status: inappropriate: downstream-only tooling\nDrop-When: The downstream fork is retired.",
-        ],
-    );
-    git_ok(
-        work,
-        ["remote", "add", "downstream", downstream.to_str().unwrap()],
-    );
-    git_ok(work, ["push", "--quiet", "downstream", "HEAD:main"]);
-    git_ok(work, ["reset", "--hard", "--quiet", base]);
+fn isolated_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("GIT_") {
+            command.env_remove(key);
+        }
+    }
+    command
 }
 
 pub fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
-    let output = Command::new("git")
+    let output = isolated_command("git")
         .args(args)
         .current_dir(dir)
         .output()
@@ -270,80 +190,7 @@ pub fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
     );
 }
 
-pub fn stg_ok<const N: usize>(dir: &Path, args: [&str; N]) {
-    let output = Command::new("stg")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "stg failed:\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-pub fn stg_capture<const N: usize>(dir: &Path, args: [&str; N]) -> String {
-    let output = Command::new("stg")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "stg failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap().trim().to_string()
-}
-
-pub fn git_capture<const N: usize>(dir: &Path, args: [&str; N]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap().trim().to_string()
-}
-
 fn configure_identity(repo: &Path) {
     git_ok(repo, ["config", "user.name", "Forkctl Test"]);
     git_ok(repo, ["config", "user.email", "forkctl@example.com"]);
-}
-
-struct LedgerPatch<'a> {
-    name: &'a str,
-    kind: &'a str,
-    purpose: &'a str,
-    upstream_status: &'a str,
-    drop_when: &'a str,
-}
-
-fn ledger(label: &str, base: &str, patches: &[LedgerPatch<'_>]) -> String {
-    let mut output = format!(
-        "# Downstream Patches\n\n> Generated by `forkctl`; edit the manifest, not this file.\n\nBase: `{label}` (`{base}`)\n\n| Order | Patch | Kind | Purpose | Upstream status | Drop condition |\n|--:|:--|:--|:--|:--|:--|\n"
-    );
-    for (index, patch) in patches.iter().enumerate() {
-        output.push_str("| ");
-        output.push_str(&(index + 1).to_string());
-        output.push_str(" | `");
-        output.push_str(patch.name);
-        output.push_str("` | ");
-        output.push_str(patch.kind);
-        output.push_str(" | ");
-        output.push_str(patch.purpose);
-        output.push_str(" | ");
-        output.push_str(patch.upstream_status);
-        output.push_str(" | ");
-        output.push_str(patch.drop_when);
-        output.push_str(" |\n");
-    }
-    output.push_str("\n## History\n\n| Event | Patch | Former commit | Target | Purpose |\n|:--|:--|:--|:--|:--|\n| None | — | — | — | — |\n");
-    output
 }

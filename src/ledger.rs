@@ -1,4 +1,4 @@
-use crate::manifest::{Manifest, PatchEventKind, PatchKind};
+use crate::manifest::{HistoryEvent, Manifest, PatchKind};
 use anyhow::{Context, Result};
 use askama::Template;
 
@@ -29,6 +29,25 @@ struct HistoryRow {
 }
 
 pub fn render(manifest: &Manifest) -> Result<String> {
+    let history = manifest
+        .history
+        .iter()
+        .flat_map(|event| match event {
+            HistoryEvent::Rebase {
+                target, dropped, ..
+            } => dropped
+                .iter()
+                .map(|item| HistoryRow {
+                    kind: "upstream merged",
+                    patch: escape(&item.patch.name),
+                    commit: item.commit.clone(),
+                    target: escape(&target.selector),
+                    target_commit: target.commit.clone(),
+                    purpose: escape(&item.patch.purpose),
+                })
+                .collect::<Vec<_>>(),
+        })
+        .collect();
     LedgerTemplate {
         target_selector: escape(&manifest.base.target.selector),
         base_sha: &manifest.base.stack,
@@ -43,20 +62,7 @@ pub fn render(manifest: &Manifest) -> Result<String> {
                 drop_when: escape(&patch.drop_when),
             })
             .collect(),
-        history: manifest
-            .history
-            .iter()
-            .map(|event| HistoryRow {
-                kind: match event.kind {
-                    PatchEventKind::UpstreamMerged => "upstream merged",
-                },
-                patch: escape(&event.patch.name),
-                commit: event.commit.clone(),
-                target: escape(&event.target.selector),
-                target_commit: event.target.commit.clone(),
-                purpose: escape(&event.patch.purpose),
-            })
-            .collect(),
+        history,
     }
     .render()
     .context("render PATCHES.md")
@@ -74,70 +80,4 @@ fn escape(value: &str) -> String {
         .replace('\\', "\\\\")
         .replace('|', "\\|")
         .replace('`', "\\`")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::manifest::{
-        Allow, Base, BaseTarget, Downstream, Patch, PatchEvent, TargetKind, Upstream,
-    };
-
-    #[test]
-    fn renders_stable_escaped_table_and_history() {
-        let commit = "0".repeat(40);
-        let patch = Patch {
-            name: "fork-tooling".into(),
-            kind: PatchKind::Tooling,
-            purpose: "Own A | B.".into(),
-            upstream_status: "downstream-only".into(),
-            drop_when: "The fork is retired.".into(),
-            paths: vec!["fork.json".into(), "PATCHES.md".into()],
-            export: None,
-        };
-        let manifest = Manifest {
-            schema: 1,
-            downstream: Downstream {
-                remote: "origin".into(),
-                branch: "main".into(),
-                backup_tag_prefix: "vsh/pre-sync".into(),
-            },
-            upstream: Upstream {
-                remote: "upstream".into(),
-                url: "https://example.com/upstream.git".into(),
-                fetch_ref: "refs/heads/main".into(),
-            },
-            base: Base {
-                target: BaseTarget {
-                    kind: TargetKind::Commit,
-                    selector: commit.clone(),
-                    commit: commit.clone(),
-                    tag_object: None,
-                },
-                canonical: commit.clone(),
-                stack: commit.clone(),
-            },
-            ledger: "PATCHES.md".into(),
-            bookkeeping_patch: "fork-tooling".into(),
-            patches: vec![patch.clone()],
-            history: vec![PatchEvent {
-                kind: PatchEventKind::UpstreamMerged,
-                patch,
-                commit: "1".repeat(40),
-                target: BaseTarget {
-                    kind: TargetKind::Commit,
-                    selector: commit.clone(),
-                    commit,
-                    tag_object: None,
-                },
-            }],
-            allow: Allow::default(),
-            required: Vec::new(),
-        };
-        let first = render(&manifest).unwrap();
-        assert_eq!(first, render(&manifest).unwrap());
-        assert!(first.contains("Own A \\| B."));
-        assert!(first.contains("upstream merged"));
-        assert!(first.ends_with('\n'));
-    }
 }

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Version pins are generated from root mise.toml by `mise run version:sync`.
+#MISE description="Run the complete forkctl CLI with exact Git/StGit tools and mounted shell completion"
+#MISE dir="{{cwd}}"
+#MISE raw_args=true
+#MISE tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.5" }
+#USAGE mount "mise run --quiet fork -- --usage-spec=fork"
+
+set -euo pipefail
+exec forkctl "$@"

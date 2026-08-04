@@ -1,41 +1,57 @@
 # forkctl agent instructions
 
-`forkctl` maintains an audited downstream branch as an ordered StGit patch stack.
+`forkctl` maintains one explicit audited StGit downstream patch stack.
 
 ## Sources of truth
 
 - Git commits and refs are canonical repository history.
-- The manifest selected by `FORK_MANIFEST` or `--manifest` is canonical policy, typed target provenance, current patch metadata, and append-only dropped-patch history.
-- `PATCHES.md` and optional patch exports are generated evidence; never edit them independently.
-- StGit metadata and pending review evidence are recoverable clone-local state.
+- The manifest selected by `FORK_MANIFEST` or `--manifest` is canonical policy, target provenance, patch metadata, and recovery-bound history.
+- `PATCHES.md` and source exports are generated evidence; edit metadata with forkctl, not generated files.
+- Active patch and current operation are typed Git-private clone state.
 
-## Protocol boundary
+## Patch workflow
 
-- Every command handler returns typed data; it does not print or choose a view.
-- Use `--output pretty` for the unified terminal view and `--output json` for one versioned JSON envelope. `--json` remains an alias.
-- `forkctl api schema` emits JSON Schema for the full local invocation/response protocol.
-- `forkctl api call` reads one versioned invocation from stdin and emits one JSON response.
-- JSON stdout must never contain Git/StGit progress or human diagnostics.
+1. `mise run fork patch create NAME -k source|tooling -p PURPOSE -u STATUS -d DROP_CONDITION -s SCOPE...` records explicit active intent.
+2. Edit normally and stage with Git.
+3. `mise run fork check -s` validates the index against the active patch without mutation.
+4. `mise run fork patch refresh` captures staged files by default, refreshes the targeted StGit patch, regenerates evidence, and refreshes bookkeeping.
+5. Repeat edit/stage/check/refresh as needed.
+6. `mise run fork patch finish` runs the full check and clears active state.
 
-## Workflow
+`patch refresh -a` explicitly stages all changed paths owned by the patch. Repeated `-p PATHSPEC` limits capture to explicit Git pathspecs. Use `-n` on mutations to inspect the effect plan.
 
-1. Run `mise run fork:init` after cloning when StGit metadata is absent.
-2. Use `mise run fork:status` at any time, including dirty or conflicted states.
-3. Run `mise run fork:new -- NAME --kind source|tooling --purpose ... --upstream-status ... --drop-when ... --path ...` to scaffold a documented empty patch.
-4. Add only declared implementation paths, refresh that patch with StGit, restore the bookkeeping patch, and run `mise run fork:new -- --finish` to bind the verified tip and regenerate exports.
-5. Run `mise run fork:rebase -- --onto REF` with a full `refs/heads/*`, full `refs/tags/*`, or full commit SHA. Forkctl captures exact lease/recovery evidence, replays with `stg rebase --merged`, records upstream-merged patch removals in `PATCHES.md`, and writes a Git-private range-diff report bound by Git object ID.
-6. If replay conflicts, resolve with `stg add --update`, `stg refresh`, and `stg goto <bookkeeping-patch>`, then rerun the same rebase command.
-7. Review the range-diff and run consumer-specific semantic tests.
-8. Run `mise run fork:publish`. It verifies bound pending evidence and atomically pushes the recovery tag and branch under the captured exact lease.
+## Stack lifecycle
+
+- `mise run fork init` hydrates a fresh clone with StGit metadata and exact historical recovery refs. Without a manifest it requires explicit bootstrap arguments and a branch exactly at its selected base.
+- `mise run fork status` is read-only and remains usable during conflicts.
+- `mise run fork check` is the complete clean-repository audit.
+- `mise run fork rebase -o REF` records exact recovery/lease evidence and delegates replay to StGit; it never publishes.
+- Resolve conflicts with supported Git/StGit commands, then run `mise run fork operation continue`.
+- `mise run fork operation status` reports the exact phase and next actions; `operation abort -n` plans restoration and `operation abort -y` performs it.
+- Review the range-diff report and consumer semantic checks before `mise run fork publish`.
+- Publish is one atomic explicit-ref push with an exact lease and no fallback.
+
+## Hook integration
+
+Forkctl exposes commands; it does not own a hook manager:
+
+- pre-commit: `mise run fork check -s`
+- pre-push: `mise run fork check -q`
+
+Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit hook and consumes its final index.
+
+## Protocol
+
+- `--format pretty|json` selects human or complete versioned output.
+- `api call` reads one typed invocation and emits one JSON response.
+- `api schema -k bundle|manifest|invocation|response|active-state|operation` emits JSON Schema 2020-12.
+- `--usage-spec=fork` emits the mounted mise grammar from the Clap tree.
+- `completion SHELL` supports bash, elvish, fish, Nushell, PowerShell, and zsh.
+- JSON stdout never contains subprocess or human output.
 
 ## Safety
 
-- Mutating commands reject dirty worktrees. Forkctl never stashes operator changes.
-- Keep the upstream remote fetch-only; its push URL must remain `DISABLED`.
-- Rebase never publishes; publish never uses plain `--force`, an implicit lease, or a non-atomic fallback.
-- A remote advance, retargeted recovery tag, modified report, post-finish stack change, unsafe export path, or unsupported atomic push is a hard failure.
-- Do not treat structural reconstruction as semantic compatibility.
-- Keep consumer build, packaging, hosting policy, and semantic checks outside forkctl.
-- Do not put generic executable fork lifecycle or presentation logic into consuming repositories.
-
-See `examples/` and the repository README for the complete manifest and immutable mise include shapes.
+- Forkctl never guesses patch intent, stashes changes, edits hook configuration, or administers remote branch policy.
+- Upstream push URL must remain `DISABLED`.
+- Dirty worktrees, incomplete active patches, unresolved operations, scope drift, evidence drift, stale leases, and non-atomic publication fail closed.
+- Keep consumer build, packaging, signing, hosting, and semantic compatibility outside forkctl.

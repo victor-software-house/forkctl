@@ -1,15 +1,16 @@
+mod check;
 mod init;
-mod new;
+mod operation;
+mod patch;
 mod publish;
 mod rebase;
 mod status;
-mod verify;
 
+use crate::error::DomainError;
 use crate::ledger;
-use crate::manifest::{BaseTarget, Manifest, Patch, TargetKind};
-use crate::pattern;
+use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind};
 use crate::process::{capture, output, run, succeeds};
-use crate::state::{PendingOperation, PendingState};
+use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
 use anyhow::{Context, Result, ensure};
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -22,39 +23,40 @@ use tempfile::NamedTempFile;
 const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
 
 pub struct App {
-    repo: PathBuf,
-    manifest_path: PathBuf,
-    manifest: Manifest,
+    pub(super) repo: PathBuf,
+    pub(super) manifest_path: PathBuf,
+    pub(super) manifest: Option<Manifest>,
 }
 
 impl App {
-    pub fn load(manifest_arg: &Path) -> Result<Self> {
+    pub fn discover(manifest_arg: &Path) -> Result<Self> {
         let cwd = env::current_dir().context("read current directory")?;
-        let repo = PathBuf::from(capture(&cwd, "git", ["rev-parse", "--show-toplevel"])?);
+        let repo = capture(&cwd, "git", ["rev-parse", "--show-toplevel"])
+            .map(PathBuf::from)
+            .map_err(|error| DomainError::repository_not_found(error.to_string()))?;
         let manifest_path = if manifest_arg.is_absolute() {
             manifest_arg.to_owned()
         } else {
             repo.join(manifest_arg)
         };
-        let bytes = match fs::read(&manifest_path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                let snapshot = git_private_path(&repo, "forkctl/manifest.json")?;
-                fs::read(&snapshot).with_context(|| {
-                    format!(
-                        "read {} or pending snapshot {}",
-                        manifest_path.display(),
-                        snapshot.display()
-                    )
-                })?
+        let manifest = match fs::read(&manifest_path) {
+            Ok(bytes) => {
+                let manifest: Manifest = serde_json::from_slice(&bytes).map_err(|error| {
+                    DomainError::manifest_invalid(format!(
+                        "parse {}: {error}",
+                        manifest_path.display()
+                    ))
+                })?;
+                manifest
+                    .validate(&repo, &manifest_path)
+                    .map_err(|error| DomainError::manifest_invalid(error.to_string()))?;
+                Some(manifest)
             }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => {
                 return Err(error).with_context(|| format!("read {}", manifest_path.display()));
             }
         };
-        let manifest: Manifest = serde_json::from_slice(&bytes)
-            .with_context(|| format!("parse {}", manifest_path.display()))?;
-        manifest.validate(&repo, &manifest_path)?;
         Ok(Self {
             repo,
             manifest_path,
@@ -62,17 +64,34 @@ impl App {
         })
     }
 
-    fn require_clean(&self) -> Result<()> {
-        ensure!(self.dirty_lines()?.is_empty(), "worktree is not clean");
-        Ok(())
+    pub(super) fn manifest(&self) -> Result<&Manifest> {
+        self.manifest
+            .as_ref()
+            .context("forkctl manifest is unavailable")
     }
 
-    fn require_declared_branch(&self) -> Result<()> {
+    pub(super) fn manifest_mut(&mut self) -> Result<&mut Manifest> {
+        self.manifest
+            .as_mut()
+            .context("forkctl manifest is unavailable")
+    }
+
+    pub(super) fn require_clean(&self) -> Result<()> {
+        let paths = self.dirty_paths()?;
+        if paths.is_empty() {
+            Ok(())
+        } else {
+            Err(DomainError::dirty_worktree(paths).into())
+        }
+    }
+
+    pub(super) fn require_declared_branch(&self) -> Result<()> {
+        let manifest = self.manifest()?;
         let actual = self.current_branch()?;
         ensure!(
-            actual == self.manifest.downstream.branch,
+            actual == manifest.downstream.branch,
             "current branch is {actual}, expected {}",
-            self.manifest.downstream.branch
+            manifest.downstream.branch
         );
         let tracking = capture(
             &self.repo,
@@ -86,7 +105,7 @@ impl App {
         )?;
         let expected = format!(
             "{}/{}",
-            self.manifest.downstream.remote, self.manifest.downstream.branch
+            manifest.downstream.remote, manifest.downstream.branch
         );
         ensure!(
             tracking == expected,
@@ -95,7 +114,7 @@ impl App {
         Ok(())
     }
 
-    fn current_branch(&self) -> Result<String> {
+    pub(super) fn current_branch(&self) -> Result<String> {
         capture(
             &self.repo,
             "git",
@@ -104,38 +123,84 @@ impl App {
         .context("repository is in detached HEAD state")
     }
 
-    fn dirty_lines(&self) -> Result<Vec<String>> {
-        Ok(nonempty_lines(&capture(
+    pub(super) fn worktree_inventory(&self) -> Result<WorktreeInventory> {
+        let output = capture(
             &self.repo,
             "git",
-            ["status", "--porcelain=v1"],
-        )?))
+            ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        )?;
+        let mut inventory = WorktreeInventory::default();
+        for entry in output.split('\0').filter(|entry| !entry.is_empty()) {
+            if entry.len() < 4 {
+                continue;
+            }
+            let bytes = entry.as_bytes();
+            let x = bytes[0] as char;
+            let y = bytes[1] as char;
+            let path = entry[3..].to_string();
+            if x == '?' && y == '?' {
+                inventory.untracked.push(path);
+            } else {
+                if x != ' ' {
+                    inventory.staged.push(path.clone());
+                }
+                if y != ' ' {
+                    inventory.unstaged.push(path);
+                }
+            }
+        }
+        for values in [
+            &mut inventory.staged,
+            &mut inventory.unstaged,
+            &mut inventory.untracked,
+        ] {
+            values.sort();
+            values.dedup();
+        }
+        Ok(inventory)
     }
 
-    fn upstream_tracking_ref(&self) -> String {
-        let branch = self
-            .manifest
+    pub(super) fn dirty_paths(&self) -> Result<Vec<String>> {
+        let inventory = self.worktree_inventory()?;
+        let mut paths = inventory.staged;
+        paths.extend(inventory.unstaged);
+        paths.extend(inventory.untracked);
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
+
+    pub(super) fn upstream_tracking_ref(&self) -> Result<String> {
+        let manifest = self.manifest()?;
+        let branch = manifest
             .upstream
             .fetch_ref
             .strip_prefix("refs/heads/")
-            .expect("validated fetch ref");
-        format!("refs/remotes/{}/{}", self.manifest.upstream.remote, branch)
+            .context("validated upstream branch ref")?;
+        Ok(format!(
+            "refs/remotes/{}/{branch}",
+            manifest.upstream.remote
+        ))
     }
 
-    fn fetch_upstream(&self, quiet: bool) -> Result<()> {
-        let upstream = &self.manifest.upstream;
-        let destination = self.upstream_tracking_ref();
-        let refspec = format!("+{}:{destination}", upstream.fetch_ref);
+    pub(super) fn fetch_upstream(&self, quiet: bool) -> Result<()> {
+        let manifest = self.manifest()?;
+        let destination = self.upstream_tracking_ref()?;
+        let refspec = format!("+{}:{destination}", manifest.upstream.fetch_ref);
         let mut args = vec!["fetch"];
         if quiet {
             args.push("--quiet");
         }
-        args.extend(["--no-tags", upstream.remote.as_str(), refspec.as_str()]);
+        args.extend([
+            "--no-tags",
+            manifest.upstream.remote.as_str(),
+            refspec.as_str(),
+        ]);
         run(&self.repo, "git", args)
     }
 
-    fn fetch_base_target(&self, quiet: bool) -> Result<()> {
-        let target = &self.manifest.base.target;
+    pub(super) fn fetch_target(&self, target: &BaseTarget, quiet: bool) -> Result<()> {
+        let manifest = self.manifest()?;
         let selector = if target.kind == TargetKind::Tag && target.tag_object.is_some() {
             target.selector.as_str()
         } else {
@@ -145,11 +210,7 @@ impl App {
         if quiet {
             args.push("--quiet");
         }
-        args.extend([
-            "--no-tags",
-            self.manifest.upstream.remote.as_str(),
-            selector,
-        ]);
+        args.extend(["--no-tags", manifest.upstream.remote.as_str(), selector]);
         run(&self.repo, "git", args)?;
         let resolved = capture(&self.repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
         ensure!(
@@ -161,56 +222,12 @@ impl App {
         self.verify_target_evidence(target)
     }
 
-    fn resolve_target(&self, selector: &str) -> Result<BaseTarget> {
-        ensure!(!selector.trim().is_empty(), "rebase target is required");
-        let kind = if is_full_sha(selector) {
-            TargetKind::Commit
-        } else if selector.starts_with("refs/heads/") {
-            TargetKind::Branch
-        } else if selector.starts_with("refs/tags/") {
-            TargetKind::Tag
-        } else {
-            anyhow::bail!("target must be a full refs/heads ref, refs/tags ref, or commit SHA");
-        };
-        run(
-            &self.repo,
-            "git",
-            [
-                "fetch",
-                "--no-tags",
-                self.manifest.upstream.remote.as_str(),
-                selector,
-            ],
-        )?;
-        let commit = capture(&self.repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
-        let tag_object = if kind == TargetKind::Tag {
-            let object = self.remote_ref_sha(&self.manifest.upstream.remote, selector)?;
-            match capture(&self.repo, "git", ["cat-file", "-t", &object])?.as_str() {
-                "tag" => Some(object),
-                "commit" => {
-                    ensure!(
-                        object == commit,
-                        "lightweight tag object differs from target commit"
-                    );
-                    None
-                }
-                object_type => anyhow::bail!("tag points to unsupported object type {object_type}"),
-            }
-        } else {
-            None
-        };
-        let target = BaseTarget {
-            kind,
-            selector: selector.to_string(),
-            commit,
-            tag_object,
-        };
-        target.validate()?;
-        self.verify_target_evidence(&target)?;
-        Ok(target)
+    pub(super) fn resolve_target(&self, selector: &str) -> Result<BaseTarget> {
+        let manifest = self.manifest()?;
+        resolve_target(&self.repo, &manifest.upstream.remote, selector)
     }
 
-    fn verify_target_evidence(&self, target: &BaseTarget) -> Result<()> {
+    pub(super) fn verify_target_evidence(&self, target: &BaseTarget) -> Result<()> {
         target.validate()?;
         run(
             &self.repo,
@@ -232,20 +249,11 @@ impl App {
                 "tag object peels to {peeled}, expected {}",
                 target.commit
             );
-            let tag_name = capture(&self.repo, "git", ["cat-file", "tag", object])?
-                .lines()
-                .find_map(|line| line.strip_prefix("tag "))
-                .context("annotated tag object has no tag name")?
-                .to_string();
-            ensure!(
-                target.selector == format!("refs/tags/{tag_name}"),
-                "tag selector does not match annotated tag name"
-            );
         }
         Ok(())
     }
 
-    fn stg_series(&self) -> Result<Vec<String>> {
+    pub(super) fn stg_series(&self) -> Result<Vec<String>> {
         Ok(nonempty_lines(&capture(
             &self.repo,
             "stg",
@@ -253,11 +261,11 @@ impl App {
         )?))
     }
 
-    fn patch_commit(&self, patch: &str) -> Result<String> {
+    pub(super) fn patch_commit(&self, patch: &str) -> Result<String> {
         capture(&self.repo, "stg", ["id", patch])
     }
 
-    fn patch_paths(&self, commit: &str) -> Result<Vec<String>> {
+    pub(super) fn patch_paths(&self, commit: &str) -> Result<Vec<String>> {
         Ok(nonempty_lines(&capture(
             &self.repo,
             "git",
@@ -265,34 +273,7 @@ impl App {
         )?))
     }
 
-    fn verify_allowed_paths(candidates: &[String], allow: &[String], label: &str) -> Result<()> {
-        for candidate in candidates {
-            ensure!(
-                allow
-                    .iter()
-                    .any(|allowed| pattern::matches(allowed, candidate)),
-                "undeclared {label}: {candidate}"
-            );
-        }
-        Ok(())
-    }
-
-    fn verify_allowed_diff(
-        &self,
-        from: &str,
-        to: &str,
-        allow: &[String],
-        label: &str,
-    ) -> Result<()> {
-        let candidates = nonempty_lines(&capture(
-            &self.repo,
-            "git",
-            ["diff", "--name-only", from, to],
-        )?);
-        Self::verify_allowed_paths(&candidates, allow, label)
-    }
-
-    fn export_patch(&self, patch: &Patch) -> Result<Vec<u8>> {
+    pub(super) fn export_patch(&self, patch: &Patch) -> Result<Vec<u8>> {
         let directory = tempfile::tempdir().context("create patch export directory")?;
         let template_path = directory.path().join("patchexport.tmpl");
         fs::write(&template_path, EXPORT_TEMPLATE)
@@ -311,19 +292,36 @@ impl App {
         .stdout)
     }
 
-    fn write_exports(&self) -> Result<Vec<PathBuf>> {
-        let mut paths = Vec::new();
-        for patch in self.manifest.exported_patches() {
-            let path = self
-                .repo
-                .join(patch.export.as_ref().expect("exported patch"));
-            write_atomic(&path, &self.export_patch(patch)?)?;
-            paths.push(path);
+    pub(super) fn write_exports(&self) -> Result<Vec<PathBuf>> {
+        let manifest = self.manifest()?;
+        let mut expected = Vec::new();
+        let exports_dir = self.repo.join(&manifest.documents.exports);
+        fs::create_dir_all(&exports_dir)?;
+        for export in manifest.source_exports() {
+            let path = self.repo.join(&export.path);
+            write_atomic(&path, &self.export_patch(export.patch)?)?;
+            expected.push(path);
         }
-        Ok(paths)
+        let expected_set = expected
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
+        for entry in fs::read_dir(exports_dir)? {
+            let path = entry?.path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "patch")
+                && !expected_set.contains(&path)
+            {
+                fs::remove_file(&path)?;
+                expected.push(path);
+            }
+        }
+        Ok(expected)
     }
 
-    fn reconstruct_tree(&self) -> Result<String> {
+    pub(super) fn reconstruct_tree(&self) -> Result<String> {
+        let manifest = self.manifest()?;
         let temp = tempfile::tempdir().context("create verification directory")?;
         let clone = temp.path().join("repo");
         run(
@@ -345,15 +343,13 @@ impl App {
                 "checkout",
                 "--quiet",
                 "-b",
-                "verify-stack",
-                &self.manifest.base.stack,
+                "check-stack",
+                &manifest.base.stack,
             ],
         )?;
         run(&clone, "stg", ["init"])?;
-        for patch in self.manifest.exported_patches() {
-            let path = self
-                .repo
-                .join(patch.export.as_ref().expect("exported patch"));
+        for export in manifest.source_exports() {
+            let path = self.repo.join(export.path);
             run(
                 &clone,
                 "stg",
@@ -363,9 +359,10 @@ impl App {
         capture(&clone, "git", ["rev-parse", "HEAD^{tree}"])
     }
 
-    fn expected_reconstructed_tree(&self) -> Result<String> {
-        if let Some(patch) = self.manifest.exported_patches().last() {
-            let commit = self.patch_commit(&patch.name)?;
+    pub(super) fn expected_reconstructed_tree(&self) -> Result<String> {
+        let manifest = self.manifest()?;
+        if let Some(export) = manifest.source_exports().last() {
+            let commit = self.patch_commit(&export.patch.name)?;
             capture(
                 &self.repo,
                 "git",
@@ -375,33 +372,35 @@ impl App {
             capture(
                 &self.repo,
                 "git",
-                [
-                    "rev-parse",
-                    &format!("{}^{{tree}}", self.manifest.base.stack),
-                ],
+                ["rev-parse", &format!("{}^{{tree}}", manifest.base.stack)],
             )
         }
     }
 
-    fn write_manifest(&self) -> Result<()> {
-        let mut bytes = serde_json::to_vec_pretty(&self.manifest)?;
+    pub(super) fn write_manifest(&self) -> Result<()> {
+        let mut bytes = serde_json::to_vec_pretty(self.manifest()?)?;
         bytes.push(b'\n');
         write_atomic(&self.manifest_path, &bytes)
     }
 
-    fn write_ledger(&self) -> Result<PathBuf> {
-        let path = self.repo.join(&self.manifest.ledger);
-        write_atomic(&path, ledger::render(&self.manifest)?.as_bytes())?;
+    pub(super) fn write_ledger(&self) -> Result<PathBuf> {
+        let manifest = self.manifest()?;
+        let path = self.repo.join(&manifest.documents.ledger);
+        write_atomic(&path, ledger::render(manifest)?.as_bytes())?;
         Ok(path)
     }
 
-    fn stage_and_refresh_bookkeeping(&self, paths: &[PathBuf]) -> Result<()> {
+    pub(super) fn refresh_bookkeeping(&self, paths: &[PathBuf]) -> Result<()> {
+        let manifest = self.manifest()?;
         let mut relative = paths
             .iter()
             .map(|path| relative_to(&self.repo, path))
             .collect::<Result<Vec<_>>>()?;
         relative.sort();
         relative.dedup();
+        if relative.is_empty() {
+            return Ok(());
+        }
         let mut add_args = vec![OsString::from("add"), OsString::from("--")];
         add_args.extend(relative.iter().cloned().map(OsString::from));
         run(&self.repo, "git", add_args)?;
@@ -413,22 +412,20 @@ impl App {
         ];
         diff_args.extend(relative.into_iter().map(OsString::from));
         if !succeeds(&self.repo, "git", diff_args)? {
-            let top = capture(&self.repo, "stg", ["top"])?;
-            ensure!(
-                top == self.manifest.bookkeeping_patch,
-                "top patch is {top}, expected bookkeeping patch {}",
-                self.manifest.bookkeeping_patch
-            );
-            run(&self.repo, "stg", ["refresh", "--index"])?;
+            run(
+                &self.repo,
+                "stg",
+                ["refresh", "--patch", &manifest.bookkeeping_patch, "--index"],
+            )?;
         }
         Ok(())
     }
 
-    fn downstream_ref(&self) -> String {
-        format!("refs/heads/{}", self.manifest.downstream.branch)
+    pub(super) fn downstream_ref(&self) -> Result<String> {
+        Ok(format!("refs/heads/{}", self.manifest()?.downstream.branch))
     }
 
-    fn remote_ref_sha(&self, remote: &str, git_ref: &str) -> Result<String> {
+    pub(super) fn remote_ref_sha(&self, remote: &str, git_ref: &str) -> Result<String> {
         let line = capture(
             &self.repo,
             "git",
@@ -443,111 +440,241 @@ impl App {
         Ok(sha.to_string())
     }
 
-    fn downstream_sha(&self) -> Result<String> {
-        self.remote_ref_sha(&self.manifest.downstream.remote, &self.downstream_ref())
+    pub(super) fn downstream_sha(&self) -> Result<String> {
+        let manifest = self.manifest()?;
+        self.remote_ref_sha(&manifest.downstream.remote, &self.downstream_ref()?)
     }
 
-    fn git_private_path(&self, relative: &str) -> Result<PathBuf> {
+    pub(super) fn git_private_path(&self, relative: &str) -> Result<PathBuf> {
         git_private_path(&self.repo, relative)
     }
 
-    fn pending_path(&self) -> Result<PathBuf> {
-        self.git_private_path("forkctl/pending.json")
+    pub(super) fn active_path(&self) -> Result<PathBuf> {
+        self.git_private_path("forkctl/active.json")
     }
 
-    fn file_object_id(&self, path: &Path) -> Result<String> {
+    pub(super) fn operation_path(&self) -> Result<PathBuf> {
+        self.git_private_path("forkctl/operation.json")
+    }
+
+    pub(super) fn operation_manifest_snapshot_path(&self) -> Result<PathBuf> {
+        self.git_private_path("forkctl/manifest.json")
+    }
+
+    pub(super) fn read_active(&self) -> Result<Option<ActivePatchState>> {
+        read_optional_json(&self.active_path()?)
+    }
+
+    pub(super) fn write_active(&self, state: &ActivePatchState) -> Result<()> {
+        write_json_atomic(&self.active_path()?, state)
+    }
+
+    pub(super) fn clear_active(&self) -> Result<()> {
+        remove_optional(&self.active_path()?)
+    }
+
+    pub(super) fn read_operation(&self) -> Result<Option<OperationState>> {
+        read_optional_json(&self.operation_path()?)
+    }
+
+    pub(super) fn load_operation_manifest(&mut self) -> Result<()> {
+        if self.manifest.is_some() {
+            return Ok(());
+        }
+        let snapshot = self.operation_manifest_snapshot_path()?;
+        let bytes = fs::read(&snapshot)
+            .with_context(|| format!("read operation manifest snapshot {}", snapshot.display()))?;
+        let manifest: Manifest = serde_json::from_slice(&bytes)
+            .with_context(|| format!("parse operation manifest snapshot {}", snapshot.display()))?;
+        manifest.validate(&self.repo, &self.manifest_path)?;
+        self.manifest = Some(manifest);
+        Ok(())
+    }
+
+    pub(super) fn write_operation(&self, state: &OperationState) -> Result<()> {
+        write_json_atomic(&self.operation_path()?, state)
+    }
+
+    pub(super) fn clear_operation(&self) -> Result<()> {
+        remove_optional(&self.operation_path()?)
+    }
+
+    pub(super) fn complete_local_operation(&self, operation: &OperationState) -> Result<()> {
+        run(
+            &self.repo,
+            "git",
+            ["tag", "--delete", &operation.recovery.tag],
+        )?;
+        remove_optional(&self.operation_manifest_snapshot_path()?)?;
+        self.clear_operation()
+    }
+
+    pub(super) fn create_operation(
+        &self,
+        kind: OperationKind,
+        target: Option<BaseTarget>,
+    ) -> Result<OperationState> {
+        if let Some(operation) = self.read_operation()? {
+            return Err(DomainError::operation_in_progress(&operation).into());
+        }
+        let manifest = self.manifest()?;
+        let expected_remote_sha = if kind == OperationKind::Rebase {
+            self.downstream_sha()?
+        } else {
+            capture(&self.repo, "git", ["rev-parse", "@{upstream}"])?
+        };
+        let old_base = capture(&self.repo, "stg", ["id", "{base}"])?;
+        let old_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+        let old_patches = manifest
+            .patches
+            .iter()
+            .map(|patch| {
+                Ok(PatchCommitEvidence {
+                    name: patch.name.clone(),
+                    commit: self.patch_commit(&patch.name)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .context("system clock is before Unix epoch")?;
+        let short = old_tip.get(..12).context("old tip is not a full SHA")?;
+        let id = format!("{}-{short}", epoch.as_nanos());
+        let tag = format!("{}/{id}", manifest.downstream.recovery_tag_prefix);
+        run(
+            &self.repo,
+            "git",
+            [
+                "tag",
+                "-a",
+                &tag,
+                "-m",
+                &format!("forkctl recovery for {kind:?}"),
+                &old_tip,
+            ],
+        )?;
+        let tag_object = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("refs/tags/{tag}")],
+        )?;
+        let snapshot = self.operation_manifest_snapshot_path()?;
+        write_atomic(&snapshot, &serde_json::to_vec_pretty(manifest)?)?;
+        Ok(OperationState {
+            schema: 1,
+            id,
+            kind,
+            phase: "prepared".into(),
+            started_at_unix_ms: epoch.as_millis(),
+            expected_remote_sha,
+            old_base: old_base.clone(),
+            old_tip: old_tip.clone(),
+            old_patches,
+            recovery: RecoveryEvidence {
+                tag,
+                tag_object,
+                old_base,
+                old_tip,
+            },
+            intent: None,
+            target,
+            new_base: None,
+            new_tip: None,
+            report: None,
+            next_actions: Vec::new(),
+        })
+    }
+
+    pub(super) fn file_object_id(&self, path: &Path) -> Result<String> {
         capture(
             &self.repo,
             "git",
             [OsStr::new("hash-object"), path.as_os_str()],
         )
     }
+}
 
-    fn read_pending(&self) -> Result<Option<PendingState>> {
-        let path = self.pending_path()?;
-        match fs::read(&path) {
-            Ok(bytes) => {
-                let state: PendingState = serde_json::from_slice(&bytes)
-                    .with_context(|| format!("parse {}", path.display()))?;
-                ensure!(
-                    state.schema == 1,
-                    "unsupported pending-state schema: {}",
-                    state.schema
-                );
-                Ok(Some(state))
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
-        }
-    }
+#[derive(Default)]
+pub(super) struct WorktreeInventory {
+    pub staged: Vec<String>,
+    pub unstaged: Vec<String>,
+    pub untracked: Vec<String>,
+}
 
-    fn write_pending(&self, state: &PendingState) -> Result<()> {
-        let mut bytes = serde_json::to_vec_pretty(state)?;
-        bytes.push(b'\n');
-        write_atomic(&self.pending_path()?, &bytes)
-    }
+pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Result<BaseTarget> {
+    ensure!(!selector.trim().is_empty(), "target is required");
+    let kind = if crate::manifest::is_full_sha(selector) {
+        TargetKind::Commit
+    } else if selector.starts_with("refs/heads/") {
+        TargetKind::Branch
+    } else if selector.starts_with("refs/tags/") {
+        TargetKind::Tag
+    } else {
+        anyhow::bail!("target must be a full refs/heads ref, refs/tags ref, or commit SHA");
+    };
+    run(repo, "git", ["fetch", "--no-tags", remote, selector])?;
+    let commit = capture(repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
+    let tag_object = if kind == TargetKind::Tag {
+        let line = capture(repo, "git", ["ls-remote", "--exit-code", remote, selector])?;
+        let object = line
+            .split_whitespace()
+            .next()
+            .context("remote tag output has no object")?
+            .to_string();
+        (capture(repo, "git", ["cat-file", "-t", &object])? == "tag").then_some(object)
+    } else {
+        None
+    };
+    let target = BaseTarget {
+        kind,
+        selector: if kind == TargetKind::Commit {
+            commit.clone()
+        } else {
+            selector.to_string()
+        },
+        commit,
+        tag_object,
+    };
+    target.validate()?;
+    Ok(target)
+}
 
-    fn clear_pending(&self) -> Result<()> {
-        for path in [
-            self.pending_path()?,
-            self.git_private_path("forkctl/manifest.json")?,
-        ] {
-            match fs::remove_file(&path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => {
-                    return Err(error).with_context(|| format!("remove {}", path.display()));
-                }
-            }
-        }
-        Ok(())
-    }
+pub(super) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path.parent().context("output path has no parent")?;
+    fs::create_dir_all(parent)?;
+    let mut temporary = NamedTempFile::new_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.as_file_mut().sync_all()?;
+    temporary.persist(path)?;
+    Ok(())
+}
 
-    fn create_recovery(&self, operation: PendingOperation) -> Result<PendingState> {
-        ensure!(
-            self.read_pending()?.is_none(),
-            "a forkctl operation is already pending"
-        );
-        let expected_remote_sha = self.downstream_sha()?;
-        let old_base = capture(&self.repo, "stg", ["id", "{base}"])?;
-        let old_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
-        let epoch = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .context("system clock is before Unix epoch")?
-            .as_nanos();
-        let short = old_tip.get(..12).context("old tip is not a full SHA")?;
-        let backup_tag = format!(
-            "{}-{epoch}-{short}",
-            self.manifest.downstream.backup_tag_prefix
-        );
-        run(
-            &self.repo,
-            "git",
-            [
-                "tag",
-                "--annotate",
-                "--message",
-                &format!("forkctl recovery before {operation:?}"),
-                &backup_tag,
-                &old_tip,
-            ],
-        )?;
-        let mut manifest = serde_json::to_vec_pretty(&self.manifest)?;
-        manifest.push(b'\n');
-        write_atomic(&self.git_private_path("forkctl/manifest.json")?, &manifest)?;
-        Ok(PendingState::new(
-            operation,
-            expected_remote_sha,
-            old_base,
-            old_tip,
-            self.manifest.patches.len(),
-            backup_tag,
-        ))
+fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> Result<()> {
+    let mut bytes = serde_json::to_vec_pretty(value)?;
+    bytes.push(b'\n');
+    write_atomic(path, &bytes)
+}
+
+fn read_optional_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(
+            serde_json::from_slice(&bytes).with_context(|| format!("parse {}", path.display()))?,
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
     }
 }
 
-fn is_full_sha(value: &str) -> bool {
-    value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+fn remove_optional(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove {}", path.display())),
+    }
+}
+
+fn relative_to(repo: &Path, path: &Path) -> Result<String> {
+    Ok(path.strip_prefix(repo)?.to_string_lossy().into_owned())
 }
 
 fn git_private_path(repo: &Path, relative: &str) -> Result<PathBuf> {
@@ -557,28 +684,6 @@ fn git_private_path(repo: &Path, relative: &str) -> Result<PathBuf> {
     } else {
         repo.join(path)
     })
-}
-
-pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path
-        .parent()
-        .with_context(|| format!("path has no parent: {}", path.display()))?;
-    fs::create_dir_all(parent)?;
-    let mut temporary = NamedTempFile::new_in(parent)?;
-    temporary.write_all(bytes)?;
-    temporary
-        .persist(path)
-        .map_err(|error| error.error)
-        .with_context(|| format!("replace {}", path.display()))?;
-    Ok(())
-}
-
-fn relative_to(repo: &Path, path: &Path) -> Result<String> {
-    Ok(path
-        .strip_prefix(repo)
-        .with_context(|| format!("{} is outside {}", path.display(), repo.display()))?
-        .to_string_lossy()
-        .into_owned())
 }
 
 fn nonempty_lines(value: &str) -> Vec<String> {
