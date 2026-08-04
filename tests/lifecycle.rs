@@ -300,6 +300,46 @@ fn refresh_consumes_pre_commit_hook_modified_index() {
 }
 
 #[test]
+fn documented_staged_check_hook_accepts_source_and_bookkeeping_refreshes() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "hook-check",
+        "--kind",
+        "source",
+        "--purpose",
+        "validate source and generated bookkeeping scopes",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "upstream provides equivalent behavior",
+        "--scope",
+        "hook-check.txt",
+    ]);
+    let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nexec '{}' --manifest patches/fork.json check -s >/dev/null\n",
+            env!("CARGO_BIN_EXE_forkctl")
+        ),
+    )
+    .unwrap();
+    make_executable(&hook);
+    fs::write(fixture.repo.join("hook-check.txt"), "downstream\n").unwrap();
+    git_ok(&fixture.repo, ["add", "hook-check.txt"]);
+
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["active_patch"]["patch"], "hook-check");
+    assert!(status["result"]["operation"].is_null());
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
 fn no_op_refresh_does_not_create_an_operation() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");

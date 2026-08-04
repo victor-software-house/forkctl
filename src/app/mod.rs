@@ -413,11 +413,20 @@ impl App {
         ];
         diff_args.extend(relative.into_iter().map(OsString::from));
         if !succeeds(&self.repo, "git", diff_args)? {
-            run(
+            let previous_active = self.read_active()?;
+            self.write_active(&ActivePatchState::Existing {
+                patch: manifest.bookkeeping_patch.clone(),
+            })?;
+            let refresh_result = run(
                 &self.repo,
                 "stg",
                 ["refresh", "--patch", &manifest.bookkeeping_patch, "--index"],
-            )?;
+            );
+            match previous_active {
+                Some(active) => self.write_active(&active)?,
+                None => self.clear_active()?,
+            }
+            refresh_result?;
         }
         Ok(())
     }
