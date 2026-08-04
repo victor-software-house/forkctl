@@ -2,12 +2,12 @@
 
 ## Design Goal
 
-Mise must expose the complete forkctl CLI—not six incomplete wrappers whose arguments drift from Clap. The mounted task validates arguments, renders task help, and completes the same grammar as direct forkctl. Lefthook calls that task but is not required by forkctl core.
+Mise must expose the complete forkctl CLI—not incomplete wrappers whose arguments drift from Clap. The `fork` file task is a transparent `raw_args` proxy: forkctl owns parsing, validation, and help; a mise-documented Usage self-mount supplies the same Clap-derived grammar to shell completion. Lefthook calls that task but is not required by forkctl core.
 
 ## Consumer Configuration
 
 ```toml
-min_version = "2026.7.7"
+min_version = "<minimum-mise-version>"
 
 [settings]
 experimental = true
@@ -18,7 +18,7 @@ FORK_MANIFEST = "patches/fork.json"
 
 [task_config]
 includes = [
-  "git::https://github.com/victor-software-house/forkctl.git//tasks/fork.toml?ref=v0.0.6",
+  "git::https://github.com/victor-software-house/forkctl.git//tasks/fork?ref=<immutable-release>",
   "mise-tasks",
 ]
 ```
@@ -29,44 +29,46 @@ includes = [
 
 ## Remote Catalog
 
-```toml
-["fork"]
-description = "Run the complete forkctl patch-stack CLI with exact Git/StGit tooling, mounted argument validation, help, and completion"
-dir = "{{cwd}}"
-usage = 'mount "mise run fork -- --usage-spec=fork"'
-run = '''
+`tasks/fork/` is a remote file-task directory:
+
+```text
+tasks/fork/
+├── fork
+└── hooks/
+    ├── install
+    └── validate
+```
+
+Canonical `tasks/fork/fork`:
+
+```bash
 #!/usr/bin/env bash
+#MISE description="Run the complete forkctl CLI with exact Git/StGit tools and mounted shell completion"
+#MISE dir="{{cwd}}"
+#MISE raw_args=true
+#MISE tools = { rust = "<rust-version>", "cargo:stgit" = { version = "<stgit-version>", depends = ["rust"] }, "github:victor-software-house/forkctl" = "<forkctl-version>" }
+#USAGE mount "mise run --quiet fork -- --usage-spec=fork"
+
 set -euo pipefail
 exec forkctl "$@"
-'''
-tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.6" }
-
-["fork:hooks:install"]
-description = "Install the consumer's existing Lefthook configuration; forkctl does not edit or replace it"
-dir = "{{cwd}}"
-run = "lefthook install"
-tools = { lefthook = "2.1.10" }
-
-["fork:hooks:validate"]
-description = "Validate the consumer's composed Lefthook configuration, including forkctl checks"
-dir = "{{cwd}}"
-run = "lefthook validate"
-tools = { lefthook = "2.1.10" }
 ```
+
+`hooks/install` and `hooks/validate` are executable file tasks with `#MISE dir="{{cwd}}"`, the Lefthook pin generated from root `mise.toml`, and direct `exec lefthook install|validate`.
 
 ## Why These Mise Features
 
 | Mise feature | Use |
 |:--|:--|
 | `dir = "{{cwd}}"` | Preserve the operator's invocation directory; forkctl itself discovers the repository root. `{{config_root}}` would silently force every call to the config root and hide cwd-sensitive mistakes. |
-| `usage = 'mount ...'` | Import the complete generated forkctl grammar instead of restating args/flags in task TOML. |
-| `mise run fork -- --usage-spec=fork` | Official self-mount pattern: the task's exact tool environment exists while the hidden bootstrap spec is emitted. The separator is needed only for this bootstrap call. |
+| `#USAGE mount ...` | Import the complete generated forkctl grammar for shell completion instead of restating arguments in task config. Mise's source intentionally hoists root file-task mounts into the task spec. |
+| `mise run --quiet fork -- --usage-spec=fork` | Self-mount through the task's exact tool environment while suppressing mise's task banner from interactive completion. The separator is needed only for this bootstrap call. |
 | Shebang task plus `exec forkctl "$@"` | Preserve the parsed command line exactly and make forkctl the process receiving signals/exit status. |
+| `raw_args = true` | Make the task a transparent CLI proxy: mise does not intercept `--help` or parse forkctl's arguments, while the mounted spec still supplies shell completion. |
 | Exact task-local `tools` | Provision forkctl and StGit with no ambient/global dependency. |
 | `{{cwd}}` rather than shell `cd` | Use mise's native directory macro; no audit-noisy wrapper commands. |
 | Rich `description` | Make the task understandable in `mise tasks` and by agents before invocation. |
 
-No deprecated `{{arg()}}`, `{{option()}}`, or `{{flag()}}` Tera functions appear. No manually maintained `${usage_*}` forwarding appears because the mounted spec and `"$@"` preserve the full command line. The generated Usage spec itself comes from `usage_lib::Spec::from(&Cli::command())`, so Clap remains the single source.
+No deprecated `{{arg()}}`, `{{option()}}`, or `{{flag()}}` Tera functions appear. No manually maintained `${usage_*}` forwarding appears because `raw_args`, `exec`, and `"$@"` preserve the full command line. The generated Usage completion spec itself comes from `usage_lib::Spec::from(&Cli::command())`, so Clap remains the single source.
 
 ## Operator Usage
 
@@ -92,17 +94,19 @@ Everything after `fork` belongs to the mounted forkctl grammar, so ordinary invo
 
 ## Mise Help and Completion
 
-`forkctl --usage-spec=fork` emits Usage KDL generated from the full Clap tree, relabeled for the mounted task, and augmented with dynamic completion entries. Mise therefore provides:
+`mise run fork --help` reaches forkctl directly because the task sets `raw_args = true`; mise's own source explicitly treats such tasks as CLI proxies. `forkctl --usage-spec=fork` emits Usage KDL generated from the full Clap tree, relabeled for the mounted task, and augmented with dynamic completion entries. The mount runs only when shell completion asks for the task spec, exactly as mise documents.
+
+Mise therefore provides:
 
 - subcommand completion;
 - short/long flag completion;
 - enum choices;
-- required/optional argument validation;
+- required/optional argument awareness during completion;
 - repeated flag handling;
 - file/directory completion;
 - live patch-name completion;
 - local remote/ref completion;
-- task help matching direct `forkctl --help` semantics.
+- direct forkctl validation and colored help with unchanged exit codes and streams.
 
 Examples:
 
@@ -113,7 +117,7 @@ mise run fork patch show <TAB>       # live patch names
 mise run fork rebase --onto <TAB>    # local refs
 ```
 
-The mounted completion command runs inside the task's exact tool environment. Integration tests invoke real mise against the immutable catalog and compare direct forkctl vs mounted parsing/completion.
+The mounted completion command self-invokes the task because completion resolution happens outside the task process; this is mise's documented pattern for applying task-local tools before forwarding `--usage-spec`. `--quiet` suppresses mise's task banner from completion. Integration tests exercise real mise against the catalog and compare direct forkctl vs mounted completion.
 
 ## Lefthook Composition
 
@@ -145,9 +149,9 @@ Properties:
 A release is blocked unless a disposable consumer proves:
 
 1. remote catalog loads from the immutable tag;
-2. `mise run fork --help` displays mounted grammar;
+2. `mise run fork --help` reaches forkctl's complete colored grammar;
 3. direct and mounted long/short forms map to identical API requests;
-4. invalid combinations fail in mise before forkctl execution where the Usage spec can decide them;
+4. invalid combinations fail through forkctl with the same exit code and diagnostics;
 5. bash, fish, Nushell, PowerShell, and zsh task completion includes static grammar;
 6. patch names and local refs complete dynamically;
 7. Lefthook pre-commit runs `check -s` and pre-push runs full `check`;

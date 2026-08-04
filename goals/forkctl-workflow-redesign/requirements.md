@@ -35,7 +35,7 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 - `--help` is a colored, width-aware, scan-friendly view generated solely from Clap metadata. It groups commands/arguments/options, shows short and long forms, metavars, defaults, choices, and descriptions, and uses forkctl's existing semantic theme.
 - `forkctl completion SHELL` generates completions for bash, elvish, fish, Nushell, PowerShell, and zsh from the same Clap graph. Completions include commands, options, short forms, enums, paths, repository remotes/refs, and live patch names.
 - Dynamic completion is local/offline and fail-silent: an absent/invalid manifest yields no domain candidates rather than terminal errors or network access.
-- Hidden `--usage-spec[=BIN]` emits a full Usage KDL specification generated from Clap and augmented with the same dynamic candidates; `BIN` relabels the mounted root command, and mise requests `--usage-spec=fork` so `mise run fork ...` has equivalent validation, help, and completion.
+- Hidden `--usage-spec[=BIN]` emits a full Usage KDL specification generated from Clap and augmented with the same dynamic candidates; `BIN` relabels the mounted root command. The mise task is a `raw_args` proxy, so forkctl retains authoritative validation/help, while mise requests `--usage-spec=fork` only for equivalent shell completion.
 - Invalid CLI syntax exits 2; actionable repository/policy failure exits 1; success exits 0. Machine callers use typed error codes rather than additional exit-code taxonomy.
 
 ### Core lifecycle
@@ -74,7 +74,7 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 - Pre-push integration calls ordinary `forkctl check`.
 - Commit-message validation is added only if implementation evidence shows it catches a gap not already covered by generated messages and full check.
 - The repository publishes one exact `fork` mise task whose mounted Usage spec exposes the complete forkctl grammar, plus optional Lefthook install/validate helpers. It does not duplicate command arguments across wrapper tasks.
-- The mounted task uses `dir = "{{cwd}}"`, a shebang `exec forkctl "$@"` passthrough, exact task-local tools, and no deprecated Tera argument functions or manual `usage_*` forwarding.
+- The mounted file task uses `dir = "{{cwd}}"`, `raw_args = true`, a shebang `exec forkctl "$@"` passthrough, exact task-local tools, mise's documented self-mount for completion, and no deprecated Tera argument functions or manual `usage_*` forwarding.
 - The repository publishes a small Lefthook preset or documented local snippet using `mise run fork check [-s]`. It never overwrites consumer hook configuration or claims `core.hooksPath`.
 
 ## Manifest Requirements
