@@ -168,7 +168,7 @@ fn create_upstream(directory: &Path, work: &Path, bare: &Path) {
     git_ok(work, ["push", "--quiet", "-u", "origin", "main"]);
 }
 
-fn isolated_command(program: &str) -> Command {
+pub fn isolated_command(program: &str) -> Command {
     let mut command = Command::new(program);
     for (key, _) in std::env::vars_os() {
         if key.to_string_lossy().starts_with("GIT_") {
