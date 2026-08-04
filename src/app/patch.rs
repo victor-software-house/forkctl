@@ -333,7 +333,7 @@ impl App {
                 )
             })?;
         proposed.patches.remove(old_index);
-        let index = proposed.insertion_index(patch.kind);
+        let index = proposed.insertion_index(&patch);
         proposed.patches.insert(index, patch);
         proposed
             .validate(&self.repo, &self.manifest_path)
@@ -411,7 +411,7 @@ impl App {
             .stage_capture(&capture_paths, &args.capture)
             .and_then(|()| {
                 if matches!(active, ActivePatchState::Draft { .. }) {
-                    let insertion = self.manifest()?.insertion_index(patch.kind);
+                    let insertion = self.manifest()?.insertion_index(&patch);
                     run(
                         &self.repo,
                         "stg",
@@ -526,7 +526,7 @@ impl App {
         old_commit: Option<String>,
     ) -> Result<CommandResult> {
         if self.manifest()?.patch(&patch.name).is_none() {
-            let insertion = self.manifest()?.insertion_index(patch.kind);
+            let insertion = self.manifest()?.insertion_index(&patch);
             self.manifest_mut()?
                 .patches
                 .insert(insertion, patch.clone());

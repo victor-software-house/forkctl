@@ -171,6 +171,39 @@ fn patch_kind_change_reorders_series_and_exports() {
 }
 
 #[test]
+fn bookkeeping_patch_edit_remains_final_after_source_patches() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "source\n");
+    fixture.forkctl_ok(&["patch", "select", "fork-tooling"]);
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "edit",
+        "fork-tooling",
+        "--add-scope",
+        ".github/workflows/release.yml",
+    ]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+
+    assert_eq!(
+        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"])
+            .lines()
+            .collect::<Vec<_>>(),
+        ["source-change", "fork-tooling"]
+    );
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.repo.join("patches/fork.json")).unwrap()).unwrap();
+    assert!(
+        manifest["patches"][1]["scope"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == ".github/workflows/release.yml")
+    );
+}
+
+#[test]
 fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "lower", "shared.txt", "lower\n");

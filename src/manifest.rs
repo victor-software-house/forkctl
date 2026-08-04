@@ -327,8 +327,11 @@ impl Manifest {
         self.patches.iter().find(|patch| patch.name == name)
     }
 
-    pub fn insertion_index(&self, kind: PatchKind) -> usize {
-        match kind {
+    pub fn insertion_index(&self, patch: &Patch) -> usize {
+        if patch.name == self.bookkeeping_patch {
+            return self.patches.len();
+        }
+        match patch.kind {
             PatchKind::Source => self
                 .patches
                 .iter()
