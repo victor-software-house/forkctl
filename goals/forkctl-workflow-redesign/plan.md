@@ -31,14 +31,17 @@ The contract is approved and released through forkctl 0.0.9 from `a88180ade72618
 - Downloaded macOS arm64 asset digest: `043eb4d5d439175c1e4cf2541b772f2ff6f660c24cf6701e5a4ff1eef42da526`.
 - Downloaded release binary, clean `cargo install --version 0.0.9 --locked`, and immutable `v0.0.9` mise catalog all report `forkctl 0.0.9`.
 
+### Fleet closeout evidence
+
+- Ghostty `main` `4e2e1348ae67ac2519423acc6d82e6e3bab71f33` pins catalog `v0.0.9`; clean fresh-clone `init/check` passed.
+- zmx `main` `6959c806ab5642c46535bc4fea13b1af2e1c2699` is canonical-based with three active tooling patches and exact dropped history for both upstreamed macOS fixes. Format, check, tests, focused arm64 artifact, atomic publication, exact private release, and complete fresh-clone proof passed.
+- Macterm `main` `9b7a95e2723f4be944694214030c65ed8f418b18` pins catalog `v0.0.9` and exact private Ghostty/zmx releases. Its setup contains no universal zmx lookup or thinning; format, lint, unit, release build, 12/12 E2E, benchmark, atomic publication, and fresh-clone setup/init/check passed.
+- Every build and verification ran on `macbook-portable`. All three repositories are clean, synchronized, and have no active patch or operation.
+- After explicit operator approval, the temporary Ghostty and zmx migration branches were deleted. Recovery tags/history and previous private releases remain.
+
 ### Remaining implementation blockers
 
-1. **Fleet repin** — refresh only each repository's `fork-tooling` patch from catalog `v0.0.8` to `v0.0.9`, verify, atomically publish, and fresh-clone prove Macterm, Ghostty, and zmx.
-2. **zmx closeout** — publish the exact arm64 zmx release, remove Macterm's universal download/thinning path, rerun compatibility, and complete the fleet proof.
-
-### Execution order
-
-Complete the blockers above in order. Do not publish zmx or migrate its consumer while any earlier blocker remains. After each blocker: run the repository's complete verification, inspect the diff, update this checkpoint and the live task ledger, then commit only the coherent verified layer.
+None. The forkctl workflow redesign and sequential private-fleet migration are complete.
 
 ## Phase 1 — Freeze the New Contract
 
