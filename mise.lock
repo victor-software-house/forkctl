@@ -29,6 +29,10 @@ checksum = "sha256:a1b5b7c06994992755d4cd0b9cf10c2f4a6e7b4a82d2810edee5985a59f67
 url = "https://github.com/ast-grep/ast-grep/releases/download/0.45.0/app-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/ast-grep/ast-grep/releases/assets/487376855"
 
+[[tools."cargo:cargo-nextest"]]
+version = "0.9.143"
+backend = "cargo:cargo-nextest"
+
 [[tools."cargo:stgit"]]
 version = "2.6.1"
 backend = "cargo:stgit"

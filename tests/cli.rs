@@ -5,7 +5,9 @@ use std::process::{Command, Stdio};
 use support::Fixture;
 
 fn forkctl() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_forkctl"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_forkctl"));
+    command.env("FORKCTL_NO_UPDATE_CHECK", "1");
+    command
 }
 
 fn max_line_width(bytes: &[u8]) -> usize {

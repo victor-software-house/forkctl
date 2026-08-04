@@ -92,9 +92,8 @@ fn lefthook_composes_with_mounted_read_only_checks() {
     )
     .unwrap();
     support::git_ok(&fixture.repo, ["add", "mise.toml", "lefthook.yml"]);
-    let refresh = support::isolated_command("stg")
+    let refresh = support::isolated_command(&fixture.repo, "stg")
         .args(["refresh", "--patch", "fork-tooling", "--index"])
-        .current_dir(&fixture.repo)
         .output()
         .unwrap();
     assert!(
@@ -178,7 +177,7 @@ impl MountedCatalog {
     }
 
     fn mise(&self, args: &[&str]) -> Output {
-        support::isolated_command("mise")
+        support::isolated_command(&self.repo, "mise")
             .args(args)
             .env("MISE_TRUSTED_CONFIG_PATHS", &self.repo)
             .current_dir(&self.repo)
@@ -187,7 +186,7 @@ impl MountedCatalog {
     }
 
     fn complete(&self, spec: &Path, shell: &str, cword: usize, words: &[&str]) -> String {
-        let output = support::isolated_command("usage")
+        let output = support::isolated_command(&self.repo, "usage")
             .args(["complete-word", "--file"])
             .arg(spec)
             .args(["--shell", shell, "--cword", &cword.to_string(), "--"])
@@ -210,7 +209,7 @@ impl MountedCatalog {
     }
 
     fn lefthook(&self, args: &[&str]) -> Output {
-        support::isolated_command("lefthook")
+        support::isolated_command(&self.repo, "lefthook")
             .args(args)
             .env("MISE_TRUSTED_CONFIG_PATHS", &self.repo)
             .current_dir(&self.repo)

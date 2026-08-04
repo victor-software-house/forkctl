@@ -348,7 +348,10 @@ Provide supported `git` and `stg` executables on `PATH`, plus whatever tools you
 mise install --locked
 mise exec -- lefthook install
 mise run verify
+mise run test:isolated
 mise run build
 ```
+
+`mise run test` uses Rust's standard parallel harness. `test:isolated` runs the same suite with cargo-nextest, one test per process. Real Git/StGit lifecycle tests use a fresh `tempfile` sandbox with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment; they never read operator aliases, credential helpers, hooks, or global config. Mounted-task tests reuse only the caller's mise installation store for the repository's exact pinned tools. Containers are reserved for future scenarios that actually require another OS, daemon, network, or toolchain image.
 
 `[workspace.package].version` is the sole forkctl release source. Root `mise.toml` is the sole source for the minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. After changing either source, run `mise run version:sync`; it regenerates `mise.lock` and every operational pin. The verification gate rejects drift and runs rustfmt, denied-warning workspace Clippy, API/schema/help/completion tests, and disposable real Git/StGit lifecycle tests.

@@ -44,6 +44,8 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - The remote catalog exposes one mounted `fork` file task using `dir = "{{cwd}}"`, `raw_args = true`, exact task tools, the mise-documented self-mount `mise run --quiet fork -- --usage-spec=fork`, and `exec forkctl "$@"`.
 - VSH Lefthook defaults call `mise run fork check -s` on pre-commit and `mise run fork check -q` on pre-push; other managers call the same commands.
 - `skills/forkctl/SKILL.md` is the portable skills.sh-installable operator workflow. Keep it concise and synchronized with released CLI behavior; installed help/instructions remain authoritative, so the skill must not duplicate a full flag grammar.
+- Lifecycle fixtures use real Git/StGit binaries inside a private `tempfile` root with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment only; never inherit operator Git config or mutate the test process environment.
+- `mise run test:isolated` is the cargo-nextest lane that proves each test passes in its own process; keep ordinary lifecycle tests container-free unless the scenario actually requires another OS, daemon, network, or toolchain image.
 
 ## Versioning
 

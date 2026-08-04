@@ -386,6 +386,7 @@ fn refresh_consumes_pre_commit_hook_modified_index() {
         "hook.txt",
     ]);
     let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
     fs::write(
         &hook,
         "#!/bin/sh\nprintf 'formatted\\n' > hook.txt\ngit add hook.txt\n",
@@ -428,6 +429,7 @@ fn documented_staged_check_hook_accepts_source_and_bookkeeping_refreshes() {
         "hook-check.txt",
     ]);
     let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
     fs::write(
         &hook,
         format!(
@@ -496,9 +498,8 @@ fn refresh_dry_run_is_non_mutating() {
 fn hook_exported_git_environment_does_not_contaminate_nested_clone() {
     let fixture = Fixture::new();
     let git_dir = git_capture(&fixture.repo, ["rev-parse", "--git-dir"]);
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_forkctl"))
+    let output = support::forkctl_command(&fixture.repo)
         .args(["--manifest", "patches/fork.json", "check"])
-        .current_dir(&fixture.repo)
         .env("GIT_DIR", fixture.repo.join(git_dir))
         .env("GIT_WORK_TREE", &fixture.repo)
         .output()
@@ -542,9 +543,8 @@ fn rebase_publish_and_fresh_clone_hydrate_exact_recovery() {
     );
     git_ok(&clone, ["config", "user.name", "Forkctl Test"]);
     git_ok(&clone, ["config", "user.email", "forkctl@example.com"]);
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_forkctl"))
+    let output = support::forkctl_command(&clone)
         .args(["--manifest", "patches/fork.json", "init"])
-        .current_dir(&clone)
         .output()
         .unwrap();
     assert!(
@@ -862,6 +862,7 @@ fn publish_preserves_refs_when_remote_policy_rejects_atomic_push() {
     let tag = response["result"]["recovery_tag"].as_str().unwrap();
     let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
     let hook = std::path::Path::new(&remote).join("hooks/pre-receive");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
     fs::write(
         &hook,
         "#!/bin/sh\necho 'protected branch policy' >&2\nexit 1\n",
@@ -1135,7 +1136,7 @@ fn git_capture_dynamic(repo: &std::path::Path, args: &[&str]) -> String {
 }
 
 fn git_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
-    let output = support::isolated_command("git")
+    let output = support::isolated_command(repo, "git")
         .args(args)
         .current_dir(repo)
         .output()
@@ -1149,7 +1150,7 @@ fn git_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
 }
 
 fn capture(repo: &std::path::Path, program: &str, args: &[&str]) -> String {
-    let output = support::isolated_command(program)
+    let output = support::isolated_command(repo, program)
         .args(args)
         .current_dir(repo)
         .output()
@@ -1167,7 +1168,7 @@ fn stg_capture(repo: &std::path::Path, args: [&str; 3]) -> String {
 }
 
 fn stg_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
-    let output = support::isolated_command("stg")
+    let output = support::isolated_command(repo, "stg")
         .args(args)
         .current_dir(repo)
         .output()
@@ -1567,4 +1568,38 @@ fn check_glob_naming_an_undeclared_check_is_rejected() {
         String::from_utf8_lossy(&rejected.stderr)
     );
     fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn fixture_processes_use_private_home_git_config_and_templates() {
+    let fixture = Fixture::new();
+    let sandbox = fixture.repo.parent().unwrap().join(".forkctl-test-env");
+
+    let environment = support::isolated_command(&fixture.repo, "sh")
+        .args([
+            "-c",
+            "printf '%s\n%s\n%s\n%s\n' \"$HOME\" \"$XDG_CONFIG_HOME\" \"$LC_ALL\" \"$TZ\"",
+        ])
+        .output()
+        .unwrap();
+    assert!(environment.status.success());
+    let values = String::from_utf8(environment.stdout).unwrap();
+    let values = values.lines().collect::<Vec<_>>();
+    assert_eq!(values[0], sandbox.join("home").to_str().unwrap());
+    assert_eq!(values[1], sandbox.join("xdg-config").to_str().unwrap());
+    assert_eq!(values[2], "C");
+    assert_eq!(values[3], "UTC");
+
+    let global = support::isolated_command(&fixture.repo, "git")
+        .args(["config", "--global", "--list"])
+        .output()
+        .unwrap();
+    assert!(global.status.success());
+    assert!(global.stdout.is_empty(), "global Git config leaked");
+
+    let hooks = fixture.repo.join(".git/hooks");
+    assert!(
+        !hooks.exists() || fs::read_dir(&hooks).unwrap().next().is_none(),
+        "Git's host template directory populated fixture hooks"
+    );
 }

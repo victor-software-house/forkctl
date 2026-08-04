@@ -7,6 +7,7 @@ const FORKCTL_REF_MARKER: &str = "forkctl.git//tasks/fork?ref=v";
 const MIN_MISE_MARKER: &str = "min_version = \"";
 const RUST_TOOL_MARKER: &str = "rust = \"";
 const STGIT_TOOL_MARKER: &str = "\"cargo:stgit\" = { version = \"";
+const NEXTEST_TOOL_MARKER: &str = "\"cargo:cargo-nextest\" = { version = \"";
 const LEFTHOOK_TOOL_MARKER: &str = "lefthook = \"";
 const USAGE_TOOL_MARKER: &str = "usage = \"";
 const GH_TOOL_MARKER: &str = "gh = \"";
@@ -17,6 +18,7 @@ struct ToolVersions {
     minimum_mise: String,
     rust: String,
     stgit: String,
+    nextest: String,
     lefthook: String,
     usage: String,
     gh: String,
@@ -77,6 +79,7 @@ fn read_tool_versions(path: &Path) -> Result<ToolVersions, String> {
         minimum_mise: read_value(&contents, MIN_MISE_MARKER)?,
         rust: read_value(&contents, RUST_TOOL_MARKER)?,
         stgit: read_value(&contents, STGIT_TOOL_MARKER)?,
+        nextest: read_value(&contents, NEXTEST_TOOL_MARKER)?,
         lefthook: read_value(&contents, LEFTHOOK_TOOL_MARKER)?,
         usage: read_value(&contents, USAGE_TOOL_MARKER)?,
         gh: read_value(&contents, GH_TOOL_MARKER)?,
@@ -107,6 +110,7 @@ fn check_lock(path: &Path, versions: &ToolVersions) -> Result<(), String> {
         fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
     for (tool, expected) in [
         ("ast-grep", versions.ast_grep.as_str()),
+        ("cargo:cargo-nextest", versions.nextest.as_str()),
         ("cargo:stgit", versions.stgit.as_str()),
         ("gh", versions.gh.as_str()),
         ("lefthook", versions.lefthook.as_str()),
