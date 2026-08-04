@@ -393,7 +393,7 @@ dependencies = [
 
 [[package]]
 name = "forkctl"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anstream",
  "anstyle",
@@ -413,7 +413,7 @@ dependencies = [
 
 [[package]]
 name = "forkctl-xtask"
-version = "0.0.6"
+version = "0.0.7"
 
 [[package]]
 name = "getrandom"

@@ -177,7 +177,7 @@ Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and 
 
 ## Bootstrap and clone hydration
 
-Without a manifest, `init` requires explicit repository/base/document/bookkeeping arguments and `HEAD` exactly at the resolved base. It creates the initial bookkeeping patch and never imports legacy commits.
+Without a manifest, `init` requires explicit repository/base/document/bookkeeping arguments and `HEAD` exactly at the resolved base. Repeatable `--allow-base GLOB` and `--required-text PATH=TEXT` options initialize declarative contracts without manual manifest edits. It creates the initial bookkeeping patch and never imports legacy commits.
 
 With a manifest, `init` idempotently reconstructs StGit metadata and fetches only exact recovery refs named by history before running the full check.
 

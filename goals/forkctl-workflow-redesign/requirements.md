@@ -40,7 +40,7 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 
 ### Core lifecycle
 
-- With no manifest, `forkctl init` bootstraps a new contract from explicit upstream/downstream/base/document/bookkeeping arguments, requires the branch to equal the selected base, creates the initial bookkeeping patch, and writes the first verified manifest/ledger. It never imports or interprets legacy commits.
+- With no manifest, `forkctl init` bootstraps a new contract from explicit upstream/downstream/base/document/bookkeeping arguments plus repeatable allowed-base globs and required `PATH=TEXT` assertions, requires the branch to equal the selected base, creates the initial bookkeeping patch, and writes the first verified manifest/ledger. It never imports or interprets legacy commits.
 - With a manifest, `forkctl init` idempotently hydrates StGit metadata and exact historical recovery refs in a fresh clone.
 - `forkctl status` reports repository identity, base/target, patch series, active patch, staged/unstaged paths, check summary, and current operation without mutation.
 - `forkctl check` performs the complete offline structural, audit, export, history, and reconstruction gate.

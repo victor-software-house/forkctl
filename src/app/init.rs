@@ -104,7 +104,10 @@ impl App {
             bookkeeping_patch: bookkeeping_patch.clone(),
             patches: vec![patch.clone()],
             history: Vec::new(),
-            contracts: Contracts::default(),
+            contracts: Contracts {
+                allow_base: args.allow_base,
+                required_text: args.required_text,
+            },
         };
         manifest.validate(&self.repo, &self.manifest_path)?;
         let plan = MutationPlan {

@@ -84,7 +84,7 @@ No aliases remain.
 
 | Command family | Short forms |
 |:--|:--|
-| `init` | `-u` upstream URL · `-b` base · `-l` ledger · `-e` exports · `-k` bookkeeping patch · `-p` bookkeeping path · `-n` dry-run; remote/ref/branch identities remain long-only |
+| `init` | `-u` upstream URL · `-b` base · `-l` ledger · `-e` exports · `-k` bookkeeping patch · `-p` bookkeeping path · `-a` allow base · `-r` required text · `-n` dry-run; remote/ref/branch identities remain long-only |
 | `rebase` | `-o` onto · `-n` dry-run |
 | `publish` | `-n` dry-run |
 | `check` | `-s` staged · `-p` patch; no flag means complete repository check |
@@ -244,10 +244,12 @@ forkctl --manifest patches/fork.json init \
   --bookkeeping-patch fork-tooling \
   --bookkeeping-path mise.toml \
   --bookkeeping-path lefthook.yml \
-  --bookkeeping-path FORK.md
+  --bookkeeping-path FORK.md \
+  --allow-base 'vendor/**' \
+  --required-text 'FORK.md=forkctl check'
 ```
 
-Forkctl resolves the base to typed historical provenance, requires `HEAD` to equal that commit, initializes StGit, creates the non-empty bookkeeping patch from the files explicitly declared or generated, and verifies the initial contract. It refuses downstream commits above the base. Existing fleets are rebuilt by replaying intended changes through `patch create`/`refresh`; forkctl has no legacy commit importer.
+Forkctl resolves the base to typed historical provenance, requires `HEAD` to equal that commit, validates repeatable allowed-base globs and required `PATH=TEXT` assertions, initializes StGit, creates the non-empty bookkeeping patch from the files explicitly declared or generated, and verifies the initial contract. It refuses downstream commits above the base. Existing fleets are rebuilt by replaying intended changes through `patch create`/`refresh`; forkctl has no legacy commit importer.
 
 When the manifest exists, `init` is idempotent clone hydration: fetch exact historical evidence, reconstruct StGit metadata when absent, and run the full check.
 

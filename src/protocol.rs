@@ -1,4 +1,4 @@
-use crate::manifest::{BaseTarget, Manifest, Patch, PatchKind};
+use crate::manifest::{BaseTarget, Manifest, Patch, PatchKind, RequiredText};
 use crate::state::{ActivePatchState, OperationState};
 use clap::ValueEnum;
 use schemars::JsonSchema;
@@ -135,6 +135,10 @@ pub struct InitArgs {
     pub bookkeeping_patch: Option<String>,
     #[serde(default)]
     pub bookkeeping_scope: Vec<String>,
+    #[serde(default)]
+    pub allow_base: Vec<String>,
+    #[serde(default)]
+    pub required_text: Vec<RequiredText>,
 }
 
 impl InitArgs {
@@ -149,6 +153,8 @@ impl InitArgs {
             || self.exports.is_some()
             || self.bookkeeping_patch.is_some()
             || !self.bookkeeping_scope.is_empty()
+            || !self.allow_base.is_empty()
+            || !self.required_text.is_empty()
     }
 }
 

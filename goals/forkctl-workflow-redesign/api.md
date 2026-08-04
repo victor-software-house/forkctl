@@ -94,12 +94,14 @@ Bundle shape:
   "ledger": "PATCHES.md",
   "exports": "patches/downstream",
   "bookkeeping_patch": "fork-tooling",
-  "bookkeeping_scope": ["mise.toml", "lefthook.yml", "FORK.md"]
+  "bookkeeping_scope": ["mise.toml", "lefthook.yml", "FORK.md"],
+  "allow_base": ["vendor/**"],
+  "required_text": [{"path":"FORK.md","contains":"forkctl check"}]
 }
 ```
 
 - If the manifest exists, every bootstrap field must be absent; init hydrates that manifest.
-- If the manifest does not exist, every identity/base/document/bookkeeping field except extra bookkeeping scope is required.
+- If the manifest does not exist, every identity/base/document/bookkeeping field except extra bookkeeping scope and optional contract arrays is required. `allow_base` and `required_text` initialize the complete declarative contract without manual manifest edits.
 - Bootstrap refuses `HEAD != resolved base` and never imports existing downstream commits.
 
 `CheckArgs`:
