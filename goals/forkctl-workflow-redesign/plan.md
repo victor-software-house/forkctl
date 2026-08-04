@@ -2,6 +2,33 @@
 
 No implementation begins until `requirements.md` and `design.md` are accepted through `ask_user`.
 
+## Execution Checkpoint — 2026-08-03
+
+The contract is approved and implementation is active on `feat/forkctl-workflow-protocol`. PR #1 is closed unmerged. The repository currently compiles cleanly, passes denied-warning Clippy, and passes 46 tests through `mise run verify`.
+
+### Implemented and verified
+
+- Incompatible schema-1 manifest, Clap command tree, typed request/result/schema graph, execute/plan adapter, centralized pretty/JSON view, and generated width-aware help.
+- Top-level `check` with repository default and staged `-s`, explicit active-patch state, metadata-only draft creation, select/show/list, staged/all/path refresh, deterministic exports, bookkeeping refresh, and finish.
+- One production subprocess factory that clears Git repository-local hook variables; synthetic hook-context lifecycle coverage passes.
+- Typed rebase journal, exact annotated recovery object, atomic exact-lease publication, operation-level history, and fresh-clone hydration; the real rebase/publish/fresh-clone lifecycle passes.
+- Clap-derived Usage KDL with dynamic patch/ref/remote candidates. `completion SHELL` now emits dynamic Clap registrations for bash, elvish, fish, PowerShell, and zsh, plus a Usage-backed dynamic Nushell registration; direct completion tests prove live patches, refs, remotes, all six shell registrations, and fail-silent lookup outside repositories.
+- Typed domain errors now originate at repository, manifest, subprocess, active-patch, patch lookup, scope, operation, lease, and publication boundaries. API conversion downcasts those types rather than parsing messages; tests prove stable request/repository/patch/path details and JSON stream cleanliness.
+- Patch edits and refreshes are journaled with typed intent. Kind reorder, edit/refresh conflict continuation, hook-modified capture, no-op rejection, and stale export cleanup are lifecycle-proven.
+- Abort reconstructs and verifies the exact old tip/base/ordered patch commits before deleting its journal/tag/snapshot; recovery-tag deletion and substitution fail closed.
+- Mise's source-backed proxy design: executable file task, `raw_args = true`, exact local tools, `exec forkctl "$@"`, and mise's documented Usage self-mount for completion. Direct mounted help and nested command completion were proven against real mise.
+- Root `mise.toml` is the sole source for minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. `[workspace.package].version` remains the sole forkctl release source. `version:sync` regenerates the lockfile and all operational copies; `version:check` rejects drift.
+- Real mise tests prove raw-proxy help/cwd/stream/exit parity and bash/fish/Nushell/PowerShell/zsh mounted completion with live patch/ref candidates; real Lefthook pre-push and staged pre-commit composition passes.
+- Publication tests prove stale leases, conflicting tags, protected-branch rejection, and remotes without atomic capability leave both refs unchanged, retain the operation, return typed errors, and never retry without `--atomic`.
+
+### Remaining implementation blockers
+
+1. **Review and release** — split the currently uncommitted rewrite into coherent green commits, run architecture/security/release/silent-failure review, resolve findings, release 0.0.6, verify published artifacts, then migrate Macterm, Ghostty, and zmx sequentially.
+
+### Execution order
+
+Complete the blockers above in order. Do not version-bump, publish, or migrate a consumer while any earlier blocker remains. After each blocker: run `mise run verify`, inspect the diff, update this checkpoint and the live task ledger, then commit only the coherent verified layer.
+
 ## Phase 1 — Freeze the New Contract
 
 ### Changes
@@ -103,6 +130,8 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 - Store operation-level rebase history with exact tag object and dropped pre-rebase commits.
 - Fresh init fetches only exact history refs.
 - Reimplement report newline/object binding and correct API error classification from PR #1.
+- Patch metadata edits and refreshes are now journaled with typed intent. Kind changes validate/reorder the real StGit series, regenerate deterministic exports, and delete stale generated exports. Real lifecycle tests cover clean kind reorder, multi-stage kind-reorder conflict continuation, lower-patch refresh conflict continuation through StGit's documented `refresh-temp` squash path, hook-modified index capture, and no-op rejection without journal debris.
+- Operation abort now requires confirmation, reconstructs the exact old tip/base/ordered patch commits through Git/StGit, verifies the restored repository before deleting its journal/tag/snapshot, and keeps evidence on failure. Tests cover dry-run, unconfirmed execution, exact rebase restoration, and deleted/lightweight/wrong-tip recovery-tag rejection.
 
 ### Verification
 
@@ -118,7 +147,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 
 - Rebuild publish against the new operation journal and error taxonomy.
 - Add typed `publication_rejected` without parsing provider policy into generic logic beyond preserving remote diagnostics.
-- Replace shallow wrappers with one `fork` shebang task: `dir = "{{cwd}}"`, mounted `--usage-spec`, `exec forkctl "$@"`, and exact task-local tools.
+- Replace shallow wrappers with one `fork` shebang file task: `dir = "{{cwd}}"`, `raw_args = true`, mise-documented self-mounted `--usage-spec` for completion, `exec forkctl "$@"`, and exact task-local tools.
 - Add optional Lefthook install/validate helpers and document `mise run fork check -s` / `mise run fork check -q` composition without mutating hook manager configuration.
 
 ### Verification
@@ -127,7 +156,7 @@ No implementation begins until `requirements.md` and `design.md` are accepted th
 - Successful publication atomically updates branch and recovery tag under the exact lease.
 - Real StGit pre-commit hooks may update staged content during `patch refresh`.
 - Real Lefthook pre-commit and pre-push configurations pass in a disposable consumer and under inherited Git hook variables.
-- A real immutable remote catalog proves mounted help, argument rejection, short/long parity, dynamic completion, cwd preservation, and direct-vs-mise stdout/stderr/exit parity.
+- A real immutable remote catalog proves direct forkctl help/argument rejection through the raw proxy, short/long parity, dynamic mounted completion, cwd preservation, and direct-vs-mise stdout/stderr/exit parity.
 
 ## Phase 8 — Independent Review and Release 0.0.6
 

@@ -68,7 +68,7 @@ The local one-request stdin/stdout protocol uses `protocol_version: 1`, dotted c
 
 ### Mise and hooks
 
-One immutable remote `fork` task mounts `--usage-spec=fork`, generated through `usage-lib` directly from Clap. It uses `dir = "{{cwd}}"`, exact task-local forkctl/Rust/StGit tools, and a shebang `exec forkctl "$@"`. It provides full mise validation, help, and completion without duplicated wrapper arguments or deprecated Tera argument functions.
+One immutable remote `fork` file task is a transparent `raw_args` proxy using `dir = "{{cwd}}"`, exact task-local forkctl/Rust/StGit tools, and `exec forkctl "$@"`. Forkctl therefore owns validation and colored help unchanged. For shell completion, the task uses mise's documented self-mount to request `--usage-spec=fork`, generated through `usage-lib` directly from Clap, without duplicated wrapper arguments or deprecated Tera argument functions.
 
 VSH's optional Lefthook composition is:
 
