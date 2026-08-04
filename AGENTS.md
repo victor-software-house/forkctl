@@ -48,4 +48,4 @@ mise run verify
 mise run build
 ```
 
-Every release must additionally be exercised through the immutable mise catalog and the published binary against disposable real Git/StGit remotes, including bootstrap, active patch capture, hooks, abort/continue, rebase history hydration, stale lease, protected-branch rejection, and successful atomic publication.
+Every release must additionally be exercised through the immutable mise catalog and the published binary against disposable real Git/StGit remotes, including bootstrap, active patch capture, hooks, abort/continue, rebase history hydration, stale lease, protected-branch rejection, and successful atomic publication. Supply `CARGO_REGISTRY_TOKEN` before invoking the release task; it must fail before creating GitHub state when an unpublished version lacks auth and must resume only an exact-target draft.
