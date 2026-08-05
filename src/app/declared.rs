@@ -15,9 +15,9 @@ const FILES_TEMPLATE: &str = "{files}";
 impl App {
     /// Runs every declared patch check against the tree it observes.
     ///
-    /// Stack checks run in the repository with the complete series applied. Patch checks run in a
-    /// disposable clone checked out at the declaring patch's own commit, so an invariant can be
-    /// verified for that layer alone. Checks never touch the operator's worktree.
+    /// Stack checks run in a disposable clone with the complete series applied. Patch checks run
+    /// in a disposable clone checked out at the declaring patch's own commit, so an invariant can
+    /// be verified for that layer alone. Checks never touch the operator's worktree.
     pub(super) fn run_declared_checks(&self) -> Result<Vec<CheckFinding>> {
         let manifest = self.manifest()?;
         if manifest.check_count() == 0 {

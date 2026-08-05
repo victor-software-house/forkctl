@@ -54,6 +54,33 @@ fn pretty_output_respects_terminal_width() {
     assert!(max_line_width(&error.stderr) <= 40);
 }
 
+#[test]
+fn narrow_help_preserves_complete_tokens() {
+    for width in [40, 50, 60] {
+        let root = forkctl()
+            .env("COLUMNS", width.to_string())
+            .args(["--color", "never", "--help"])
+            .output()
+            .unwrap();
+        assert!(root.status.success());
+        let root = String::from_utf8(root.stdout).unwrap();
+        for token in ["--manifest", "FORK_MANIFEST", "patches/fork.yaml"] {
+            assert!(root.contains(token), "{width}-column help split {token:?}");
+        }
+
+        let patch = forkctl()
+            .env("COLUMNS", width.to_string())
+            .args(["--color", "never", "patch", "create", "--help"])
+            .output()
+            .unwrap();
+        assert!(patch.status.success());
+        let patch = String::from_utf8(patch.stdout).unwrap();
+        for token in ["--upstream-status", "[source|tooling]", "--check-glob"] {
+            assert!(patch.contains(token), "{width}-column help split {token:?}");
+        }
+    }
+}
+
 fn complete_in(directory: &std::path::Path, words: &[&str], index: usize) -> std::process::Output {
     forkctl()
         .env("COMPLETE", "bash")
@@ -110,6 +137,11 @@ fn schema_bundle_exposes_all_contracts() {
     ] {
         assert!(schema["schemas"][key].is_object(), "missing {key}");
     }
+    let schema_text = schema.to_string();
+    assert!(
+        schema_text.contains("complete applied stack, in a disposable clone with no origin remote")
+    );
+    assert!(!schema_text.contains("complete applied stack, in the repository itself"));
 }
 
 #[test]

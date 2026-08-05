@@ -6,6 +6,8 @@ use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL_CONDENSED};
 use std::fmt::Write as _;
 use std::io::{self, Write};
 
+const NARROW_HELP_WIDTH: u16 = 64;
+
 const HEADING: Style = Style::new()
     .bold()
     .fg_color(Some(anstyle::Color::Ansi(AnsiColor::Cyan)));
@@ -184,6 +186,10 @@ fn section(output: &mut String, title: &str, rows: Vec<Vec<String>>) {
         title,
         HEADING.render_reset()
     );
+    if layout::terminal_width().is_some_and(|width| width < NARROW_HELP_WIDTH) {
+        narrow_rows(output, rows);
+        return;
+    }
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL_CONDENSED)
@@ -193,6 +199,29 @@ fn section(output: &mut String, title: &str, rows: Vec<Vec<String>>) {
         table.add_row(row);
     }
     let _ = writeln!(output, "{table}");
+}
+
+fn narrow_rows(output: &mut String, rows: Vec<Vec<String>>) {
+    for row in rows {
+        let (label, description) = if row.len() == 2 {
+            (row[0].clone(), row[1].clone())
+        } else {
+            (
+                row.iter()
+                    .take(3)
+                    .filter(|value| !value.is_empty())
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                row.get(3).cloned().unwrap_or_default(),
+            )
+        };
+        layout::push_indented(output, &label, 2);
+        if !description.is_empty() {
+            layout::push_indented(output, &description, 4);
+        }
+    }
+    output.push('\n');
 }
 
 fn value_label(arg: &clap::Arg) -> String {
