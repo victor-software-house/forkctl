@@ -1,4 +1,3 @@
-use crate::manifest::Manifest;
 use crate::process::{capture, command};
 use clap::ValueEnum;
 use clap_complete::{CompletionCandidate, engine::ArgValueCompleter};
@@ -46,10 +45,13 @@ fn patch_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
     let Some((repo, manifest_path)) = repository_and_manifest() else {
         return Vec::new();
     };
-    let Ok(bytes) = std::fs::read(manifest_path) else {
+    let Ok(bytes) = std::fs::read(&manifest_path) else {
         return Vec::new();
     };
-    let Ok(manifest) = serde_json::from_slice::<Manifest>(&bytes) else {
+    let Ok(format) = crate::manifest_codec::ManifestFormat::from_path(&manifest_path) else {
+        return Vec::new();
+    };
+    let Ok(manifest) = format.parse(&bytes, &manifest_path) else {
         return Vec::new();
     };
     let mut values = manifest.patch_names();
@@ -114,7 +116,7 @@ fn repository_and_manifest() -> Option<(PathBuf, PathBuf)> {
     let cwd = std::env::current_dir().ok()?;
     let repo = PathBuf::from(capture(&cwd, "git", ["rev-parse", "--show-toplevel"]).ok()?);
     let manifest = std::env::var_os("FORK_MANIFEST")
-        .map_or_else(|| PathBuf::from("patches/fork.json"), PathBuf::from);
+        .map_or_else(|| PathBuf::from("patches/fork.yaml"), PathBuf::from);
     let manifest = if manifest.is_absolute() {
         manifest
     } else {

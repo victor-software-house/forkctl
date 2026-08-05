@@ -1,4 +1,4 @@
-use crate::manifest::{HistoryEvent, Manifest, PatchKind};
+use crate::manifest::{CheckStage, HistoryEvent, Manifest, PatchKind};
 use anyhow::{Context, Result};
 use askama::Template;
 
@@ -9,6 +9,7 @@ struct LedgerTemplate<'a> {
     base_sha: &'a str,
     patches: Vec<PatchRow>,
     disabled: Vec<DisabledRow>,
+    checks: Vec<CheckRow>,
     history: Vec<HistoryRow>,
 }
 
@@ -18,6 +19,14 @@ struct PatchRow {
     purpose: String,
     upstream_status: String,
     drop_when: String,
+}
+
+struct CheckRow {
+    patch: String,
+    name: String,
+    stage: &'static str,
+    glob: String,
+    run: String,
 }
 
 struct HistoryRow {
@@ -37,39 +46,28 @@ struct DisabledRow {
 }
 
 pub fn render(manifest: &Manifest) -> Result<String> {
-    let history = manifest
-        .history
+    let history = history_rows(manifest);
+    let checks = manifest
+        .patches
         .iter()
-        .flat_map(|event| match event {
-            HistoryEvent::Rebase {
-                target, dropped, ..
-            } => dropped
-                .iter()
-                .map(|item| HistoryRow {
-                    kind: "upstream merged",
-                    patch: escape(&item.patch.name),
-                    commit: item.commit.clone(),
-                    target: escape(&target.selector),
-                    target_commit: target.commit.clone(),
-                    purpose: escape(&item.patch.purpose),
-                })
-                .collect::<Vec<_>>(),
-            HistoryEvent::PatchRemoved { record } => vec![HistoryRow {
-                kind: "removed",
-                patch: escape(&record.patch.name),
-                commit: record.commit.clone(),
-                target: "—".into(),
-                target_commit: "—".into(),
-                purpose: escape(&record.reason),
-            }],
-            HistoryEvent::PatchEnabled { record, .. } => vec![HistoryRow {
-                kind: "re-enabled",
-                patch: escape(&record.patch.name),
-                commit: record.commit.clone(),
-                target: "—".into(),
-                target_commit: "—".into(),
-                purpose: escape(&record.reason),
-            }],
+        .flat_map(|patch| {
+            patch.checks.iter().map(|check| CheckRow {
+                patch: escape(&patch.name),
+                name: escape(&check.name),
+                stage: match check.at {
+                    CheckStage::Stack => "stack",
+                    CheckStage::Patch => "patch",
+                },
+                glob: escape(
+                    &patch
+                        .check_globs(check)
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                ),
+                run: escape(&check.run),
+            })
         })
         .collect();
     LedgerTemplate {
@@ -96,10 +94,70 @@ pub fn render(manifest: &Manifest) -> Result<String> {
                 position: record.position,
             })
             .collect(),
+        checks,
         history,
     }
     .render()
     .context("render PATCHES.md")
+}
+
+fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
+    manifest
+        .history
+        .iter()
+        .flat_map(|event| match event {
+            HistoryEvent::Rebase {
+                target,
+                dropped,
+                path_changes,
+                ..
+            } => dropped
+                .iter()
+                .map(|item| HistoryRow {
+                    kind: "upstream merged",
+                    patch: escape(&item.patch.name),
+                    commit: item.commit.clone(),
+                    target: escape(&target.selector),
+                    target_commit: target.commit.clone(),
+                    purpose: escape(&item.patch.purpose),
+                })
+                .chain(path_changes.iter().map(|item| HistoryRow {
+                    kind: "replay path change",
+                    patch: escape(&item.patch),
+                    commit: item.commit.clone(),
+                    target: escape(&target.selector),
+                    target_commit: target.commit.clone(),
+                    purpose: format!(
+                        "Lost paths after replay: {}",
+                        escape(
+                            &item
+                                .lost_paths
+                                .iter()
+                                .map(String::as_str)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    ),
+                }))
+                .collect::<Vec<_>>(),
+            HistoryEvent::PatchRemoved { record } => vec![HistoryRow {
+                kind: "removed",
+                patch: escape(&record.patch.name),
+                commit: record.commit.clone(),
+                target: "—".into(),
+                target_commit: "—".into(),
+                purpose: escape(&record.reason),
+            }],
+            HistoryEvent::PatchEnabled { record, .. } => vec![HistoryRow {
+                kind: "re-enabled",
+                patch: escape(&record.patch.name),
+                commit: record.commit.clone(),
+                target: "—".into(),
+                target_commit: "—".into(),
+                purpose: escape(&record.reason),
+            }],
+        })
+        .collect()
 }
 
 fn patch_kind(kind: PatchKind) -> &'static str {

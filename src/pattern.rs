@@ -23,7 +23,7 @@ mod tests {
     fn wildcard_does_not_cross_directories() {
         assert!(matches(
             "patches/embedding/*",
-            "patches/embedding/fork.json"
+            "patches/embedding/fork.yaml"
         ));
         assert!(!matches(
             "patches/embedding/*",

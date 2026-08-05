@@ -109,6 +109,10 @@ impl App {
         self.check_required_text()?;
         self.check_ledger()?;
         self.check_exports()?;
+        let findings = self.run_declared_checks()?;
+        if !findings.is_empty() {
+            return Err(DomainError::declared_checks_failed(findings).into());
+        }
         let expected_tree = self.expected_reconstructed_tree()?;
         let reconstructed_tree = self.reconstruct_tree()?;
         ensure!(
@@ -128,6 +132,7 @@ impl App {
             canonical_base: Some(manifest.base.canonical.clone()),
             stack_base: Some(manifest.base.stack.clone()),
             patch_count: Some(expected_stack.len()),
+            declared_checks: Some(manifest.check_count()),
             source_tree: Some(expected_tree),
         })
     }
@@ -145,6 +150,7 @@ impl App {
                 canonical_base: None,
                 stack_base: None,
                 patch_count: None,
+                declared_checks: None,
                 source_tree: None,
             });
         }
@@ -168,6 +174,7 @@ impl App {
             canonical_base: None,
             stack_base: None,
             patch_count: None,
+            declared_checks: None,
             source_tree: None,
         })
     }
@@ -356,6 +363,7 @@ impl App {
                     target,
                     recovery,
                     dropped,
+                    path_changes,
                 } => {
                     self.verify_target_evidence(target)?;
                     let commits = capture(
@@ -375,6 +383,21 @@ impl App {
                             item.patch.name
                         );
                         self.check_historical_patch(&item.patch, &item.commit)?;
+                    }
+                    for item in path_changes {
+                        ensure!(
+                            commits.contains(item.commit.as_str()),
+                            "replayed patch {} is outside recovery stack",
+                            item.patch
+                        );
+                        let paths = self.patch_paths(&item.commit)?;
+                        for path in &item.lost_paths {
+                            ensure!(
+                                paths.contains(path),
+                                "replayed patch {} did not touch recorded path {path}",
+                                item.patch
+                            );
+                        }
                     }
                 }
                 HistoryEvent::PatchRemoved { record }
@@ -398,12 +421,24 @@ impl App {
                 "-e",
                 &format!("{}^{{tag}}", recovery.tag_object),
             ],
-        )?;
+        )
+        .map_err(|error| {
+            DomainError::check_failed(format!(
+                "history recovery tag {} object {} is unavailable: {error}; restore the published recovery tag or run forkctl init to hydrate it",
+                recovery.tag, recovery.tag_object
+            ))
+        })?;
         let local_object = capture(
             &self.repo,
             "git",
             ["rev-parse", &format!("refs/tags/{}", recovery.tag)],
-        )?;
+        )
+        .map_err(|error| {
+            DomainError::check_failed(format!(
+                "history recovery tag {} is missing locally: {error}; run forkctl init to hydrate published recovery tags",
+                recovery.tag
+            ))
+        })?;
         ensure!(
             local_object == recovery.tag_object,
             "history recovery tag {} differs",
@@ -457,6 +492,26 @@ impl App {
             peeled == operation.old_tip,
             "operation recovery tag peels to wrong tip"
         );
+        if let Some(recovery) = &operation.publication_recovery {
+            let local_object = capture(
+                &self.repo,
+                "git",
+                ["rev-parse", &format!("refs/tags/{}", recovery.tag)],
+            )?;
+            ensure!(
+                local_object == recovery.tag_object,
+                "publication recovery tag object differs"
+            );
+            let peeled = capture(
+                &self.repo,
+                "git",
+                ["rev-parse", &format!("{}^{{commit}}", recovery.tag_object)],
+            )?;
+            ensure!(
+                peeled == recovery.old_tip,
+                "publication recovery tag peels to wrong tip"
+            );
+        }
         if let Some(new_tip) = &operation.new_tip {
             ensure!(
                 capture(&self.repo, "git", ["rev-parse", "HEAD"])? == *new_tip,

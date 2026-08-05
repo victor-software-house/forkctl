@@ -20,16 +20,33 @@
 
 `patch refresh -a` explicitly stages all changed paths owned by the patch. Repeated `-p PATHSPEC` limits capture to explicit Git pathspecs. Use `-n` on mutations to inspect the effect plan.
 
+## Declared checks
+
+A patch may declare commands that must succeed for it to still hold, so a rebase or refactor that quietly neutralizes it fails instead of passing:
+
+- `-C NAME=COMMAND` declares a check; `{files}` expands to the checked files, shell-quoted. Exit 0 passes.
+- `-g NAME=GLOB` restricts it; repeatable, and defaults to the declaring patch's scope.
+- `--check-at NAME=stack|patch` selects the applied stack (default) or the patch's own commit in a disposable clone.
+- `--clear-checks` replaces the complete set.
+
+Globs are deliberately not limited to the patch's scope. Use a repository-wide check to catch cases the patch never covered — a new upstream call site bypassing a downstream wrapper, or a new trait implementor missing a downstream method. Write the rule to match the unhandled shape and let the tool exit non-zero. In Rust, forbidding a catch-all arm in a patched `match` delegates exhaustiveness to the compiler.
+
+A check whose globs match no tracked file fails as stale, so a moved or deleted subject cannot silently disarm it.
+
+Checks run during `check` after structural validation, so they gate `patch refresh`, `patch finish`, `rebase`, and both hook checks. They execute `sh -c` with repository-local Git variables cleared; provide their tools through the consumer's own mise configuration.
+
 ## Stack lifecycle
 
 - `mise run fork init` hydrates a fresh clone with StGit metadata and exact historical recovery refs. Without a manifest it requires explicit bootstrap arguments and a branch exactly at its selected base.
 - `mise run fork status` is read-only and remains usable during conflicts.
 - `mise run fork check` is the complete clean-repository audit.
 - `mise run fork rebase -o REF` records exact recovery/lease evidence and delegates replay to StGit; it never publishes.
+- A rebase that leaves a surviving patch touching fewer paths records the lost paths as recovery-bound history and reports them as `path_changed_patches`; inspect them before publishing. This is path-delta evidence, not a claim of upstream causality.
 - Resolve conflicts with supported Git/StGit commands, then run `mise run fork operation continue`.
-- `mise run fork operation status` reports the exact phase and next actions; `operation abort -n` plans restoration and `operation abort -y` performs it.
+- `mise run fork operation status` reports the exact phase and next actions; `operation abort -n` plans restoration and `operation abort -y` performs it. These remain usable when an in-flight conflict leaves the tracked manifest unreadable.
 - Review the range-diff report and consumer semantic checks before `mise run fork publish`.
-- Publish is one atomic explicit-ref push with an exact lease and no fallback.
+- `mise run fork publish` publishes any unpublished downstream state. It reports `already_published` when nothing changed, fast-forwards when the published tip is an ancestor, and otherwise creates an annotated recovery tag at the overwritten published tip before one atomic explicit-ref push.
+- Publish is one atomic explicit-ref push with an exact lease and no fallback. A rewrite requires the published tip to equal the reviewed rebase lease, or the fetched downstream tracking ref when no operation is in flight; otherwise it fails with `remote_advanced`.
 
 ## Hook integration
 

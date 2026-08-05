@@ -27,7 +27,7 @@ fn mounted_mise_proxy_preserves_help_output_exit_and_cwd() {
         "--quiet",
         "fork",
         "--manifest",
-        "patches/fork.json",
+        "patches/fork.yaml",
         "--format",
         "json",
         "status",
@@ -92,15 +92,22 @@ fn lefthook_composes_with_mounted_read_only_checks() {
     )
     .unwrap();
     support::git_ok(&fixture.repo, ["add", "mise.toml", "lefthook.yml"]);
-    let refresh = support::isolated_command("stg")
+    let refresh = support::isolated_command(&fixture.repo, "stg")
         .args(["refresh", "--patch", "fork-tooling", "--index"])
-        .current_dir(&fixture.repo)
         .output()
         .unwrap();
     assert!(
         refresh.status.success(),
         "bookkeeping refresh failed: {}",
         String::from_utf8_lossy(&refresh.stderr)
+    );
+
+    let direct_check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(
+        direct_check.status.success(),
+        "direct check failed before mounted hook:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&direct_check.stdout),
+        String::from_utf8_lossy(&direct_check.stderr)
     );
 
     let pre_push = catalog.lefthook(&["run", "pre-push"]);
@@ -146,9 +153,13 @@ impl MountedCatalog {
                 "",
             )
             .replace(
-                "exec forkctl",
-                &format!("exec {}", env!("CARGO_BIN_EXE_forkctl")),
+                "exec \"$(mise where github:victor-software-house/forkctl)/forkctl\" \"$@\"",
+                &format!("exec {} \"$@\"", env!("CARGO_BIN_EXE_forkctl")),
             );
+        assert!(
+            !source.contains("mise where github:victor-software-house/forkctl"),
+            "mounted test task still resolves the published forkctl binary"
+        );
         fs::write(&task_path, source).unwrap();
         let mut permissions = fs::metadata(&task_path).unwrap().permissions();
         permissions.set_mode(0o755);
@@ -166,7 +177,7 @@ impl MountedCatalog {
     }
 
     fn mise(&self, args: &[&str]) -> Output {
-        support::isolated_command("mise")
+        support::isolated_command(&self.repo, "mise")
             .args(args)
             .env("MISE_TRUSTED_CONFIG_PATHS", &self.repo)
             .current_dir(&self.repo)
@@ -175,7 +186,7 @@ impl MountedCatalog {
     }
 
     fn complete(&self, spec: &Path, shell: &str, cword: usize, words: &[&str]) -> String {
-        let output = support::isolated_command("usage")
+        let output = support::isolated_command(&self.repo, "usage")
             .args(["complete-word", "--file"])
             .arg(spec)
             .args(["--shell", shell, "--cword", &cword.to_string(), "--"])
@@ -198,7 +209,7 @@ impl MountedCatalog {
     }
 
     fn lefthook(&self, args: &[&str]) -> Output {
-        support::isolated_command("lefthook")
+        support::isolated_command(&self.repo, "lefthook")
             .args(args)
             .env("MISE_TRUSTED_CONFIG_PATHS", &self.repo)
             .current_dir(&self.repo)

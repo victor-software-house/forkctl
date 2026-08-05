@@ -15,6 +15,13 @@ Base: `{{ target_selector }}` (`{{ base_sha }}`)
 {% for patch in disabled %}| `{{ patch.name }}` | `{{ patch.commit }}` | {{ patch.position }} | {{ patch.reason }} |
 {% else %}| None | — | — | — |
 {% endfor %}
+## Checks
+
+| Patch | Check | Applied at | Files | Command |
+|:--|:--|:--|:--|:--|
+{% for check in checks %}| `{{ check.patch }}` | `{{ check.name }}` | {{ check.stage }} | `{{ check.glob }}` | `{{ check.run }}` |
+{% else %}| None | — | — | — | — |
+{% endfor %}
 ## History
 
 | Event | Patch | Former commit | Target | Purpose |

@@ -155,7 +155,24 @@ fn render_result(output: &mut String, result: &CommandResult) {
             [
                 ("branch", result.branch.clone()),
                 ("head", result.head.clone()),
-                ("recovery", result.recovery_tag.clone()),
+                (
+                    "publication",
+                    if result.already_published {
+                        "already published".into()
+                    } else if result.fast_forward {
+                        "fast-forward".into()
+                    } else {
+                        "leased rewrite".into()
+                    },
+                ),
+                (
+                    "recovery",
+                    if result.recovery_tags.is_empty() {
+                        "not required".into()
+                    } else {
+                        result.recovery_tags.join(", ")
+                    },
+                ),
                 ("lease", result.expected_lease.clone()),
             ],
         ),
@@ -249,6 +266,7 @@ fn render_rebase(output: &mut String, result: &crate::protocol::RebaseResult) {
             ("recovery", result.recovery_tag.clone()),
             ("report", result.report_path.clone()),
             ("dropped", display_list(&result.dropped_patches)),
+            ("paths changed", display_list(&result.path_changed_patches)),
         ],
     );
 }
@@ -360,6 +378,12 @@ fn render_check(output: &mut String, result: &CheckResult) {
                 "patch count",
                 result
                     .patch_count
+                    .map_or_else(|| "n/a".into(), |value| value.to_string()),
+            ),
+            (
+                "declared checks",
+                result
+                    .declared_checks
                     .map_or_else(|| "n/a".into(), |value| value.to_string()),
             ),
             (

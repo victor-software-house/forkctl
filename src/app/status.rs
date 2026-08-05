@@ -3,7 +3,10 @@ use crate::protocol::{CheckSummary, PatchSummary, StatusResult};
 use anyhow::Result;
 
 impl App {
-    pub fn status(&self) -> Result<StatusResult> {
+    pub fn status(&mut self) -> Result<StatusResult> {
+        if self.manifest.is_none() && self.read_operation()?.is_some() {
+            self.load_operation_manifest()?;
+        }
         let manifest = self.manifest()?;
         let check = match self.check_repository(false) {
             Ok(_) => CheckSummary {

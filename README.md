@@ -16,7 +16,7 @@ experimental = true
 lockfile = true
 
 [env]
-FORK_MANIFEST = "patches/fork.json"
+FORK_MANIFEST = "patches/fork.yaml"
 
 [task_config]
 includes = [
@@ -99,6 +99,83 @@ mise run fork contract edit --clear -r 'FORK.md=forkctl check'
 
 Without `--clear`, entries append uniquely. `--clear` explicitly replaces the complete contract set after validating all supplied required text.
 
+## Declared checks
+
+Structural validation answers the question a clean merge cannot: does this patch still do what it says — and does it still cover everything it needs to?
+
+A patch encodes the cases that existed when it was written. The drift that breaks a long-lived fork is upstream introducing cases it never covered: a new call site, a new trait implementor, a new enum variant, in files the patch does not own and that may not have existed. So a patch declares **checks**: ordinary commands that must succeed, scoped by glob.
+
+```sh
+mise run fork patch create terminal-guard \
+  -k source \
+  -p 'Route every terminal spawn through the downstream guard.' \
+  -u not-submitted \
+  -d 'Upstream guards terminal spawning.' \
+  -s 'crates/terminal/**' -s 'fork-rules/**' \
+  -C 'unguarded-spawn=ast-grep scan --rule fork-rules/unguarded-spawn.yml {files}' \
+  -g 'unguarded-spawn=crates/**/*.rs'
+```
+
+| Option | Meaning |
+|:--|:--|
+| `-C NAME=COMMAND` | declare a check; `{files}` expands to the checked files, shell-quoted |
+| `-g NAME=GLOB` | restrict a declared check; repeatable, **defaults to the declaring patch's scope** |
+| `--check-at NAME=stack\|patch` | choose the tree the check observes; defaults to `stack` |
+| `--clear-checks` | replace the complete check set |
+
+**Exit status is the verdict.** Zero passes; anything else is one typed `check_failed` finding naming the patch, the check, the exit code, and the first diagnostic line. No polarity flags and no expression language — a check is a command, so any tool works: `ast-grep`, `rg`, `grep`, `cargo`, a repo script.
+
+Globs default to the declaring patch's scope and **may reach anywhere in the repository**. Scope governs what a patch may *modify*; a check only reads, and the invariants a fork depends on are usually about upstream code it does not own.
+
+### Covering cases the patch never saw
+
+Write a rule matching only the *unhandled* shape and let the tool's own exit status report it — the [Coccinelle](https://coccinelle.gitlabpages.inria.fr/website/) bad-pattern idiom. With `severity: error`, ast-grep exits non-zero exactly when the bad shape exists:
+
+```yaml
+id: unguarded-spawn
+language: rust
+severity: error
+message: spawn_terminal bypasses the downstream guard
+rule:
+  all:
+    - pattern: spawn_terminal($$$ARGS)
+    - not:
+        inside:
+          kind: function_item
+          has: { field: name, regex: ^spawn_terminal_guarded$ }
+          stopBy: end
+```
+
+A caller added upstream in a crate the patch does not own now fails the check. The same shape expresses "every implementor of this trait must carry the downstream method" (`kind: impl_item` + `has` trait + `not: has` method).
+
+For Rust exhaustiveness the sharpest check forbids a catch-all arm in the patched `match`: a new upstream enum variant then becomes a compile error, delegated to the tool that does it best.
+
+### Stack or patch layer
+
+`--check-at stack` (the default) checks out the complete applied series in a disposable clone. `--check-at patch` checks out the declaring patch's own commit instead, so an invariant can be verified for that layer alone — independent of what later patches do. Forkctl invokes commands with the clone as cwd and removes its origin, protecting the operator worktree from ordinary relative writes and accidental pushes.
+
+Declared commands remain trusted repository code running with the operator's user privileges; the clone is an execution boundary, not a security sandbox. Review declarations before running them.
+
+### Stale globs
+
+A check whose globs match **no tracked file fails as stale**. A command over an empty file list usually succeeds, so a moved or deleted subject would otherwise disarm the very check that was watching it:
+
+```
+check_glob_stale · guarded-spawn: unguarded-spawn
+crates/**/*.rs matches no tracked file, so the check would pass over nothing;
+its subject moved or was removed
+```
+
+### Execution
+
+`check` runs declared checks after structural validation, in manifest order, so they gate `patch refresh`, `patch finish`, `rebase`, and both hook checks. Commands run through forkctl's process layer with repository-local Git variables cleared and an explicit cwd, `sh -c`, and shell-quoted `{files}`. Checks and their commands are rendered in the generated ledger, so what a fork enforces is audited alongside why each patch exists.
+
+Forkctl ships no checking tooling and embeds no parser, query language, or scripting runtime. A check names whatever the consumer's own `mise.toml` provides.
+
+> ▲ A declared check is a command from a tracked manifest, executed by `check` — including in hooks and during fresh-clone `init` hydration. This is the same trust shape as repository-declared Lefthook hooks or mise tasks. Review a fork's manifest before hydrating a clone you do not control.
+
+Checks describe what tools can see. Whether patched code is still reached belongs to the consumer's build and tests.
+
 ## Check, rebase, and publish
 
 ```sh
@@ -113,9 +190,22 @@ mise run fork publish
 
 Rebase creates an immutable annotated recovery tag, captures the remote lease and old ordered stack, delegates to `stg rebase --merged`, generates a Git-private range-diff report, and records dropped patches in operation-level recovery-bound history. It never publishes.
 
-`operation status`, `continue`, and `abort` expose the typed in-flight journal. `operation abort -n` reports the restoration plan; `operation abort -y` restores and checks old state before clearing the journal.
+A patch whose complete effect disappears into the new base is dropped into history. A surviving patch that touches fewer paths records those lost paths as `path_changes` history bound to the same recovery tag and rendered in the ledger. This audits the replay delta without claiming whether upstream, conflict resolution, or another replay effect caused it.
 
-Publish performs one atomic explicit-ref push of branch plus recovery tag with an exact lease. There is no force, lease, or atomic fallback and no provider ruleset administration.
+`operation status`, `continue`, and `abort` expose the typed in-flight journal. `operation abort -n` reports the restoration plan; `operation abort -y` restores and checks old state before clearing the journal. While an operation is in flight, `status`, `operation status`, `operation continue`, and `operation abort` read the Git-private manifest snapshot, so an unreadable tracked manifest cannot block recovery.
+
+Publish covers every unpublished downstream state, not only rebases:
+
+| Local state versus published branch | Publish behavior |
+|:--|:--|
+| identical | reports `already_published` and pushes nothing |
+| published tip is an ancestor | fast-forward push under an exact lease; no recovery tag required |
+| rewritten history | creates an immutable annotated recovery tag at the **overwritten published tip**, then pushes tag plus branch atomically under an exact lease |
+| rewritten history after a reviewed rebase | reuses the rebase recovery tag when it already preserves the overwritten tip, otherwise publishes both |
+
+If the branch already matches while a ready operation remains, `publish` verifies every recorded recovery ref before clearing the local journal and snapshot. Exact refs make the retry idempotent; missing required evidence is published atomically under the unchanged branch lease, while mismatched evidence fails closed.
+
+Every rewrite requires exact evidence that it was computed against the current published tip: the reviewed rebase lease when an operation journal exists, otherwise the fetched downstream tracking ref. A remote that advanced beyond that evidence fails with `remote_advanced` and changes no ref. There is no force, lease, or atomic fallback and no provider ruleset administration.
 
 ## Hooks
 
@@ -152,9 +242,11 @@ Completion supports bash, elvish, fish, Nushell, PowerShell, and zsh, including 
 ```sh
 forkctl status --format json
 forkctl api schema --kind bundle
-printf '%s' '{"protocol_version":1,"mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
+printf '%s' '{"protocol_version":1,"manifest":"patches/fork.yaml","mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
   | forkctl api call
 ```
+
+The API already accepts complete typed command arguments from JSON on stdin; `manifest` selects either a YAML or JSON manifest path. This is the generic programmatic interface — no second stdin argument grammar exists.
 
 Requests use dotted command names such as `patch.refresh` and `operation.abort`, command-specific typed arguments, and `mode: execute|plan`. Success, plan, notice, error, and error-detail types are schema-derived. JSON stdout is exactly one response and stderr is empty.
 
@@ -162,50 +254,60 @@ Schema kinds: `bundle`, `manifest`, `invocation`, `response`, `active-state`, `o
 
 ## Manifest
 
-```json
-{
-  "schema": 1,
-  "downstream": {
-    "remote": "origin",
-    "branch": "main",
-    "recovery_tag_prefix": "forkctl/recovery"
-  },
-  "upstream": {
-    "remote": "upstream",
-    "url": "https://github.com/example/project.git",
-    "fetch_ref": "refs/heads/main"
-  },
-  "base": {
-    "target": {
-      "kind": "branch",
-      "selector": "refs/heads/main",
-      "commit": "0000000000000000000000000000000000000000"
-    },
-    "canonical": "0000000000000000000000000000000000000000",
-    "stack": "0000000000000000000000000000000000000000"
-  },
-  "documents": {
-    "ledger": "PATCHES.md",
-    "exports": "patches/downstream"
-  },
-  "bookkeeping_patch": "fork-tooling",
-  "patches": [
-    {
-      "name": "downstream-change",
-      "kind": "source",
-      "purpose": "Describe why this downstream change exists.",
-      "upstream_status": "not-submitted",
-      "drop_when": "Upstream provides the required behavior.",
-      "scope": ["src/**", "tests/**"]
-    }
-  ],
-  "history": [],
-  "contracts": {
-    "allow_base": [],
-    "required_text": []
-  }
-}
+YAML is the default human-authored format:
+
+```yaml
+%YAML 1.2
+---
+schema: 1
+downstream:
+  remote: origin
+  branch: main
+  recovery_tag_prefix: forkctl/recovery
+upstream:
+  remote: upstream
+  url: https://github.com/example/project.git
+  fetch_ref: refs/heads/main
+base:
+  target:
+    kind: branch
+    selector: refs/heads/main
+    commit: '0000000000000000000000000000000000000000'
+  canonical: '0000000000000000000000000000000000000000'
+  stack: '0000000000000000000000000000000000000000'
+documents:
+  ledger: PATCHES.md
+  exports: patches/downstream
+bookkeeping_patch: fork-tooling
+patches:
+  - name: downstream-change
+    kind: source
+    purpose: Describe why this downstream change exists.
+    upstream_status: not-submitted
+    drop_when: Upstream provides the required behavior.
+    scope:
+      - src/**
+      - tests/**
+    checks:
+      - name: downstream-hook
+        run: grep -q downstream_hook {files}
+        glob: []
+        at: stack
+      - name: unguarded-call
+        run: ast-grep scan --rule fork-rules/unguarded-call.yml {files}
+        glob:
+          - crates/**/*.rs
+        at: stack
+disabled_patches: []
+history: []
+contracts:
+  allow_base: []
+  required_text: []
 ```
+
+The extension selects the codec: `.yaml`/`.yml` reads and rewrites canonical YAML; `.json` reads and rewrites canonical JSON. Both deserialize into the same typed `Manifest`, execute the same handlers, and produce the same generated evidence. Unknown or missing extensions are rejected — forkctl never sniffs bytes or silently changes a file's format.
+
+YAML parsing rejects duplicate keys, merge keys, aliases/anchors, multiple documents, odd indentation, ambiguous booleans, excessive nesting, and manifests over 2 MiB. JSON remains available for generated consumers; YAML is the readable default. Git-private operation/active state, API stdin/stdout, pretty/JSON output selection, and JSON Schema remain JSON.
 
 Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` trailers. Source patches precede tooling patches. Every source export is generated deterministically as `<exports>/<order>-<name>.patch`; tooling patches have no export. The final tooling patch owns manifest, ledger, exports, and integration files.
 
@@ -213,7 +315,7 @@ Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and 
 
 Without a manifest, `init` requires explicit repository/base/document/bookkeeping arguments and `HEAD` exactly at the resolved base. Repeatable `--allow-base GLOB` and `--required-text PATH=TEXT` options initialize declarative contracts without manual manifest edits. It creates the initial bookkeeping patch and never imports legacy commits.
 
-With a manifest, `init` idempotently reconstructs StGit metadata and fetches only exact recovery refs named by history before running the full check.
+With a manifest, `init` idempotently reconstructs StGit metadata, skips history recovery tags already present locally at the recorded object, fetches only the exact missing recovery refs named by history, and reports an actionable error naming any recovery tag the downstream remote no longer serves before running the full check.
 
 ## Agent skill
 
@@ -236,7 +338,7 @@ cargo install forkctl --locked
 
 Successful interactive commands check crates.io at most once every 24 hours and print one concise notice when a newer version is available. Checks time out after one second, fail silently, never run for JSON/completion/non-TTY output, and can be disabled with `FORKCTL_NO_UPDATE_CHECK=1`. Forkctl never overwrites its own executable: Cargo or the repository's pinned mise catalog remains the update owner.
 
-Provide supported `git` and `stg` executables on `PATH`; the mounted mise task provisions exact versions automatically.
+Provide supported `git` and `stg` executables on `PATH`, plus whatever tools your declared checks invoke; the mounted mise task provisions exact Git/StGit versions automatically.
 
 ## Development
 
@@ -244,7 +346,10 @@ Provide supported `git` and `stg` executables on `PATH`; the mounted mise task p
 mise install --locked
 mise exec -- lefthook install
 mise run verify
+mise run test:isolated
 mise run build
 ```
+
+`mise run test` uses Rust's standard parallel harness. `test:isolated` runs the same suite with cargo-nextest, one test per process. Real Git/StGit lifecycle tests use a fresh `tempfile` sandbox with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment; they never read operator aliases, credential helpers, hooks, or global config. Mounted-task tests reuse only the caller's mise installation store for the repository's exact pinned tools. Containers are reserved for future scenarios that actually require another OS, daemon, network, or toolchain image.
 
 `[workspace.package].version` is the sole forkctl release source. Root `mise.toml` is the sole source for the minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. After changing either source, run `mise run version:sync`; it regenerates `mise.lock` and every operational pin. The verification gate rejects drift and runs rustfmt, denied-warning workspace Clippy, API/schema/help/completion tests, and disposable real Git/StGit lifecycle tests.

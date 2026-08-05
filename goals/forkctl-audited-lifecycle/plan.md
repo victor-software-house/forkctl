@@ -60,7 +60,7 @@ Unknown fields remain errors. Source patches precede tooling patches; exports ar
 
 ### 1. Replace the manifest contract and deterministic projections
 
-**Files:** `src/manifest.rs`, new focused `src/ledger.rs`, `examples/fork.json`, manifest unit tests.
+**Files:** `src/manifest.rs`, new focused `src/ledger.rs`, `examples/fork.yaml`, manifest unit tests.
 
 - Replace the old upstream/bases/allow-tooling shape with the accepted schema-1 contract above.
 - Add `Downstream`, `PatchKind`, per-patch audit metadata and paths, base label, ledger path, and bookkeeping-patch identity.
