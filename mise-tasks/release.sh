@@ -35,7 +35,10 @@ asset="$work/forkctl_${version}_${os}_${arch}.tar.gz"
 tar czf "$asset" -C "$work" forkctl
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 published=false
-if cargo info "forkctl@$version" >/dev/null 2>&1; then
+# Run registry probes outside this package workspace. Inside the workspace,
+# `cargo info forkctl@VERSION` can succeed by inspecting the local package even
+# when that version does not exist on crates.io.
+if (cd "$work" && cargo info "forkctl@$version" >/dev/null 2>&1); then
   published=true
 fi
 if [ "$published" = false ] && [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
@@ -63,7 +66,7 @@ fi
 if [ "$published" = false ]; then
   cargo publish --locked
   attempts=0
-  until cargo info "forkctl@$version" >/dev/null 2>&1; do
+  until (cd "$work" && cargo info "forkctl@$version" >/dev/null 2>&1); do
     attempts=$((attempts + 1))
     [ "$attempts" -lt 12 ] || { printf 'release: crates.io did not expose forkctl@%s\n' "$version" >&2; exit 1; }
     sleep 5
