@@ -123,6 +123,18 @@ fn render_result(output: &mut String, result: &CommandResult) {
             output,
             [("patch", result.patch.clone()), ("check", "passed".into())],
         ),
+        CommandResult::PatchRemove(result)
+        | CommandResult::PatchDisable(result)
+        | CommandResult::PatchEnable(result) => fields(
+            output,
+            [
+                ("patch", result.patch.clone()),
+                ("former commit", result.commit.clone()),
+                ("new tip", result.new_tip.clone()),
+                ("recovery", result.recovery_tag.clone()),
+                ("check", "passed".into()),
+            ],
+        ),
         CommandResult::ContractEdit(result) => fields(
             output,
             [

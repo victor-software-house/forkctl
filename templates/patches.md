@@ -8,6 +8,13 @@ Base: `{{ target_selector }}` (`{{ base_sha }}`)
 |--:|:--|:--|:--|:--|:--|
 {% for patch in patches %}| {{ loop.index }} | `{{ patch.name }}` | {{ patch.kind }} | {{ patch.purpose }} | {{ patch.upstream_status }} | {{ patch.drop_when }} |
 {% endfor %}
+## Disabled
+
+| Patch | Former commit | Original position | Reason |
+|:--|:--|--:|:--|
+{% for patch in disabled %}| `{{ patch.name }}` | `{{ patch.commit }}` | {{ patch.position }} | {{ patch.reason }} |
+{% else %}| None | — | — | — |
+{% endfor %}
 ## History
 
 | Event | Patch | Former commit | Target | Purpose |

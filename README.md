@@ -55,6 +55,31 @@ mise run fork patch finish
 
 `patch create` records metadata-only active intent. `patch refresh` captures the index by default, targets the correct StGit patch, runs the consumer pre-commit hook, regenerates deterministic evidence, refreshes bookkeeping, and leaves the patch active for more edits. `patch finish` requires no remaining changes, runs the full check, and clears active state.
 
+### Remove or temporarily disable a patch
+
+```sh
+mise run fork patch remove old-policy --reason 'Upstream now provides it'
+mise run fork publish
+
+mise run fork patch disable optional-feature --reason 'Not needed on this host'
+mise run fork publish
+mise run fork patch enable optional-feature
+mise run fork publish
+```
+
+All three transitions require a clean fully checked stack and no active patch.
+They create an annotated recovery tag and publication operation, mutate the
+series through StGit, regenerate the manifest/ledger/exports, and stop at the
+same exact-lease atomic `publish` gate as rebase. The bookkeeping patch cannot
+be removed or disabled.
+
+Disabled patches are absent from the source tree and active StGit series. Their
+metadata, former commit, original position, reason, and recovery evidence remain
+under `disabled_patches`; fresh clone hydration fetches those recovery tags.
+Enabling imports the preserved patch at its former position with a 3-way apply
+and can continue or abort through the normal operation journal on conflict.
+Permanent removal writes the same evidence to manifest history instead.
+
 Explicit alternatives:
 
 ```sh

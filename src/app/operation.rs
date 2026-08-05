@@ -39,7 +39,7 @@ impl App {
                 self.continue_rebase(operation)?,
             )))),
             OperationKind::PatchEdit => {
-                let Some(OperationIntent::PatchEdit { patch }) = operation.intent.clone() else {
+                let Some(OperationIntent::Edit { patch }) = operation.intent.clone() else {
                     return Err(DomainError::operation_conflict(
                         "patch edit operation has no typed intent",
                         Some(&operation),
@@ -49,7 +49,7 @@ impl App {
                 Some(Box::new(self.continue_patch_edit(&operation, patch)?))
             }
             OperationKind::PatchRefresh => {
-                let Some(OperationIntent::PatchRefresh {
+                let Some(OperationIntent::Refresh {
                     patch,
                     capture,
                     captured_paths,
@@ -66,6 +66,26 @@ impl App {
                     patch,
                     capture,
                     captured_paths,
+                )?))
+            }
+            kind @ (OperationKind::PatchRemove
+            | OperationKind::PatchDisable
+            | OperationKind::PatchEnable) => {
+                let Some(OperationIntent::Transition {
+                    patch,
+                    commit,
+                    position,
+                    reason,
+                }) = operation.intent.clone()
+                else {
+                    return Err(DomainError::operation_conflict(
+                        "patch transition operation has no typed intent",
+                        Some(&operation),
+                    )
+                    .into());
+                };
+                Some(Box::new(self.continue_patch_transition(
+                    operation, kind, patch, commit, position, reason,
                 )?))
             }
         };
@@ -120,7 +140,11 @@ impl App {
         self.manifest = rediscovered.manifest;
         let check = self.check_restored_repository(matches!(
             operation.kind,
-            OperationKind::PatchRefresh | OperationKind::PatchEdit
+            OperationKind::PatchRefresh
+                | OperationKind::PatchEdit
+                | OperationKind::PatchRemove
+                | OperationKind::PatchDisable
+                | OperationKind::PatchEnable
         ))?;
         self.complete_local_operation(&operation)?;
         Ok(CommandResult::OperationAbort(OperationAbortResult {

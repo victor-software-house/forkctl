@@ -347,68 +347,89 @@ impl App {
     }
 
     fn check_history(&self) -> Result<()> {
+        for recovery in self.manifest()?.recovery_evidence() {
+            self.check_recovery(recovery)?;
+        }
         for event in &self.manifest()?.history {
-            let HistoryEvent::Rebase {
-                target,
-                recovery,
-                dropped,
-            } = event;
-            run(
-                &self.repo,
-                "git",
-                [
-                    "cat-file",
-                    "-e",
-                    &format!("{}^{{tag}}", recovery.tag_object),
-                ],
-            )?;
-            let local_object = capture(
-                &self.repo,
-                "git",
-                ["rev-parse", &format!("refs/tags/{}", recovery.tag)],
-            )?;
-            ensure!(
-                local_object == recovery.tag_object,
-                "history recovery tag {} differs",
-                recovery.tag
-            );
-            let old_tip = capture(
-                &self.repo,
-                "git",
-                ["rev-parse", &format!("{}^{{commit}}", recovery.tag_object)],
-            )?;
-            ensure!(
-                old_tip == recovery.old_tip,
-                "history recovery tag peels to wrong tip"
-            );
-            self.verify_target_evidence(target)?;
-            let commits = capture(
-                &self.repo,
-                "git",
-                [
-                    "rev-list",
-                    "--reverse",
-                    &format!("{}..{}", recovery.old_base, recovery.old_tip),
-                ],
-            )?;
-            let commits = commits.lines().collect::<HashSet<_>>();
-            for item in dropped {
-                ensure!(
-                    commits.contains(item.commit.as_str()),
-                    "historical patch {} is outside recovery stack",
-                    item.patch.name
-                );
-                let paths = self.patch_paths(&item.commit)?;
-                ensure!(
-                    !paths.is_empty(),
-                    "historical patch {} is empty",
-                    item.patch.name
-                );
-                Self::check_patch_paths(&item.patch, &paths)?;
-                self.check_patch_commit(&item.patch, &item.commit)?;
+            match event {
+                HistoryEvent::Rebase {
+                    target,
+                    recovery,
+                    dropped,
+                } => {
+                    self.verify_target_evidence(target)?;
+                    let commits = capture(
+                        &self.repo,
+                        "git",
+                        [
+                            "rev-list",
+                            "--reverse",
+                            &format!("{}..{}", recovery.old_base, recovery.old_tip),
+                        ],
+                    )?;
+                    let commits = commits.lines().collect::<HashSet<_>>();
+                    for item in dropped {
+                        ensure!(
+                            commits.contains(item.commit.as_str()),
+                            "historical patch {} is outside recovery stack",
+                            item.patch.name
+                        );
+                        self.check_historical_patch(&item.patch, &item.commit)?;
+                    }
+                }
+                HistoryEvent::PatchRemoved { record }
+                | HistoryEvent::PatchEnabled { record, .. } => {
+                    self.check_historical_patch(&record.patch, &record.commit)?;
+                }
             }
         }
+        for record in &self.manifest()?.disabled_patches {
+            self.check_historical_patch(&record.patch, &record.commit)?;
+        }
         Ok(())
+    }
+
+    fn check_recovery(&self, recovery: &crate::manifest::RecoveryEvidence) -> Result<()> {
+        run(
+            &self.repo,
+            "git",
+            [
+                "cat-file",
+                "-e",
+                &format!("{}^{{tag}}", recovery.tag_object),
+            ],
+        )?;
+        let local_object = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("refs/tags/{}", recovery.tag)],
+        )?;
+        ensure!(
+            local_object == recovery.tag_object,
+            "history recovery tag {} differs",
+            recovery.tag
+        );
+        let old_tip = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("{}^{{commit}}", recovery.tag_object)],
+        )?;
+        ensure!(
+            old_tip == recovery.old_tip,
+            "history recovery tag peels to wrong tip"
+        );
+        Ok(())
+    }
+
+    fn check_historical_patch(&self, patch: &crate::manifest::Patch, commit: &str) -> Result<()> {
+        let paths = self.patch_paths(commit)?;
+        ensure!(
+            !paths.is_empty(),
+            "historical patch {} is empty",
+            patch.name
+        );
+        Self::check_patch_paths(patch, &paths)?;
+        self.check_patch_commit(patch, commit)
     }
 
     pub(super) fn check_operation(&self, operation: &crate::state::OperationState) -> Result<()> {

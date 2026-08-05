@@ -2,7 +2,8 @@ use crate::manifest::{PatchKind, RequiredText};
 use crate::protocol::{
     ApiRequest, CaptureSource, CheckArgs, CheckScope, ColorMode, ContractEditArgs, EmptyArgs,
     ExecutionMode, InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs, PatchEditArgs,
-    PatchName, PatchRefreshArgs, PatchTarget, RebaseArgs, SchemaKind, ScopeEdit,
+    PatchName, PatchRefreshArgs, PatchTarget, PatchTransitionArgs, RebaseArgs, SchemaKind,
+    ScopeEdit,
 };
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
@@ -196,6 +197,30 @@ pub enum PatchCommand {
         #[command(flatten)]
         execution: DryRunArgs,
     },
+    /// Permanently remove a patch while preserving recovery evidence.
+    Remove(PatchTransitionCliArgs),
+    /// Disable a patch while retaining enough evidence to re-enable it.
+    Disable(PatchTransitionCliArgs),
+    /// Re-enable a previously disabled patch.
+    Enable {
+        /// Disabled patch name.
+        #[arg(add = crate::completion::patch_completer())]
+        name: String,
+        #[command(flatten)]
+        execution: DryRunArgs,
+    },
+}
+
+#[derive(Args)]
+pub struct PatchTransitionCliArgs {
+    /// Patch name.
+    #[arg(add = crate::completion::patch_completer())]
+    pub name: String,
+    /// Auditable operator reason for this transition.
+    #[arg(short = 'r', long, help_heading = "Audit")]
+    pub reason: String,
+    #[command(flatten)]
+    pub execution: DryRunArgs,
 }
 
 #[derive(Args)]
@@ -518,6 +543,24 @@ fn patch_action(command: PatchCommand) -> Result<CliAction> {
         }
         PatchCommand::Finish { name, execution } => CliAction::Request {
             request: Box::new(ApiRequest::PatchFinish(PatchTarget { patch: name })),
+            mode: mode(execution.dry_run),
+        },
+        PatchCommand::Remove(args) => CliAction::Request {
+            request: Box::new(ApiRequest::PatchRemove(PatchTransitionArgs {
+                patch: args.name,
+                reason: args.reason,
+            })),
+            mode: mode(args.execution.dry_run),
+        },
+        PatchCommand::Disable(args) => CliAction::Request {
+            request: Box::new(ApiRequest::PatchDisable(PatchTransitionArgs {
+                patch: args.name,
+                reason: args.reason,
+            })),
+            mode: mode(args.execution.dry_run),
+        },
+        PatchCommand::Enable { name, execution } => CliAction::Request {
+            request: Box::new(ApiRequest::PatchEnable(PatchName { patch: name })),
             mode: mode(execution.dry_run),
         },
     })

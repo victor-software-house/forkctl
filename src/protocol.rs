@@ -59,6 +59,12 @@ pub enum ApiRequest {
     PatchRefresh(PatchRefreshArgs),
     #[serde(rename = "patch.finish")]
     PatchFinish(PatchTarget),
+    #[serde(rename = "patch.remove")]
+    PatchRemove(PatchTransitionArgs),
+    #[serde(rename = "patch.disable")]
+    PatchDisable(PatchTransitionArgs),
+    #[serde(rename = "patch.enable")]
+    PatchEnable(PatchName),
     #[serde(rename = "contract.edit")]
     ContractEdit(ContractEditArgs),
     #[serde(rename = "rebase")]
@@ -88,6 +94,9 @@ impl ApiRequest {
             Self::PatchEdit(_) => "patch.edit",
             Self::PatchRefresh(_) => "patch.refresh",
             Self::PatchFinish(_) => "patch.finish",
+            Self::PatchRemove(_) => "patch.remove",
+            Self::PatchDisable(_) => "patch.disable",
+            Self::PatchEnable(_) => "patch.enable",
             Self::ContractEdit(_) => "contract.edit",
             Self::Rebase(_) => "rebase",
             Self::Publish(_) => "publish",
@@ -187,6 +196,13 @@ pub struct PatchTarget {
 #[serde(deny_unknown_fields)]
 pub struct PatchName {
     pub patch: String,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatchTransitionArgs {
+    pub patch: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
@@ -314,6 +330,9 @@ pub enum CommandResult {
     PatchEdit(PatchEditResult),
     PatchRefresh(PatchRefreshResult),
     PatchFinish(PatchFinishResult),
+    PatchRemove(PatchTransitionResult),
+    PatchDisable(PatchTransitionResult),
+    PatchEnable(PatchTransitionResult),
     ContractEdit(ContractEditResult),
     Rebase(Box<RebaseResult>),
     Publish(PublishResult),
@@ -579,6 +598,15 @@ pub struct PatchRefreshResult {
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 pub struct PatchFinishResult {
     pub patch: String,
+    pub check: CheckResult,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+pub struct PatchTransitionResult {
+    pub patch: String,
+    pub commit: String,
+    pub recovery_tag: String,
+    pub new_tip: String,
     pub check: CheckResult,
 }
 

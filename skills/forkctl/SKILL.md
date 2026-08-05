@@ -82,6 +82,27 @@ Rules:
 
 Inspect or update declared intent with `patch show`, `patch list`, and `patch edit`; consult command help for exact metadata and scope flags.
 
+## Remove or disable a patch
+
+Use forkctl transitions, never raw `stg delete`, `stg pop`, or manual manifest edits:
+
+```sh
+forkctl patch remove PATCH --reason 'Why this patch is permanently obsolete'
+forkctl publish
+
+forkctl patch disable PATCH --reason 'Why this patch is temporarily excluded'
+forkctl publish
+forkctl patch enable PATCH
+forkctl publish
+```
+
+Each transition requires a clean checked stack, creates immutable recovery
+evidence, regenerates exports and the ledger, and stops at the ordinary atomic
+exact-lease publication gate. A disabled patch is absent from the source tree
+but retained in manifest `disabled_patches` with its former commit and recovery
+tag. `operation continue` / `operation abort` own conflicts during deletion,
+replay, or re-enable. The bookkeeping patch can never be removed or disabled.
+
 ## Validate
 
 ```sh

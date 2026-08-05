@@ -103,6 +103,7 @@ impl App {
             documents: Documents { ledger, exports },
             bookkeeping_patch: bookkeeping_patch.clone(),
             patches: vec![patch.clone()],
+            disabled_patches: Vec::new(),
             history: Vec::new(),
             contracts: Contracts {
                 allow_base: args.allow_base,
@@ -165,13 +166,9 @@ impl App {
             writes: vec!["StGit metadata when absent".into()],
             hooks: Vec::new(),
             ref_updates: manifest
-                .history
-                .iter()
-                .flat_map(|event| match event {
-                    crate::manifest::HistoryEvent::Rebase { recovery, .. } => {
-                        vec![format!("refs/tags/{}", recovery.tag)]
-                    }
-                })
+                .recovery_evidence()
+                .into_iter()
+                .map(|recovery| format!("refs/tags/{}", recovery.tag))
                 .collect(),
             paths: Vec::new(),
             requires_confirmation: false,
@@ -197,8 +194,7 @@ impl App {
         )?;
         self.fetch_upstream(true)?;
         self.fetch_target(&manifest.base.target, true)?;
-        for event in &manifest.history {
-            let crate::manifest::HistoryEvent::Rebase { recovery, .. } = event;
+        for recovery in manifest.recovery_evidence() {
             let tag_ref = format!("refs/tags/{}", recovery.tag);
             let refspec = format!("{tag_ref}:{tag_ref}");
             run(

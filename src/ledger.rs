@@ -8,6 +8,7 @@ struct LedgerTemplate<'a> {
     target_selector: String,
     base_sha: &'a str,
     patches: Vec<PatchRow>,
+    disabled: Vec<DisabledRow>,
     history: Vec<HistoryRow>,
 }
 
@@ -28,6 +29,13 @@ struct HistoryRow {
     purpose: String,
 }
 
+struct DisabledRow {
+    name: String,
+    commit: String,
+    reason: String,
+    position: usize,
+}
+
 pub fn render(manifest: &Manifest) -> Result<String> {
     let history = manifest
         .history
@@ -46,6 +54,22 @@ pub fn render(manifest: &Manifest) -> Result<String> {
                     purpose: escape(&item.patch.purpose),
                 })
                 .collect::<Vec<_>>(),
+            HistoryEvent::PatchRemoved { record } => vec![HistoryRow {
+                kind: "removed",
+                patch: escape(&record.patch.name),
+                commit: record.commit.clone(),
+                target: "—".into(),
+                target_commit: "—".into(),
+                purpose: escape(&record.reason),
+            }],
+            HistoryEvent::PatchEnabled { record, .. } => vec![HistoryRow {
+                kind: "re-enabled",
+                patch: escape(&record.patch.name),
+                commit: record.commit.clone(),
+                target: "—".into(),
+                target_commit: "—".into(),
+                purpose: escape(&record.reason),
+            }],
         })
         .collect();
     LedgerTemplate {
@@ -60,6 +84,16 @@ pub fn render(manifest: &Manifest) -> Result<String> {
                 purpose: escape(&patch.purpose),
                 upstream_status: escape(&patch.upstream_status),
                 drop_when: escape(&patch.drop_when),
+            })
+            .collect(),
+        disabled: manifest
+            .disabled_patches
+            .iter()
+            .map(|record| DisabledRow {
+                name: escape(&record.patch.name),
+                commit: record.commit.clone(),
+                reason: escape(&record.reason),
+                position: record.position,
             })
             .collect(),
         history,

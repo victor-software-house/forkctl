@@ -37,6 +37,13 @@ impl App {
                     .as_ref()
                     .is_some_and(|value| value.name() == patch.name),
             })
+            .chain(manifest.disabled_patches.iter().map(|record| PatchSummary {
+                name: record.patch.name.clone(),
+                kind: record.patch.kind,
+                state: "disabled".into(),
+                commit: Some(record.commit.clone()),
+                active: false,
+            }))
             .collect();
         Ok(StatusResult {
             repository: self.repo.display().to_string(),

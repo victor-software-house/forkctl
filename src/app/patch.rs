@@ -1,11 +1,12 @@
 use super::App;
 use crate::error::DomainError;
-use crate::manifest::Patch;
+use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
 use crate::process::{capture, run};
 use crate::protocol::{
     CaptureSource, CommandResult, ExecutionMode, MutationPlan, PatchCreateArgs, PatchCreateResult,
     PatchEditArgs, PatchEditResult, PatchFinishResult, PatchListResult, PatchRefreshArgs,
-    PatchRefreshResult, PatchSelectResult, PatchShowResult, PatchSummary, PatchTarget, ScopeEdit,
+    PatchRefreshResult, PatchSelectResult, PatchShowResult, PatchSummary, PatchTarget,
+    PatchTransitionArgs, PatchTransitionResult, ScopeEdit,
 };
 use crate::state::{ActivePatchState, OperationIntent, OperationKind, OperationState};
 use anyhow::{Context, Result, ensure};
@@ -38,6 +39,18 @@ impl App {
                     .as_ref()
                     .is_some_and(|value| value.name() == patch.name),
             })
+            .chain(
+                self.manifest()?
+                    .disabled_patches
+                    .iter()
+                    .map(|record| PatchSummary {
+                        name: record.patch.name.clone(),
+                        kind: record.patch.kind,
+                        state: "disabled".into(),
+                        commit: Some(record.commit.clone()),
+                        active: false,
+                    }),
+            )
             .collect();
         Ok(PatchListResult {
             patches,
@@ -46,6 +59,21 @@ impl App {
     }
 
     pub fn patch_show(&self, target: &PatchTarget) -> Result<PatchShowResult> {
+        if let Some(name) = target.patch.as_deref()
+            && let Some(record) = self
+                .manifest()?
+                .disabled_patches
+                .iter()
+                .find(|record| record.patch.name == name)
+        {
+            return Ok(PatchShowResult {
+                patch: record.patch.clone(),
+                commit: Some(record.commit.clone()),
+                changed_paths: self.patch_paths(&record.commit)?,
+                export: None,
+                active: false,
+            });
+        }
         let (name, patch) = self.resolve_patch(target.patch.as_deref())?;
         let active = self
             .read_active()?
@@ -200,7 +228,7 @@ impl App {
         let old_kind = self.manifest()?.patch(&name).expect("patch exists").kind;
         let mut operation = self.create_operation(OperationKind::PatchEdit, None)?;
         operation.phase = "editing".into();
-        operation.intent = Some(OperationIntent::PatchEdit {
+        operation.intent = Some(OperationIntent::Edit {
             patch: patch.clone(),
         });
         self.write_operation(&operation)?;
@@ -401,7 +429,7 @@ impl App {
         let old_commit = self.patch_commit(&name).ok();
         let mut operation = self.create_operation(OperationKind::PatchRefresh, None)?;
         operation.phase = "refreshing".into();
-        operation.intent = Some(OperationIntent::PatchRefresh {
+        operation.intent = Some(OperationIntent::Refresh {
             patch: patch.clone(),
             capture: args.capture.clone(),
             captured_paths: capture_paths.clone(),
@@ -590,6 +618,343 @@ impl App {
             patch: name,
             check,
         }))
+    }
+
+    pub fn patch_remove(
+        &mut self,
+        args: PatchTransitionArgs,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
+        self.patch_deactivate(args, mode, false)
+    }
+
+    pub fn patch_disable(
+        &mut self,
+        args: PatchTransitionArgs,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
+        self.patch_deactivate(args, mode, true)
+    }
+
+    fn patch_deactivate(
+        &mut self,
+        args: PatchTransitionArgs,
+        mode: ExecutionMode,
+        disable: bool,
+    ) -> Result<CommandResult> {
+        self.require_clean()?;
+        self.require_declared_branch()?;
+        ensure!(
+            self.read_active()?.is_none(),
+            "active patch must be finished first"
+        );
+        ensure!(
+            self.read_operation()?.is_none(),
+            "another forkctl operation is in progress"
+        );
+        self.check_repository(false)?;
+        ensure!(
+            !args.reason.trim().is_empty(),
+            "transition reason is required"
+        );
+        let available = self.manifest()?.patch_names();
+        let position = self
+            .manifest()?
+            .patches
+            .iter()
+            .position(|patch| patch.name == args.patch)
+            .ok_or_else(|| DomainError::patch_not_found(&args.patch, available, None))?;
+        let patch = self.manifest()?.patches[position].clone();
+        ensure!(
+            patch.name != self.manifest()?.bookkeeping_patch,
+            "bookkeeping patch cannot be removed or disabled"
+        );
+        let commit = self.patch_commit(&patch.name)?;
+        let command = if disable {
+            "patch.disable"
+        } else {
+            "patch.remove"
+        };
+        let plan = MutationPlan {
+            command: command.into(),
+            reads: vec![self.manifest_path.display().to_string(), commit.clone()],
+            writes: vec![
+                "StGit series".into(),
+                "manifest/history".into(),
+                "generated evidence".into(),
+            ],
+            hooks: Vec::new(),
+            ref_updates: vec!["annotated recovery tag".into()],
+            paths: patch.scope.clone(),
+            requires_confirmation: false,
+        };
+        if mode == ExecutionMode::Plan {
+            return Ok(CommandResult::Plan(plan));
+        }
+        let kind = if disable {
+            OperationKind::PatchDisable
+        } else {
+            OperationKind::PatchRemove
+        };
+        let mut operation = self.create_operation(kind, None)?;
+        operation.phase = "removing".into();
+        operation.intent = Some(OperationIntent::Transition {
+            patch: patch.clone(),
+            commit: commit.clone(),
+            position,
+            reason: args.reason.clone(),
+        });
+        self.write_operation(&operation)?;
+        if let Err(error) = run(&self.repo, "stg", ["delete", &patch.name]) {
+            operation.phase = "conflict".into();
+            operation.next_actions = vec![
+                "resolve conflicts".into(),
+                "stg refresh".into(),
+                "stg push --all".into(),
+                "forkctl operation continue".into(),
+            ];
+            self.write_operation(&operation)?;
+            return Err(error).context(format!(
+                "{command} stopped; recovery tag {}",
+                operation.recovery.tag
+            ));
+        }
+        self.finish_patch_deactivate(
+            &mut operation,
+            patch,
+            commit,
+            position,
+            args.reason,
+            disable,
+        )
+    }
+
+    fn finish_patch_deactivate(
+        &mut self,
+        operation: &mut OperationState,
+        patch: Patch,
+        commit: String,
+        position: usize,
+        reason: String,
+        disable: bool,
+    ) -> Result<CommandResult> {
+        let record = DisabledPatch {
+            patch: patch.clone(),
+            commit: commit.clone(),
+            position,
+            reason,
+            recovery: operation.recovery.clone(),
+        };
+        let manifest = self.manifest_mut()?;
+        manifest
+            .patches
+            .retain(|candidate| candidate.name != patch.name);
+        if disable {
+            manifest.disabled_patches.push(record);
+        } else {
+            manifest.history.push(HistoryEvent::PatchRemoved { record });
+        }
+        self.finish_patch_transition(operation, patch.name, commit, disable)
+    }
+
+    pub fn patch_enable(&mut self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
+        self.require_clean()?;
+        self.require_declared_branch()?;
+        ensure!(
+            self.read_active()?.is_none(),
+            "active patch must be finished first"
+        );
+        ensure!(
+            self.read_operation()?.is_none(),
+            "another forkctl operation is in progress"
+        );
+        self.check_repository(false)?;
+        let record = self
+            .manifest()?
+            .disabled_patches
+            .iter()
+            .find(|record| record.patch.name == name)
+            .cloned()
+            .ok_or_else(|| {
+                DomainError::invalid_request(format!("disabled patch not found: {name}"))
+            })?;
+        let plan = MutationPlan {
+            command: "patch.enable".into(),
+            reads: vec![record.commit.clone(), record.recovery.tag.clone()],
+            writes: vec![
+                "StGit series".into(),
+                "manifest/history".into(),
+                "generated evidence".into(),
+            ],
+            hooks: vec!["commit-msg via stg import".into()],
+            ref_updates: vec!["annotated recovery tag".into()],
+            paths: record.patch.scope.clone(),
+            requires_confirmation: false,
+        };
+        if mode == ExecutionMode::Plan {
+            return Ok(CommandResult::Plan(plan));
+        }
+        let mut operation = self.create_operation(OperationKind::PatchEnable, None)?;
+        operation.phase = "enabling".into();
+        operation.intent = Some(OperationIntent::Transition {
+            patch: record.patch.clone(),
+            commit: record.commit.clone(),
+            position: record.position,
+            reason: record.reason.clone(),
+        });
+        self.write_operation(&operation)?;
+        if let Err(error) = self.apply_disabled_patch(&record) {
+            operation.phase = "conflict".into();
+            operation.next_actions = vec![
+                "resolve conflicts".into(),
+                "stg add --update".into(),
+                "stg refresh".into(),
+                "stg push --all".into(),
+                "forkctl operation continue".into(),
+            ];
+            self.write_operation(&operation)?;
+            return Err(error).context(format!(
+                "patch enable stopped; recovery tag {}",
+                operation.recovery.tag
+            ));
+        }
+        let manifest = self.manifest_mut()?;
+        manifest
+            .disabled_patches
+            .retain(|candidate| candidate.patch.name != name);
+        let insertion = record
+            .position
+            .min(manifest.patches.len().saturating_sub(1));
+        manifest.patches.insert(insertion, record.patch.clone());
+        manifest.history.push(HistoryEvent::PatchEnabled {
+            record: record.clone(),
+            recovery: operation.recovery.clone(),
+        });
+        self.finish_patch_transition(&mut operation, name.to_string(), record.commit, false)
+    }
+
+    fn apply_disabled_patch(&self, record: &DisabledPatch) -> Result<()> {
+        let active = self.manifest()?.patch_names();
+        let insertion = record.position.min(active.len().saturating_sub(1));
+        if insertion == 0 {
+            run(&self.repo, "stg", ["pop", "--all"])?;
+        } else {
+            run(&self.repo, "stg", ["goto", &active[insertion - 1]])?;
+        }
+        let patch = capture(
+            &self.repo,
+            "git",
+            ["format-patch", "--stdout", "-1", &record.commit],
+        )?;
+        let mut file = tempfile::NamedTempFile::new_in(&self.repo)?;
+        file.write_all(patch.as_bytes())?;
+        file.flush()?;
+        run(
+            &self.repo,
+            "stg",
+            [
+                OsString::from("import"),
+                OsString::from("--3way"),
+                OsString::from("--name"),
+                OsString::from(&record.patch.name),
+                file.path().as_os_str().to_owned(),
+            ],
+        )?;
+        run(&self.repo, "stg", ["push", "--all"])
+    }
+
+    pub(super) fn continue_patch_transition(
+        &mut self,
+        mut operation: OperationState,
+        kind: OperationKind,
+        patch: Patch,
+        commit: String,
+        position: usize,
+        reason: String,
+    ) -> Result<CommandResult> {
+        let conflicts = capture(
+            &self.repo,
+            "git",
+            ["diff", "--name-only", "--diff-filter=U"],
+        )?;
+        ensure!(
+            conflicts.is_empty(),
+            "unresolved paths remain: {}",
+            conflicts.lines().collect::<Vec<_>>().join(", ")
+        );
+        if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0" {
+            run(&self.repo, "stg", ["push", "--all"])?;
+        }
+        if kind == OperationKind::PatchEnable {
+            let record = self
+                .manifest()?
+                .disabled_patches
+                .iter()
+                .find(|record| record.patch.name == patch.name)
+                .cloned()
+                .ok_or_else(|| {
+                    DomainError::invalid_request(format!(
+                        "disabled patch not found: {}",
+                        patch.name
+                    ))
+                })?;
+            let manifest = self.manifest_mut()?;
+            manifest
+                .disabled_patches
+                .retain(|candidate| candidate.patch.name != patch.name);
+            let insertion = position.min(manifest.patches.len().saturating_sub(1));
+            manifest.patches.insert(insertion, patch.clone());
+            manifest.history.push(HistoryEvent::PatchEnabled {
+                record,
+                recovery: operation.recovery.clone(),
+            });
+            return self.finish_patch_transition(&mut operation, patch.name, commit, false);
+        }
+        self.finish_patch_deactivate(
+            &mut operation,
+            patch,
+            commit,
+            position,
+            reason,
+            kind == OperationKind::PatchDisable,
+        )
+    }
+
+    fn finish_patch_transition(
+        &mut self,
+        operation: &mut OperationState,
+        patch: String,
+        commit: String,
+        disabled: bool,
+    ) -> Result<CommandResult> {
+        self.write_manifest()?;
+        let exports = self.write_exports()?;
+        let ledger = self.write_ledger()?;
+        let generated = std::iter::once(self.manifest_path.clone())
+            .chain(std::iter::once(ledger))
+            .chain(exports)
+            .collect::<Vec<_>>();
+        self.refresh_bookkeeping(&generated)?;
+        let new_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+        operation.phase = "ready_to_publish".into();
+        operation.new_tip = Some(new_tip.clone());
+        operation.next_actions = vec!["forkctl publish".into()];
+        self.write_operation(operation)?;
+        let check = self.check_repository(false)?;
+        let result = PatchTransitionResult {
+            patch,
+            commit,
+            recovery_tag: operation.recovery.tag.clone(),
+            new_tip,
+            check,
+        };
+        Ok(if disabled {
+            CommandResult::PatchDisable(result)
+        } else if operation.kind == OperationKind::PatchRemove {
+            CommandResult::PatchRemove(result)
+        } else {
+            CommandResult::PatchEnable(result)
+        })
     }
 
     fn capture_paths(&self, patch: &Patch, source: &CaptureSource) -> Result<Vec<String>> {

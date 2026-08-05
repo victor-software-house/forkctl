@@ -53,6 +53,12 @@ fn patch_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
         return Vec::new();
     };
     let mut values = manifest.patch_names();
+    values.extend(
+        manifest
+            .disabled_patches
+            .iter()
+            .map(|record| record.patch.name.clone()),
+    );
     let active = git_private(&repo, "forkctl/active.json")
         .and_then(|path| std::fs::read(path).ok())
         .and_then(|bytes| serde_json::from_slice::<crate::state::ActivePatchState>(&bytes).ok())

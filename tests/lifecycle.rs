@@ -62,6 +62,83 @@ fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
 }
 
 #[test]
+fn patch_disable_enable_and_remove_preserve_audited_recovery() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "optional-feature", "optional.txt", "enabled\n");
+    create_source_patch(&fixture, "later-feature", "later.txt", "later\n");
+
+    let dry_run = fixture.forkctl_ok(&[
+        "--format",
+        "json",
+        "patch",
+        "disable",
+        "optional-feature",
+        "--reason",
+        "Not needed in this host",
+        "--dry-run",
+    ]);
+    assert!(dry_run.contains("patch.disable"));
+    assert!(fixture.repo.join("optional.txt").is_file());
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "disable",
+        "optional-feature",
+        "--reason",
+        "Not needed in this host",
+    ]);
+    assert!(!fixture.repo.join("optional.txt").exists());
+    assert!(fixture.repo.join("later.txt").is_file());
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(
+        status["result"]["patches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|patch| patch["name"] == "optional-feature" && patch["state"] == "disabled")
+    );
+    fixture.forkctl_ok(&["publish"]);
+
+    fixture.forkctl_ok(&["patch", "enable", "optional-feature"]);
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("optional.txt")).unwrap(),
+        "enabled\n"
+    );
+    assert!(fixture.repo.join("later.txt").is_file());
+    fixture.forkctl_ok(&["publish"]);
+    fixture.forkctl_ok(&["check"]);
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "remove",
+        "optional-feature",
+        "--reason",
+        "Feature retired",
+    ]);
+    assert!(!fixture.repo.join("optional.txt").exists());
+    assert!(fixture.repo.join("later.txt").is_file());
+    fixture.forkctl_ok(&["publish"]);
+    fixture.forkctl_ok(&["check"]);
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.repo.join("patches/fork.json")).unwrap()).unwrap();
+    assert!(
+        !manifest["patches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|patch| patch["name"] == "optional-feature")
+    );
+    assert!(
+        manifest["history"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["kind"] == "patch_removed")
+    );
+}
+
+#[test]
 fn staged_check_rejects_out_of_scope_paths() {
     let fixture = Fixture::new();
     fixture.forkctl_ok(&[

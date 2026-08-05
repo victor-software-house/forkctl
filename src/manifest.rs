@@ -16,6 +16,8 @@ pub struct Manifest {
     pub bookkeeping_patch: String,
     pub patches: Vec<Patch>,
     #[serde(default)]
+    pub disabled_patches: Vec<DisabledPatch>,
+    #[serde(default)]
     pub history: Vec<HistoryEvent>,
     #[serde(default)]
     pub contracts: Contracts,
@@ -98,6 +100,13 @@ pub enum HistoryEvent {
         recovery: RecoveryEvidence,
         dropped: Vec<DroppedPatch>,
     },
+    PatchRemoved {
+        record: DisabledPatch,
+    },
+    PatchEnabled {
+        record: DisabledPatch,
+        recovery: RecoveryEvidence,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
@@ -116,6 +125,16 @@ pub struct DroppedPatch {
     pub commit: String,
 }
 
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DisabledPatch {
+    pub patch: Patch,
+    pub commit: String,
+    pub position: usize,
+    pub reason: String,
+    pub recovery: RecoveryEvidence,
+}
+
 #[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Contracts {
@@ -131,9 +150,29 @@ pub struct RequiredText {
 }
 
 impl Manifest {
+    pub fn recovery_evidence(&self) -> Vec<&RecoveryEvidence> {
+        let mut recoveries = self
+            .disabled_patches
+            .iter()
+            .map(|record| &record.recovery)
+            .collect::<Vec<_>>();
+        for event in &self.history {
+            match event {
+                HistoryEvent::Rebase { recovery, .. } => recoveries.push(recovery),
+                HistoryEvent::PatchRemoved { record } => recoveries.push(&record.recovery),
+                HistoryEvent::PatchEnabled { record, recovery } => {
+                    recoveries.push(&record.recovery);
+                    recoveries.push(recovery);
+                }
+            }
+        }
+        recoveries
+    }
+
     pub fn validate(&self, repo: &Path, manifest_path: &Path) -> Result<()> {
         self.validate_identity()?;
         self.validate_patches()?;
+        self.validate_disabled_patches()?;
         self.validate_bookkeeping(repo, manifest_path)?;
         self.validate_history()?;
         self.validate_contracts(repo)?;
@@ -210,6 +249,40 @@ impl Manifest {
         Ok(())
     }
 
+    fn validate_disabled_patches(&self) -> Result<()> {
+        let active = self
+            .patches
+            .iter()
+            .map(|patch| patch.name.as_str())
+            .collect::<HashSet<_>>();
+        let mut disabled = HashSet::new();
+        for record in &self.disabled_patches {
+            record.patch.validate()?;
+            ensure!(
+                disabled.insert(record.patch.name.as_str()),
+                "duplicate disabled patch: {}",
+                record.patch.name
+            );
+            ensure!(
+                !active.contains(record.patch.name.as_str()),
+                "patch cannot be active and disabled: {}",
+                record.patch.name
+            );
+            ensure!(
+                is_full_sha(&record.commit),
+                "disabled patch commit must be a full SHA"
+            );
+            ensure!(
+                !record.reason.trim().is_empty(),
+                "disabled patch reason is required"
+            );
+            record
+                .recovery
+                .validate(&self.downstream.recovery_tag_prefix)?;
+        }
+        Ok(())
+    }
+
     fn validate_bookkeeping(&self, repo: &Path, manifest_path: &Path) -> Result<()> {
         let manifest_relative = manifest_path.strip_prefix(repo)?.to_string_lossy();
         validate_repo_path(repo, &manifest_relative)?;
@@ -273,29 +346,63 @@ impl Manifest {
     fn validate_history(&self) -> Result<()> {
         let mut identities = HashSet::new();
         for event in &self.history {
-            let HistoryEvent::Rebase {
-                target,
-                recovery,
-                dropped,
-            } = event;
-            target.validate()?;
-            recovery.validate(&self.downstream.recovery_tag_prefix)?;
-            ensure!(
-                !dropped.is_empty(),
-                "rebase history must contain dropped patches"
-            );
-            for item in dropped {
-                item.patch.validate()?;
-                ensure!(
-                    is_full_sha(&item.commit),
-                    "history commit must be a full SHA"
-                );
-                ensure!(
-                    identities.insert((item.patch.name.as_str(), item.commit.as_str())),
-                    "duplicate history event for {} at {}",
-                    item.patch.name,
-                    item.commit
-                );
+            match event {
+                HistoryEvent::Rebase {
+                    target,
+                    recovery,
+                    dropped,
+                } => {
+                    target.validate()?;
+                    recovery.validate(&self.downstream.recovery_tag_prefix)?;
+                    ensure!(
+                        !dropped.is_empty(),
+                        "rebase history must contain dropped patches"
+                    );
+                    for item in dropped {
+                        item.patch.validate()?;
+                        ensure!(
+                            is_full_sha(&item.commit),
+                            "history commit must be a full SHA"
+                        );
+                        ensure!(
+                            identities.insert((item.patch.name.as_str(), item.commit.as_str())),
+                            "duplicate history event for {} at {}",
+                            item.patch.name,
+                            item.commit
+                        );
+                    }
+                }
+                HistoryEvent::PatchRemoved { record } => {
+                    record.patch.validate()?;
+                    record
+                        .recovery
+                        .validate(&self.downstream.recovery_tag_prefix)?;
+                    ensure!(
+                        is_full_sha(&record.commit),
+                        "history commit must be a full SHA"
+                    );
+                    ensure!(
+                        !record.reason.trim().is_empty(),
+                        "history reason is required"
+                    );
+                    ensure!(
+                        identities.insert((record.patch.name.as_str(), record.commit.as_str())),
+                        "duplicate history event for {} at {}",
+                        record.patch.name,
+                        record.commit
+                    );
+                }
+                HistoryEvent::PatchEnabled { record, recovery } => {
+                    record.patch.validate()?;
+                    record
+                        .recovery
+                        .validate(&self.downstream.recovery_tag_prefix)?;
+                    recovery.validate(&self.downstream.recovery_tag_prefix)?;
+                    ensure!(
+                        is_full_sha(&record.commit),
+                        "history commit must be a full SHA"
+                    );
+                }
             }
         }
         Ok(())
@@ -575,6 +682,7 @@ mod tests {
                     "patches/downstream/**".into(),
                 ],
             }],
+            disabled_patches: Vec::new(),
             history: Vec::new(),
             contracts: Contracts::default(),
         }

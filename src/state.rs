@@ -24,6 +24,9 @@ impl ActivePatchState {
 pub enum OperationKind {
     PatchRefresh,
     PatchEdit,
+    PatchRemove,
+    PatchDisable,
+    PatchEnable,
     Rebase,
 }
 
@@ -44,13 +47,19 @@ pub struct ReportEvidence {
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OperationIntent {
-    PatchEdit {
+    Edit {
         patch: Patch,
     },
-    PatchRefresh {
+    Refresh {
         patch: Patch,
         capture: CaptureSource,
         captured_paths: Vec<String>,
+    },
+    Transition {
+        patch: Patch,
+        commit: String,
+        position: usize,
+        reason: String,
     },
 }
 
