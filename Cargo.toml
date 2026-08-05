@@ -19,7 +19,7 @@ members = ["xtask"]
 resolver = "3"
 
 [workspace.package]
-version = "0.0.13"
+version = "0.0.14"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
