@@ -35,6 +35,7 @@ asset="$work/forkctl_${version}_${os}_${arch}.tar.gz"
 tar czf "$asset" -C "$work" forkctl
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 published=false
+draft=false
 # Run registry probes outside this package workspace. Inside the workspace,
 # `cargo info forkctl@VERSION` can succeed by inspecting the local package even
 # when that version does not exist on crates.io.
