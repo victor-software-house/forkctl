@@ -336,6 +336,8 @@ Add `--global` when the skill should be available outside one project, and use t
 cargo install forkctl --locked
 ```
 
+Forkctl supports Linux and macOS. Windows is not currently supported: the mounted mise tasks use a POSIX shell, and declared checks execute through `sh -c`. Shell completion generation for PowerShell remains available for compatible Unix-hosted PowerShell environments.
+
 Successful interactive commands check crates.io at most once every 24 hours and print one concise notice when a newer version is available. Checks time out after one second, fail silently, never run for JSON/completion/non-TTY output, and can be disabled with `FORKCTL_NO_UPDATE_CHECK=1`. Forkctl never overwrites its own executable: Cargo or the repository's pinned mise catalog remains the update owner.
 
 Provide supported `git` and `stg` executables on `PATH`, plus whatever tools your declared checks invoke; the mounted mise task provisions exact Git/StGit versions automatically.
@@ -355,6 +357,8 @@ mise run verify
 mise run test:isolated
 mise run build
 ```
+
+Pull requests and branch pushes run those gates on GitHub's free public-repository `ubuntu-latest` and `macos-latest` hosted runners; concurrency collapses same-repository push/PR duplicates by branch. External actions are pinned to immutable commits; CI has read-only repository permissions.
 
 `mise run test` uses Rust's standard parallel harness. `test:isolated` runs the same suite with cargo-nextest, one test per process. Real Git/StGit lifecycle tests use a fresh `tempfile` sandbox with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment; they never read operator aliases, credential helpers, hooks, or global config. Mounted-task tests reuse only the caller's mise installation store for the repository's exact pinned tools. Containers are reserved for future scenarios that actually require another OS, daemon, network, or toolchain image.
 
