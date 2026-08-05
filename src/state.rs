@@ -77,6 +77,8 @@ pub struct OperationState {
     pub old_patches: Vec<PatchCommitEvidence>,
     pub recovery: RecoveryEvidence,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication_recovery: Option<RecoveryEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intent: Option<OperationIntent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<BaseTarget>,

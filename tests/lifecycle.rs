@@ -719,6 +719,120 @@ fn publish_rejects_stale_lease_without_partial_refs() {
 }
 
 #[test]
+fn publish_retry_verifies_completed_remote_refs_and_cleans_local_operation() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "optional-feature", "optional.txt", "enabled\n");
+    create_source_patch(&fixture, "later-feature", "later.txt", "later\n");
+    fixture.forkctl_ok(&["publish"]);
+    let remote_before =
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"])
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string();
+    let response = fixture.forkctl_ok(&[
+        "--format",
+        "json",
+        "patch",
+        "disable",
+        "optional-feature",
+        "--reason",
+        "Not needed in this host",
+    ]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let tag = response["result"]["recovery_tag"].as_str().unwrap();
+    let tag_ref = format!("refs/tags/{tag}");
+    let tag_object = git_capture_dynamic(&fixture.repo, &["rev-parse", &tag_ref]);
+    let lease = format!("--force-with-lease=refs/heads/main:{remote_before}");
+    let tag_refspec = format!("{tag_ref}:{tag_ref}");
+
+    git_ok_dynamic(
+        &fixture.repo,
+        &[
+            "push",
+            "--atomic",
+            &lease,
+            "origin",
+            &tag_refspec,
+            "HEAD:refs/heads/main",
+        ],
+    );
+    assert_operation_present(&fixture);
+
+    let retry = fixture.forkctl_ok(&["--format", "json", "publish"]);
+    let retry: serde_json::Value = serde_json::from_str(&retry).unwrap();
+    assert_eq!(retry["result"]["already_published"], true);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", &tag_ref])
+            .split_whitespace()
+            .next()
+            .unwrap(),
+        tag_object
+    );
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+    let snapshot = git_capture_dynamic(
+        &fixture.repo,
+        &["rev-parse", "--git-path", "forkctl/manifest.json"],
+    );
+    let snapshot = std::path::PathBuf::from(snapshot);
+    let snapshot = if snapshot.is_absolute() {
+        snapshot
+    } else {
+        fixture.repo.join(snapshot)
+    };
+    assert!(!snapshot.exists());
+}
+
+#[test]
+fn publish_repairs_branch_only_update_with_missing_recovery_evidence() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let remote_before =
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"])
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string();
+    let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let tag = response["result"]["recovery_tag"].as_str().unwrap();
+    let tag_ref = format!("refs/tags/{tag}");
+    let lease = format!("--force-with-lease=refs/heads/main:{remote_before}");
+
+    git_ok_dynamic(
+        &fixture.repo,
+        &["push", &lease, "origin", "HEAD:refs/heads/main"],
+    );
+    assert!(git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", &tag_ref]).is_empty());
+
+    let repair = fixture.forkctl_ok(&["--format", "json", "publish"]);
+    let repair: serde_json::Value = serde_json::from_str(&repair).unwrap();
+    assert_eq!(repair["result"]["already_published"], false);
+    let recoveries = repair["result"]["recovery_tags"].as_array().unwrap();
+    assert_eq!(recoveries.len(), 2);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", &tag_ref])
+            .split_whitespace()
+            .next()
+            .unwrap(),
+        response["result"]["recovery_tag_object"].as_str().unwrap()
+    );
+    assert!(recoveries.iter().any(|recovery| {
+        let tag = recovery.as_str().unwrap().split(" -> ").next().unwrap();
+        git_capture_dynamic(
+            &fixture.repo,
+            &["rev-parse", &format!("refs/tags/{tag}^{{commit}}")],
+        ) == remote_before
+    }));
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+}
+
+#[test]
 fn publish_rejects_conflicting_remote_recovery_tag() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");

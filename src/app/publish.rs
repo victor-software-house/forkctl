@@ -3,8 +3,7 @@ use crate::error::DomainError;
 use crate::manifest::RecoveryEvidence;
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishResult};
-use crate::state::OperationKind;
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 
 const READY_TO_PUBLISH: &str = "ready_to_publish";
 
@@ -16,15 +15,19 @@ struct Publication {
     branch_refspec: String,
     fast_forward: bool,
     operation_recovery: Option<RecoveryEvidence>,
-    needs_publication_recovery: bool,
+    prepared_recovery: Option<RecoveryEvidence>,
+    overwritten_tip: Option<String>,
     clears_operation: bool,
 }
 
 impl App {
     pub fn publish(&self, mode: ExecutionMode) -> Result<CommandResult> {
         let publication = self.preflight_publication()?;
-        if publication.remote_sha == publication.head {
-            return Ok(self.already_published(&publication, mode));
+        if publication.remote_sha == publication.head
+            && (!publication.clears_operation
+                || self.operation_recovery_is_published(&publication)?)
+        {
+            return self.already_published(&publication, mode);
         }
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(publication_plan(&publication)));
@@ -54,10 +57,6 @@ impl App {
                 .into());
             }
             ensure!(
-                operation.kind == OperationKind::Rebase,
-                "only rebase operations require publication review"
-            );
-            ensure!(
                 operation.new_tip.as_deref() == Some(head.as_str()),
                 "operation does not describe current HEAD"
             );
@@ -67,9 +66,6 @@ impl App {
         let downstream_ref = self.downstream_ref()?;
         let remote_sha = self.downstream_sha()?;
         let fast_forward = remote_sha == head || self.is_ancestor(&remote_sha, &head)?;
-        let operation_recovery = operation
-            .as_ref()
-            .map(|operation| operation.recovery.clone());
         if !fast_forward {
             let expected = match &operation {
                 Some(operation) => operation.expected_remote_sha.clone(),
@@ -85,10 +81,21 @@ impl App {
                 .into());
             }
         }
-        let needs_publication_recovery = !fast_forward
-            && operation_recovery
-                .as_ref()
-                .is_none_or(|recovery| recovery.old_tip != remote_sha);
+        let (operation_recovery, prepared_recovery, overwritten_tip) = match &operation {
+            Some(operation) => (
+                Some(operation.recovery.clone()),
+                operation.publication_recovery.clone(),
+                (operation.recovery.old_tip != operation.expected_remote_sha)
+                    .then(|| operation.expected_remote_sha.clone()),
+            ),
+            None => (None, None, (!fast_forward).then(|| remote_sha.clone())),
+        };
+        if let Some(recovery) = &prepared_recovery {
+            ensure!(
+                overwritten_tip.as_deref() == Some(recovery.old_tip.as_str()),
+                "publication recovery does not preserve the expected remote tip"
+            );
+        }
         Ok(Publication {
             head,
             lease: format!("--force-with-lease={downstream_ref}:{remote_sha}"),
@@ -97,14 +104,19 @@ impl App {
             downstream_ref,
             fast_forward,
             operation_recovery,
-            needs_publication_recovery,
+            prepared_recovery,
+            overwritten_tip,
             clears_operation: operation.is_some(),
         })
     }
 
-    fn already_published(&self, publication: &Publication, mode: ExecutionMode) -> CommandResult {
+    fn already_published(
+        &self,
+        publication: &Publication,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
         if mode == ExecutionMode::Plan {
-            return CommandResult::Plan(MutationPlan {
+            return Ok(CommandResult::Plan(MutationPlan {
                 command: "publish".into(),
                 reads: vec![publication.head.clone(), publication.remote_sha.clone()],
                 writes: Vec::new(),
@@ -112,9 +124,12 @@ impl App {
                 ref_updates: Vec::new(),
                 paths: Vec::new(),
                 requires_confirmation: false,
-            });
+            }));
         }
-        CommandResult::Publish(PublishResult {
+        if publication.clears_operation {
+            self.complete_published_operation()?;
+        }
+        Ok(CommandResult::Publish(PublishResult {
             branch: self
                 .manifest()
                 .map(|manifest| manifest.downstream.branch.clone())
@@ -125,7 +140,53 @@ impl App {
             recovery_tags: Vec::new(),
             pushed_refs: Vec::new(),
             expected_lease: publication.remote_sha.clone(),
-        })
+        }))
+    }
+
+    fn operation_recovery_is_published(&self, publication: &Publication) -> Result<bool> {
+        if let Some(recovery) = &publication.operation_recovery
+            && !self.recovery_ref_is_published(&recovery.tag, &recovery.tag_object)?
+        {
+            return Ok(false);
+        }
+        match &publication.overwritten_tip {
+            Some(_) => match &publication.prepared_recovery {
+                Some(recovery) => {
+                    self.recovery_ref_is_published(&recovery.tag, &recovery.tag_object)
+                }
+                None => Ok(false),
+            },
+            None => Ok(true),
+        }
+    }
+
+    fn recovery_ref_is_published(&self, tag: &str, tag_object: &str) -> Result<bool> {
+        let manifest = self.manifest()?;
+        let git_ref = format!("refs/tags/{tag}");
+        let line = capture(
+            &self.repo,
+            "git",
+            ["ls-remote", &manifest.downstream.remote, &git_ref],
+        )?;
+        if line.is_empty() {
+            return Ok(false);
+        }
+        let mut fields = line.split_whitespace();
+        let actual = fields.next().context("remote ref output has no SHA")?;
+        ensure!(
+            fields.next() == Some(git_ref.as_str()),
+            "unexpected remote ref output: {line}"
+        );
+        if actual != tag_object {
+            return Err(DomainError::publication_ref_mismatch(
+                manifest.downstream.remote.clone(),
+                git_ref,
+                tag_object.to_string(),
+                actual.to_string(),
+            )
+            .into());
+        }
+        Ok(true)
     }
 
     fn publication_recovery_tags(
@@ -136,26 +197,34 @@ impl App {
         if let Some(recovery) = &publication.operation_recovery {
             tags.push((recovery.tag.clone(), recovery.tag_object.clone()));
         }
-        if publication.needs_publication_recovery {
-            let id = recovery_id(&publication.remote_sha)?;
-            let (tag, object) =
-                self.create_recovery_tag(&id, &publication.remote_sha, "publication")?;
-            tags.push((tag, object));
+        if let Some(tip) = &publication.overwritten_tip {
+            let recovery = if let Some(recovery) = &publication.prepared_recovery {
+                recovery.clone()
+            } else {
+                let id = recovery_id(tip)?;
+                let (tag, tag_object) = self.create_recovery_tag(&id, tip, "publication")?;
+                let recovery = RecoveryEvidence {
+                    tag,
+                    tag_object,
+                    old_base: tip.clone(),
+                    old_tip: tip.clone(),
+                };
+                if publication.clears_operation {
+                    let mut operation = self.read_operation()?.ok_or_else(|| {
+                        DomainError::operation_conflict(
+                            "publication operation disappeared before recovery evidence was recorded",
+                            None,
+                        )
+                    })?;
+                    operation.publication_recovery = Some(recovery.clone());
+                    self.write_operation(&operation)?;
+                }
+                recovery
+            };
+            tags.push((recovery.tag, recovery.tag_object));
         }
-        let remote = self.manifest()?.downstream.remote.clone();
         for (tag, object) in &tags {
-            let tag_ref = format!("refs/tags/{tag}");
-            if let Ok(remote_object) = self.remote_ref_sha(&remote, &tag_ref)
-                && remote_object != *object
-            {
-                return Err(DomainError::publication_ref_mismatch(
-                    remote,
-                    tag_ref,
-                    object.clone(),
-                    remote_object,
-                )
-                .into());
-            }
+            let _ = self.recovery_ref_is_published(tag, object)?;
         }
         Ok(tags)
     }
@@ -208,7 +277,7 @@ impl App {
             );
         }
         if publication.clears_operation {
-            self.clear_operation()?;
+            self.complete_published_operation()?;
         }
         Ok(CommandResult::Publish(PublishResult {
             branch: manifest.downstream.branch.clone(),
@@ -233,11 +302,10 @@ fn publication_plan(publication: &Publication) -> MutationPlan {
     if let Some(recovery) = &publication.operation_recovery {
         ref_updates.push(format!("refs/tags/{}", recovery.tag));
     }
-    if publication.needs_publication_recovery {
-        ref_updates.push(format!(
-            "new annotated recovery tag at overwritten {}",
-            publication.remote_sha
-        ));
+    if let Some(recovery) = &publication.prepared_recovery {
+        ref_updates.push(format!("refs/tags/{}", recovery.tag));
+    } else if let Some(tip) = &publication.overwritten_tip {
+        ref_updates.push(format!("new annotated recovery tag at overwritten {tip}"));
     }
     MutationPlan {
         command: "publish".into(),

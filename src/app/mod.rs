@@ -544,6 +544,14 @@ impl App {
             "git",
             ["tag", "--delete", &operation.recovery.tag],
         )?;
+        if let Some(recovery) = &operation.publication_recovery {
+            run(&self.repo, "git", ["tag", "--delete", &recovery.tag])?;
+        }
+        remove_optional(&self.operation_manifest_snapshot_path()?)?;
+        self.clear_operation()
+    }
+
+    pub(super) fn complete_published_operation(&self) -> Result<()> {
         remove_optional(&self.operation_manifest_snapshot_path()?)?;
         self.clear_operation()
     }
@@ -594,6 +602,7 @@ impl App {
                 old_base,
                 old_tip,
             },
+            publication_recovery: None,
             intent: None,
             target,
             new_base: None,

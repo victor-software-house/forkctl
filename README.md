@@ -124,6 +124,8 @@ Publish covers every unpublished downstream state, not only rebases:
 | rewritten history | creates an immutable annotated recovery tag at the **overwritten published tip**, then pushes tag plus branch atomically under an exact lease |
 | rewritten history after a reviewed rebase | reuses the rebase recovery tag when it already preserves the overwritten tip, otherwise publishes both |
 
+If the branch already matches while a ready operation remains, `publish` verifies every recorded recovery ref before clearing the local journal and snapshot. Exact refs make the retry idempotent; missing required evidence is published atomically under the unchanged branch lease, while mismatched evidence fails closed.
+
 Every rewrite requires exact evidence that it was computed against the current published tip: the reviewed rebase lease when an operation journal exists, otherwise the fetched downstream tracking ref. A remote that advanced beyond that evidence fails with `remote_advanced` and changes no ref. There is no force, lease, or atomic fallback and no provider ruleset administration.
 
 ## Hooks

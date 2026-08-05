@@ -469,6 +469,26 @@ impl App {
             peeled == operation.old_tip,
             "operation recovery tag peels to wrong tip"
         );
+        if let Some(recovery) = &operation.publication_recovery {
+            let local_object = capture(
+                &self.repo,
+                "git",
+                ["rev-parse", &format!("refs/tags/{}", recovery.tag)],
+            )?;
+            ensure!(
+                local_object == recovery.tag_object,
+                "publication recovery tag object differs"
+            );
+            let peeled = capture(
+                &self.repo,
+                "git",
+                ["rev-parse", &format!("{}^{{commit}}", recovery.tag_object)],
+            )?;
+            ensure!(
+                peeled == recovery.old_tip,
+                "publication recovery tag peels to wrong tip"
+            );
+        }
         if let Some(new_tip) = &operation.new_tip {
             ensure!(
                 capture(&self.repo, "git", ["rev-parse", "HEAD"])? == *new_tip,
