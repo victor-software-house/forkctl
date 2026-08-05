@@ -246,6 +246,70 @@ fn api_domain_errors_are_typed_at_the_boundary() {
 }
 
 #[test]
+fn mutation_preconditions_are_typed_client_errors() {
+    let fixture = Fixture::new();
+
+    let duplicate = fixture.api_call(
+        "execute",
+        &serde_json::json!({
+            "command":"patch.create",
+            "arguments":{
+                "name":"fork-tooling",
+                "kind":"tooling",
+                "purpose":"duplicate patch",
+                "upstream_status":"not-submitted",
+                "drop_when":"never",
+                "scope":["FORK.md"]
+            }
+        }),
+    );
+    assert!(!duplicate.status.success());
+    let duplicate: serde_json::Value = serde_json::from_slice(&duplicate.stdout).unwrap();
+    assert_eq!(duplicate["error"]["code"], "invalid_request");
+    assert_eq!(duplicate["error"]["details"]["type"], "request");
+    assert_eq!(
+        duplicate["error"]["message"],
+        "patch already exists: fork-tooling"
+    );
+
+    for (command, arguments) in [
+        ("operation.continue", serde_json::json!({})),
+        ("operation.abort", serde_json::json!({"confirmed": true})),
+    ] {
+        let missing_operation = fixture.api_call(
+            "execute",
+            &serde_json::json!({"command": command, "arguments": arguments}),
+        );
+        assert!(!missing_operation.status.success());
+        let missing_operation: serde_json::Value =
+            serde_json::from_slice(&missing_operation.stdout).unwrap();
+        assert_eq!(missing_operation["error"]["code"], "invalid_request");
+        assert_eq!(missing_operation["error"]["details"]["type"], "request");
+        assert_eq!(
+            missing_operation["error"]["message"],
+            "no forkctl operation is in progress"
+        );
+    }
+
+    support::git_ok(&fixture.repo, ["checkout", "-b", "other"]);
+    let wrong_branch = fixture.api_call(
+        "execute",
+        &serde_json::json!({
+            "command":"patch.edit",
+            "arguments":{"patch":"fork-tooling","purpose":"new purpose"}
+        }),
+    );
+    assert!(!wrong_branch.status.success());
+    let wrong_branch: serde_json::Value = serde_json::from_slice(&wrong_branch.stdout).unwrap();
+    assert_eq!(wrong_branch["error"]["code"], "invalid_request");
+    assert_eq!(wrong_branch["error"]["details"]["type"], "request");
+    assert_eq!(
+        wrong_branch["error"]["message"],
+        "current branch is other, expected main"
+    );
+}
+
+#[test]
 fn repository_discovery_failure_is_typed() {
     let directory = tempfile::tempdir().unwrap();
     let invocation = serde_json::json!({

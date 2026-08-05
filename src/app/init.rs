@@ -1,19 +1,22 @@
 use super::{App, resolve_target};
+use crate::error::DomainError;
 use crate::manifest::{
     Base, Contracts, Documents, Downstream, Manifest, Patch, PatchKind, Upstream,
 };
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, MutationPlan};
-use anyhow::{Context, Result, ensure};
+use anyhow::Result;
 use std::ffi::OsString;
 
 impl App {
     pub fn init(&mut self, args: InitArgs, mode: ExecutionMode) -> Result<CommandResult> {
         if self.manifest_present() {
-            ensure!(
-                !args.is_bootstrap(),
-                "bootstrap options require an absent manifest"
-            );
+            if args.is_bootstrap() {
+                return Err(DomainError::invalid_request(
+                    "bootstrap options require an absent manifest",
+                )
+                .into());
+            }
             self.manifest()?;
             return self.hydrate(mode);
         }
@@ -22,31 +25,27 @@ impl App {
 
     fn bootstrap(&mut self, args: InitArgs, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
-        let upstream_remote = args
-            .upstream_remote
-            .context("--upstream-remote is required")?;
-        let upstream_url = args.upstream_url.context("--upstream-url is required")?;
-        let upstream_ref = args.upstream_ref.context("--upstream-ref is required")?;
-        let downstream_remote = args
-            .downstream_remote
-            .context("--downstream-remote is required")?;
-        let downstream_branch = args
-            .downstream_branch
-            .context("--downstream-branch is required")?;
-        let base = args.base.context("--base is required")?;
-        let ledger = args.ledger.context("--ledger is required")?;
-        let exports = args.exports.context("--exports is required")?;
-        let bookkeeping_patch = args
-            .bookkeeping_patch
-            .context("--bookkeeping-patch is required")?;
-        ensure!(
-            self.current_branch()? == downstream_branch,
-            "current branch must equal downstream branch {downstream_branch}"
-        );
-        ensure!(
-            self.stg_series()?.is_empty(),
-            "bootstrap requires no existing StGit patches"
-        );
+        let upstream_remote = required(args.upstream_remote, "--upstream-remote")?;
+        let upstream_url = required(args.upstream_url, "--upstream-url")?;
+        let upstream_ref = required(args.upstream_ref, "--upstream-ref")?;
+        let downstream_remote = required(args.downstream_remote, "--downstream-remote")?;
+        let downstream_branch = required(args.downstream_branch, "--downstream-branch")?;
+        let base = required(args.base, "--base")?;
+        let ledger = required(args.ledger, "--ledger")?;
+        let exports = required(args.exports, "--exports")?;
+        let bookkeeping_patch = required(args.bookkeeping_patch, "--bookkeeping-patch")?;
+        if self.current_branch()? != downstream_branch {
+            return Err(DomainError::invalid_request(format!(
+                "current branch must equal downstream branch {downstream_branch}"
+            ))
+            .into());
+        }
+        if !self.stg_series()?.is_empty() {
+            return Err(DomainError::invalid_request(
+                "bootstrap requires no existing StGit patches",
+            )
+            .into());
+        }
 
         ensure_remote(&self.repo, &upstream_remote, &upstream_url)?;
         run(
@@ -56,11 +55,13 @@ impl App {
         )?;
         let target = resolve_target(&self.repo, &upstream_remote, &base)?;
         let head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
-        ensure!(
-            head == target.commit,
-            "bootstrap HEAD is {head}, expected base {}",
-            target.commit
-        );
+        if head != target.commit {
+            return Err(DomainError::invalid_request(format!(
+                "bootstrap HEAD is {head}, expected base {}",
+                target.commit
+            ))
+            .into());
+        }
         let manifest_relative = self
             .manifest_path
             .strip_prefix(&self.repo)?
@@ -157,10 +158,9 @@ impl App {
     fn hydrate(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        ensure!(
-            self.read_operation()?.is_none(),
-            "an operation is in progress"
-        );
+        if let Some(operation) = self.read_operation()? {
+            return Err(DomainError::operation_in_progress(&operation).into());
+        }
         let manifest = self.manifest()?.clone();
         let plan = MutationPlan {
             command: "init".into(),
@@ -228,11 +228,13 @@ impl App {
         let hydrated = if actual == expected {
             false
         } else {
-            ensure!(
-                actual.is_empty(),
-                "existing StGit stack differs: {}",
-                actual.join(", ")
-            );
+            if !actual.is_empty() {
+                return Err(DomainError::invalid_request(format!(
+                    "existing StGit stack differs: {}",
+                    actual.join(", ")
+                ))
+                .into());
+            }
             run(&self.repo, "stg", ["init"])?;
             let command = std::iter::once("uncommit".to_string())
                 .chain(expected.iter().rev().cloned())
@@ -255,9 +257,18 @@ impl App {
 fn ensure_remote(repo: &std::path::Path, name: &str, url: &str) -> Result<()> {
     match capture(repo, "git", ["remote", "get-url", name]) {
         Ok(actual) => {
-            ensure!(actual == url, "remote {name} is {actual}, expected {url}");
+            if actual != url {
+                return Err(DomainError::invalid_request(format!(
+                    "remote {name} is {actual}, expected {url}"
+                ))
+                .into());
+            }
             Ok(())
         }
         Err(_) => run(repo, "git", ["remote", "add", name, url]),
     }
+}
+
+fn required<T>(value: Option<T>, option: &str) -> Result<T> {
+    value.ok_or_else(|| DomainError::invalid_request(format!("{option} is required")).into())
 }

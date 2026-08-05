@@ -6,7 +6,7 @@ use crate::protocol::{
     OperationStatusResult,
 };
 use crate::state::{OperationIntent, OperationKind};
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 impl App {
     pub fn operation_status(&self) -> Result<OperationStatusResult> {
@@ -18,7 +18,7 @@ impl App {
     pub fn operation_continue(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
         let operation = self
             .read_operation()?
-            .context("no forkctl operation is in progress")?;
+            .ok_or_else(|| DomainError::invalid_request("no forkctl operation is in progress"))?;
         self.load_operation_manifest()?;
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(MutationPlan {
@@ -104,7 +104,7 @@ impl App {
     ) -> Result<CommandResult> {
         let operation = self
             .read_operation()?
-            .context("no forkctl operation is in progress")?;
+            .ok_or_else(|| DomainError::invalid_request("no forkctl operation is in progress"))?;
         self.load_operation_manifest()?;
         let plan = MutationPlan {
             command: "operation.abort".into(),
