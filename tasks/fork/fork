@@ -3,7 +3,7 @@
 #MISE description="Run the complete forkctl CLI with exact Git/StGit tools and mounted shell completion"
 #MISE dir="{{cwd}}"
 #MISE raw_args=true
-#MISE tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.17" }
+#MISE tools = { rust = "1.97.1", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.18" }
 #USAGE mount "mise run --quiet fork -- --usage-spec=fork"
 
 set -euo pipefail

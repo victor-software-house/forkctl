@@ -10,6 +10,7 @@ mod process;
 mod protocol;
 mod report;
 mod state;
+mod update;
 mod view;
 
 use anyhow::{Context, Result};
@@ -52,11 +53,17 @@ fn main() -> ExitCode {
                 |error| ApiResponse::error(command, mode, api_error(&error)),
                 |outcome| ApiResponse::success(command, mode, outcome),
             );
-            if emit_response(&response, output, color, quiet).is_ok() {
-                response_exit(&response)
-            } else {
-                ExitCode::FAILURE
+            if emit_response(&response, output, color, quiet).is_err() {
+                return ExitCode::FAILURE;
             }
+            if matches!(response, ApiResponse::Success { .. })
+                && output == OutputFormat::Pretty
+                && !quiet
+                && let Some(notice) = update::available_notice()
+            {
+                eprintln!("{notice}");
+            }
+            response_exit(&response)
         }
         Err(error) => {
             let response = ApiResponse::error("cli", ExecutionMode::Execute, request_error(&error));

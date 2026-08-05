@@ -234,6 +234,8 @@ Add `--global` when the skill should be available outside one project, and use t
 cargo install forkctl --locked
 ```
 
+Successful interactive commands check crates.io at most once every 24 hours and print one concise notice when a newer version is available. Checks time out after one second, fail silently, never run for JSON/completion/non-TTY output, and can be disabled with `FORKCTL_NO_UPDATE_CHECK=1`. Forkctl never overwrites its own executable: Cargo or the repository's pinned mise catalog remains the update owner.
+
 Provide supported `git` and `stg` executables on `PATH`; the mounted mise task provisions exact versions automatically.
 
 ## Development
