@@ -35,9 +35,13 @@
 4. Source resolution, materialization, replay, generated bookkeeping, and validation shall form one recoverable operation.
 5. A failure shall retain sufficient evidence to continue or abort without partially publishing downstream refs.
 6. Patches shall remain ordered and may touch several projected destinations or downstream-only paths.
-7. Forkctl shall use StGit replay semantics and shall bind every removed empty patch to exact pre-sync recovery evidence.
+7. Forkctl shall use StGit replay semantics and shall bind every removed empty active patch to exact pre-sync recovery evidence.
 8. Read-only repository checks shall not fetch or mutate source caches.
 9. A fresh downstream clone shall reconstruct and validate current/historical projected states without complete upstream histories.
+10. A true no-op shall require unchanged selected exact source locks and unchanged projected tree evidence.
+11. A selected source resolving to a different commit with identical projected content shall update tracked lock and synthetic-base provenance rather than report a no-op.
+12. Synchronization shall preserve each disabled patch's metadata, former commit, original position, reason, and recovery evidence without applying, dropping, or re-enabling it.
+13. Re-enabling or permanently removing a disabled patch shall remain an explicit recoverable patch transition against the current composed base.
 
 ## 5. History Strategies
 
@@ -103,7 +107,9 @@ Automated disposable Git/StGit fixtures shall prove:
 - destination collision and stale-root rejection before mutation;
 - one-source, subset, and all-source synchronization;
 - deletion and rename beneath mapped directories;
-- no downstream change for irrelevant source content changes according to the settled no-op policy;
+- no downstream change for a true no-op with unchanged selected locks and projected tree evidence;
+- metadata-visible provenance advancement when a selected lock changes but projected content does not;
+- disabled-patch preservation across synchronization and explicit recoverable re-enable/removal afterward;
 - one patch spanning multiple source destinations;
 - upstream incorporation and recovery-bound empty-patch removal;
 - absence of unrelated source content and unreachable source commits in downstream history;

@@ -4,7 +4,7 @@
 
 This research asks how forkctl can compose selected files and directories from several Git repositories into one audited downstream patch stack, and how the resulting synchronization can be reviewed and promoted through GitHub Actions.
 
-The current implementation assumes one upstream remote, one upstream tracking ref, one direct base target, and one StGit replay operation. See the pinned current [`Manifest`](https://github.com/victor-software-house/forkctl/blob/d1923d8d88615cbac25d5e7152f5d249cc05837e/src/manifest.rs), [`init`](https://github.com/victor-software-house/forkctl/blob/d1923d8d88615cbac25d5e7152f5d249cc05837e/src/app/init.rs), [`rebase`](https://github.com/victor-software-house/forkctl/blob/d1923d8d88615cbac25d5e7152f5d249cc05837e/src/app/rebase.rs), [`check`](https://github.com/victor-software-house/forkctl/blob/d1923d8d88615cbac25d5e7152f5d249cc05837e/src/app/check.rs), and [`publish`](https://github.com/victor-software-house/forkctl/blob/d1923d8d88615cbac25d5e7152f5d249cc05837e/src/app/publish.rs) boundaries.
+The current implementation assumes one upstream remote, one upstream tracking ref, one direct base target, and one StGit replay operation. See the pinned current [`Manifest`](https://github.com/victor-software-house/forkctl/blob/bece98610f3e711e5665a8249146b315e913b109/src/manifest.rs), [`init`](https://github.com/victor-software-house/forkctl/blob/bece98610f3e711e5665a8249146b315e913b109/src/app/init.rs), [`rebase`](https://github.com/victor-software-house/forkctl/blob/bece98610f3e711e5665a8249146b315e913b109/src/app/rebase.rs), [`check`](https://github.com/victor-software-house/forkctl/blob/bece98610f3e711e5665a8249146b315e913b109/src/app/check.rs), and [`publish`](https://github.com/victor-software-house/forkctl/blob/bece98610f3e711e5665a8249146b315e913b109/src/app/publish.rs) boundaries.
 
 ## Primary Evidence
 
@@ -79,7 +79,6 @@ Josh is stronger when a filtered repository must preserve projected history and 
 - Whether `sync` replaces direct-repository `rebase` or the two remain explicit verbs.
 - Whether a source ref may initially be branch/tag/commit or branch-only.
 - Deterministic synthetic-commit identity and timestamp policy.
-- Whether a source ref advance with an identical projected tree is a no-op or records metadata-only provenance.
 - Proposal tag payload encoding, signing policy, retention, and review-branch naming.
 - Whether append replay ships in the first implementation PR or follows proven rewrite composition.
 - Whether StGit can replay the existing named patches onto an epoch commit that already has the old patch tip as an ancestor without stack-state or merged-detection distortion; this requires a disposable prototype before append enters the public contract.

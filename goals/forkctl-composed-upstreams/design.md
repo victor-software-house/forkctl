@@ -96,7 +96,7 @@ A cache:
 - must produce the same projected objects regardless of fetch optimization;
 - is disposable and reconstructible from tracked source declarations and locks.
 
-Unselected source locks do not change during subset synchronization.
+Unselected source locks do not change during subset synchronization. A true no-op requires both the selected exact locks and projected tree evidence to remain unchanged. If a selected ref resolves to a different commit whose projection is byte-identical, forkctl still records the new lock and deterministic synthetic-base provenance; exact source provenance is observable state, not disposable metadata.
 
 ## Projection Plan
 
@@ -141,15 +141,18 @@ Author/committer identity and timestamp policy must be deterministic and fixed b
 With a new synthetic base available:
 
 1. Create the existing recovery evidence before modifying the stack.
-2. Rebase the declared series with `stg rebase --merged`.
+2. Rebase the declared active series with `stg rebase --merged`.
 3. Preserve ordinary StGit conflict state and operation continuation.
-4. Identify patches whose trees equal their parents.
-5. Bind every removed patch to its exact old commit and recovery object.
-6. Update current source locks and base evidence.
-7. Regenerate manifest, ledger, exports, and declared generated artifacts.
-8. Refresh the final bookkeeping patch.
-9. Run the complete repository check.
-10. Generate range-diff and source-lock review evidence.
+4. Identify active patches whose trees equal their parents.
+5. Bind every removed active patch to its exact old commit and recovery object.
+6. Preserve every disabled patch record unchanged: metadata, former commit, original position, reason, and recovery evidence. Do not apply or infer obsolescence for disabled patches during synchronization.
+7. Update current source locks and base evidence.
+8. Regenerate manifest, ledger, exports, and declared generated artifacts.
+9. Refresh the final bookkeeping patch.
+10. Run the complete repository check, including disabled-patch historical evidence.
+11. Generate range-diff and source-lock review evidence.
+
+Re-enable and permanent removal remain explicit current-lifecycle transitions after synchronization. Re-enable imports the preserved patch against the current composed base and may enter the ordinary recoverable conflict flow; synchronization never performs that transition implicitly.
 
 A patch may own paths across several projected roots. Projection ownership constrains the synthetic base; patch scopes continue to constrain downstream intent.
 
@@ -229,6 +232,7 @@ The canonical proposal payload binds:
 - recovery tag name and object ID;
 - source old/new locks;
 - synthetic base and tree;
+- active, disabled, removed, and re-enabled patch evidence;
 - manifest object ID;
 - report object ID;
 - creation identity/time policy.
@@ -251,7 +255,7 @@ The called workflow:
 2. checks out complete trusted downstream history;
 3. installs an exact forkctl release;
 4. hydrates and synchronizes;
-5. exits successfully without a PR on a true no-op;
+5. exits successfully without a PR only when selected locks and projected tree evidence are both unchanged;
 6. pushes proposal evidence and the review branch;
 7. creates or updates one stable draft PR through `gh`;
 8. exposes proposal ID, candidate SHA, changed sources, and PR URL as outputs.

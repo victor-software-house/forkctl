@@ -9,7 +9,7 @@ This plan is not active implementation authorization. It orders future work afte
 - Design the tagged direct-repository and composition base-provider types.
 - Define named Git sources, exact target evidence, exact file/directory mappings, and generated lock fields.
 - Decide current-manifest migration as a clean break with all known consumers updated in the same slice; add no compatibility reader.
-- Settle deterministic synthetic commit identity/timestamp and no-op lock semantics.
+- Settle deterministic synthetic commit identity/timestamp; treat a changed exact source lock with identical projected content as recorded provenance, not a no-op.
 - Settle whether `sync` replaces or complements direct-provider `rebase`.
 
 ### Verification
@@ -61,6 +61,8 @@ This plan is not active implementation authorization. It orders future work afte
 - Implement `sync` planning and execution around the current operation journal.
 - Replay the declared stack onto the new synthetic base with StGit.
 - Preserve conflict continuation/abort behavior.
+- Preserve disabled patch records and recovery evidence without applying or dropping them during sync.
+- Keep re-enable/removal as explicit recoverable transitions against the new composed base.
 - Bind and remove empty upstream-merged patches.
 - Regenerate manifest, ledger, exports, and range-diff/source-lock reports.
 - Support atomic repeatable source selection.
@@ -70,7 +72,9 @@ This plan is not active implementation authorization. It orders future work afte
 - A patch spanning two source destinations survives an update to one source.
 - Multiple selected sources update as one operation.
 - Conflict, continue, and abort restore exact old source locks/base/stack.
-- An incorporated patch is dropped only with exact recovery-bound evidence.
+- An incorporated active patch is dropped only with exact recovery-bound evidence.
+- Disabled patches survive source updates unchanged and can be explicitly re-enabled or removed afterward through the normal recoverable transition flow.
+- A changed selected lock with an identical projection updates provenance; only unchanged selected locks plus unchanged projected tree evidence report a no-op.
 - Existing direct-provider lifecycle remains green.
 
 ## Phase 5 — Rewrite Publication

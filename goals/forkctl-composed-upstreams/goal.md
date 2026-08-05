@@ -47,6 +47,8 @@ The first mode is composition-owned: every tracked path is either present in the
 - Reject overlapping destination roots, missing projection roots, invalid paths, and source identity drift before replay.
 - Treat additions, removals, and renames beneath a projected directory as normal upstream changes.
 - Let patches span several projected destinations and add downstream-only files.
+- Preserve disabled patches and their recovery-bound evidence across source synchronization; never apply, drop, or re-enable them implicitly.
+- Treat a changed exact source lock as provenance even when projected content is identical; only unchanged selected locks and unchanged projected tree evidence are a true no-op.
 - Keep checks read-only. Network resolution and source-cache mutation belong to initialization and synchronization.
 - Keep rewrite as the default publication history. Support append replay only as an explicit policy.
 - Never publish a candidate after its captured downstream lease changes.

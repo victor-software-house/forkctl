@@ -22,3 +22,5 @@
 - 2026-08-04 Support `GITHUB_TOKEN` with its documented approval gate; recommend a least-privilege GitHub App for unattended PR CI and ruleset-authorized promotion.
 - 2026-08-04 Forkctl reports provider permission or ruleset rejection and never administers bypass policy.
 - 2026-08-04 This package is architecture and planning only. No current CLI, schema, or runtime behavior is claimed to implement it.
+- 2026-08-05 A true composition no-op requires both selected exact source locks and projected tree evidence to remain unchanged. A selected source ref advancing to a different commit with an identical projection is a provenance update, not a no-op: record the new lock and synthetic-base evidence so tracked provenance remains exact.
+- 2026-08-05 Synchronization preserves every disabled patch, its former commit, original position, reason, and recovery evidence without applying, dropping, or re-enabling it. Re-enable remains an explicit recoverable patch transition against the current composed base; source synchronization never infers disabled-patch obsolescence.

@@ -27,3 +27,6 @@
 - Privileged proposal workflows never execute mutable proposal-head code through `pull_request_target`.
 - Forkctl reports provider ruleset rejection and never creates or changes bypass policy.
 - Independently evolving ordinary destination content is outside the first composition-owned milestone.
+- Unselected source locks do not change during subset synchronization.
+- A true no-op leaves selected exact source locks and projected tree evidence unchanged; a new source commit with identical projected content is recorded as a provenance update.
+- Disabled patches remain disabled across synchronization with their commit, position, reason, and recovery evidence intact; synchronization never applies, drops, or re-enables them implicitly.
