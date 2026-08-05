@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
   push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,7 +14,7 @@ env:
   GIT_CONFIG_VALUE_0: main
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ github.event.pull_request.base.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
