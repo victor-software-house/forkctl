@@ -1,0 +1,26 @@
+# Forkctl Composed Upstreams — Decisions
+
+- 2026-08-04 Model this as a composed downstream repository, not a partial checkout of one upstream.
+- 2026-08-04 Allow named projections from multiple Git repositories into one destination.
+- 2026-08-04 Implement composition-owned repositories first: every tracked path is projected or owned by a forkctl patch.
+- 2026-08-04 Defer managed roots inside an independently evolving ordinary repository. If pursued later, make it a separate mode with tracked patch artifacts rather than a hidden parallel StGit ref.
+- 2026-08-04 Guarantee strict downstream projection. Only selected source content may enter downstream history or the worktree; reduced source-cache transfer is best effort and transport-dependent.
+- 2026-08-04 Keep full-repository upstream and composed-source base providers explicit. Do not infer behavior from the number or shape of mappings.
+- 2026-08-04 Start with exact file/directory `from` → `to` mappings. Reject globs, excludes, transforms, overlay precedence, and destination overlap.
+- 2026-08-04 A missing projection root is stale configuration and fails. Changes beneath a mapped directory, including deletions and renames, are normal source changes.
+- 2026-08-04 Preserve Git entry modes and bytes. LFS pointers remain pointers; no implicit smudging or content conversion occurs.
+- 2026-08-04 Source commits are provenance, not downstream ancestry. Synthetic bases must not parent source commits because that would retain complete source histories.
+- 2026-08-04 One ordered patch stack may cross source boundaries and add downstream-only files.
+- 2026-08-04 Rewrite remains the default history strategy. Append replay is explicit and retains previous patch generations rather than pretending to preserve a single clean stack.
+- 2026-08-04 A GitHub sync PR is a review surface, not the publication primitive. Normal merge, squash, and rebase may not replace exact proposal promotion.
+- 2026-08-04 Build the review PR from a single-parent commit whose parent is the captured old downstream tip and whose tree equals the exact candidate tree. This shows the net synchronization delta even for divergent rewrite candidates.
+- 2026-08-04 Keep the exact candidate reachable through immutable proposal evidence; never promote the review commit.
+- 2026-08-04 Promotion is an explicit trusted workflow after review. Automatic publish-on-approval is deferred.
+- 2026-08-04 Keep proposal construction, evidence, validation, and promotion provider-neutral in forkctl. Use `gh` only for GitHub PR operations.
+- 2026-08-04 Prefer versioned reusable workflows over a large composite Action because checkout depth, permissions, concurrency, trusted triggers, and promotion are job-level concerns.
+- 2026-08-04 Never execute proposal-head code with privileged `pull_request_target` credentials.
+- 2026-08-04 Support `GITHUB_TOKEN` with its documented approval gate; recommend a least-privilege GitHub App for unattended PR CI and ruleset-authorized promotion.
+- 2026-08-04 Forkctl reports provider permission or ruleset rejection and never administers bypass policy.
+- 2026-08-04 This package is architecture and planning only. No current CLI, schema, or runtime behavior is claimed to implement it.
+- 2026-08-05 A true composition no-op requires both selected exact source locks and projected tree evidence to remain unchanged. A selected source ref advancing to a different commit with an identical projection is a provenance update, not a no-op: record the new lock and synthetic-base evidence so tracked provenance remains exact.
+- 2026-08-05 Synchronization preserves every disabled patch, its former commit, original position, reason, and recovery evidence without applying, dropping, or re-enabling it. Re-enable remains an explicit recoverable patch transition against the current composed base; source synchronization never infers disabled-patch obsolescence.

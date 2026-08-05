@@ -340,6 +340,12 @@ Successful interactive commands check crates.io at most once every 24 hours and 
 
 Provide supported `git` and `stg` executables on `PATH`, plus whatever tools your declared checks invoke; the mounted mise task provisions exact Git/StGit versions automatically.
 
+## Future architecture
+
+The reviewed [composed-upstreams goal](goals/forkctl-composed-upstreams/goal.md) proposes composition-owned repositories assembled from exact file/directory projections of multiple Git sources, followed by one ordered patch stack. Its [facts](goals/forkctl-composed-upstreams/facts.md), [design](goals/forkctl-composed-upstreams/design.md), [requirements](goals/forkctl-composed-upstreams/requirements.md), [research](goals/forkctl-composed-upstreams/research.md), [decisions](goals/forkctl-composed-upstreams/decisions.md), and [implementation plan](goals/forkctl-composed-upstreams/plan.md) also define rewrite/append history and reviewable GitHub Actions proposals.
+
+That package is future architecture only; the current release continues to implement the single-upstream lifecycle documented above.
+
 ## Development
 
 ```sh
