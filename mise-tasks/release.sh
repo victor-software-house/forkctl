@@ -12,7 +12,9 @@ head=$(git rev-parse HEAD)
 [ "$head" = "$(git rev-parse origin/main)" ] || { printf 'release: main is not pushed exactly\n' >&2; exit 1; }
 
 cargo build --release
-version=$(target/release/forkctl --version | awk '{print $2}')
+version_output=$(target/release/forkctl --version)
+version=${version_output#forkctl }
+[ "$version" != "$version_output" ] || { printf 'release: unexpected version output: %s\n' "$version_output" >&2; exit 1; }
 tag="v$version"
 
 case "$(uname -s)" in
@@ -55,10 +57,19 @@ else
   gh release create "$tag" "$asset" --repo "$repo" --target "$head" --title "forkctl $version" --notes "Native forkctl release $version." --draft
 fi
 
+# Registry and GitHub release state are independent. Repair a missing crate even
+# when a matching GitHub release was already finalized, and never finalize a new
+# draft until crates.io confirms the exact version is readable.
+if [ "$published" = false ]; then
+  cargo publish --locked
+  attempts=0
+  until cargo info "forkctl@$version" >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    [ "$attempts" -lt 12 ] || { printf 'release: crates.io did not expose forkctl@%s\n' "$version" >&2; exit 1; }
+    sleep 5
+  done
+fi
 if [ "$draft" = true ]; then
-  if [ "$published" = false ]; then
-    cargo publish --locked
-  fi
   gh release edit "$tag" --repo "$repo" --draft=false
 fi
 
