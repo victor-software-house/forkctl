@@ -1,5 +1,5 @@
 use super::App;
-use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
+use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
 use crate::process::{capture, run};
 use crate::protocol::{
@@ -213,7 +213,11 @@ impl App {
         patch
             .validate()
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
-        let old_kind = self.manifest()?.patch(&name).expect("patch exists").kind;
+        let old_kind = self
+            .manifest()?
+            .patch(&name)
+            .ok_or_else(|| AppError::internal_message("validated patch disappeared during edit"))?
+            .kind;
         let proposed = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let plan = MutationPlan {
             command: "patch.edit".into(),
@@ -931,7 +935,7 @@ impl App {
     }
 
     fn finish_patch_transition(
-        &mut self,
+        &self,
         operation: &mut OperationState,
         patch: String,
         commit: String,

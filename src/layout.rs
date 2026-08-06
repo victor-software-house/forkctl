@@ -29,10 +29,9 @@ fn wrap_to(value: &str, width: u16) -> String {
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_width(width)
         .add_row([value]);
-    table
-        .column_mut(0)
-        .expect("wrapped text has one column")
-        .set_padding((0, 0));
+    if let Some(column) = table.column_mut(0) {
+        column.set_padding((0, 0));
+    }
     table
         .to_string()
         .lines()

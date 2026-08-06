@@ -29,8 +29,9 @@ pub fn available_notice() -> Option<String> {
         return None;
     }
 
+    let current = current_version()?;
     latest_version()
-        .filter(|latest| latest > &current_version())
+        .filter(|latest| latest > &current)
         .map(|version| update_message(&version.to_string()))
 }
 
@@ -56,8 +57,8 @@ fn latest_version() -> Option<Version> {
     Version::parse(&response.package.newest_version).ok()
 }
 
-fn current_version() -> Version {
-    Version::parse(env!("CARGO_PKG_VERSION")).expect("package version must be valid semver")
+fn current_version() -> Option<Version> {
+    Version::parse(env!("CARGO_PKG_VERSION")).ok()
 }
 
 fn check_is_due() -> bool {

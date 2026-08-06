@@ -1,3 +1,14 @@
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::expect_used,
+        clippy::panic,
+        clippy::todo,
+        clippy::unimplemented,
+        clippy::unwrap_used
+    )
+)]
+
 mod app;
 mod cli;
 mod completion;
@@ -117,7 +128,11 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         }
         ApiRequest::OperationContinue(_) => app.operation_continue(mode)?,
         ApiRequest::OperationAbort(args) => app.operation_abort(args.confirmed, mode)?,
-        ApiRequest::Instructions(_) => unreachable!("instructions handled without repository"),
+        ApiRequest::Instructions(_) => {
+            return Err(AppError::internal_message(
+                "instructions request reached repository dispatch",
+            ));
+        }
     };
     let operation_id = app.read_operation()?.map(|operation| operation.id);
     Ok(Outcome::new(result).with_optional_operation(operation_id))
@@ -165,10 +180,18 @@ fn run_api_call() -> ExitCode {
 }
 
 fn emit_schema(kind: protocol::SchemaKind) -> ExitCode {
-    if view::emit_json(&protocol::schema_document(kind)).is_ok() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
+    match protocol::schema_document(kind) {
+        Ok(schema) if view::emit_json(&schema).is_ok() => ExitCode::SUCCESS,
+        Ok(_) => ExitCode::FAILURE,
+        Err(error) => {
+            let response =
+                ApiResponse::error("api.schema", ExecutionMode::Execute, api_error(&error));
+            if view::emit_json(&response).is_ok() {
+                response_exit(&response)
+            } else {
+                ExitCode::FAILURE
+            }
+        }
     }
 }
 

@@ -336,7 +336,7 @@ impl App {
         let expected = manifest
             .source_exports()
             .into_iter()
-            .map(|export| export.path.clone())
+            .map(|export| export.path)
             .collect::<HashSet<_>>();
         for export in manifest.source_exports() {
             let path = self.repo.join(&export.path);
