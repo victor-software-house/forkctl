@@ -37,6 +37,7 @@ use app::App;
 use clap::CommandFactory;
 use cli::{Cli, CliAction, CompletionShell};
 use ctl_core::{App as Chassis, ColorMode, OutputFormat, View};
+use error::{AppError, AppResult};
 use presentation::Report;
 use protocol::{
     ApiError, ApiErrorCode, ApiInvocation, ApiRequest, ApiResponse, CommandResult, ErrorDetails,
@@ -120,7 +121,7 @@ fn execute_cli(cli: Cli) -> Result<Report> {
     })
 }
 
-fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> Result<Outcome> {
+fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> AppResult<Outcome> {
     if request.is_read_only() && mode == ExecutionMode::Plan {
         return Err(error::DomainError::invalid_request(format!(
             "read-only command {} does not support plan mode",
@@ -319,19 +320,8 @@ fn request_error(error: &anyhow::Error) -> ApiError {
     }
 }
 
-fn api_error(error: &anyhow::Error) -> ApiError {
-    let causes = error.chain().skip(1).map(ToString::to_string).collect();
-    if let Some(domain) = error.downcast_ref::<error::DomainError>() {
-        return domain.to_api_error(causes);
-    }
-    ApiError {
-        code: ApiErrorCode::InternalError,
-        message: error.to_string(),
-        causes,
-        details: ErrorDetails::None,
-        retryable: false,
-        suggested_command: None,
-    }
+fn api_error(error: &AppError) -> ApiError {
+    error.to_api_error()
 }
 
 trait OutcomeExt {

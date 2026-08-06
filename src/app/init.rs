@@ -1,11 +1,10 @@
 use super::{App, resolve_target};
-use crate::error::DomainError;
+use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{
     Base, Contracts, Documents, Downstream, Manifest, Patch, PatchKind, Upstream,
 };
 use crate::process::{capture, run, run_operator};
 use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, MutationPlan};
-use anyhow::Result;
 use std::ffi::OsString;
 
 impl App {
@@ -35,7 +34,12 @@ impl App {
         let bookkeeping_patch = required(args.bookkeeping_patch, "--bookkeeping-patch")?;
         let manifest_relative = self
             .manifest_path
-            .strip_prefix(&self.repo)?
+            .strip_prefix(&self.repo)
+            .internal(format!(
+                "make {} relative to {}",
+                self.manifest_path.display(),
+                self.repo.display()
+            ))?
             .to_string_lossy()
             .into_owned();
         let mut scope = vec![
@@ -141,7 +145,9 @@ impl App {
                 required_text: args.required_text,
             },
         };
-        manifest.validate(&self.repo, &self.manifest_path)?;
+        manifest
+            .validate(&self.repo, &self.manifest_path)
+            .internal("validate bootstrapped manifest")?;
         let downstream_tracking = format!(
             "{}/{}",
             manifest.downstream.remote, manifest.downstream.branch
@@ -242,9 +248,7 @@ impl App {
     fn hydrate(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_operation()?;
         let manifest = self.manifest()?.clone();
         let plan = MutationPlan {
             command: "init".into(),
