@@ -1,6 +1,6 @@
 use super::App;
+use crate::error::AppResult as Result;
 use crate::protocol::{CheckSummary, PatchSummary, StatusResult};
-use anyhow::Result;
 
 impl App {
     pub fn status(&mut self) -> Result<StatusResult> {

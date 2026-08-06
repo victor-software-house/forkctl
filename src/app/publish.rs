@@ -1,9 +1,8 @@
 use super::{App, recovery_id};
-use crate::error::DomainError;
+use crate::error::{AppError, AppResult as Result, DomainError};
 use crate::manifest::RecoveryEvidence;
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishResult};
-use anyhow::{Context, Result, ensure};
 
 const READY_TO_PUBLISH: &str = "ready_to_publish";
 
@@ -38,9 +37,7 @@ impl App {
     fn preflight_publication(&self) -> Result<Publication> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        if let Some(active) = self.read_active()? {
-            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
-        }
+        self.require_no_active_patch()?;
         self.check_repository(false)?;
 
         let head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
@@ -56,10 +53,11 @@ impl App {
                 )
                 .into());
             }
-            ensure!(
-                operation.new_tip.as_deref() == Some(head.as_str()),
-                "operation does not describe current HEAD"
-            );
+            if operation.new_tip.as_deref() != Some(head.as_str()) {
+                return Err(AppError::internal_message(
+                    "operation does not describe current HEAD",
+                ));
+            }
             self.check_operation(operation)?;
         }
 
@@ -90,11 +88,12 @@ impl App {
             ),
             None => (None, None, (!fast_forward).then(|| remote_sha.clone())),
         };
-        if let Some(recovery) = &prepared_recovery {
-            ensure!(
-                overwritten_tip.as_deref() == Some(recovery.old_tip.as_str()),
-                "publication recovery does not preserve the expected remote tip"
-            );
+        if let Some(recovery) = &prepared_recovery
+            && overwritten_tip.as_deref() != Some(recovery.old_tip.as_str())
+        {
+            return Err(AppError::internal_message(
+                "publication recovery does not preserve the expected remote tip",
+            ));
         }
         Ok(Publication {
             head,
@@ -172,11 +171,14 @@ impl App {
             return Ok(false);
         }
         let mut fields = line.split_whitespace();
-        let actual = fields.next().context("remote ref output has no SHA")?;
-        ensure!(
-            fields.next() == Some(git_ref.as_str()),
-            "unexpected remote ref output: {line}"
-        );
+        let actual = fields
+            .next()
+            .ok_or_else(|| AppError::internal_message("remote ref output has no SHA"))?;
+        if fields.next() != Some(git_ref.as_str()) {
+            return Err(AppError::internal_message(format!(
+                "unexpected remote ref output: {line}"
+            )));
+        }
         if actual != tag_object {
             return Err(DomainError::publication_ref_mismatch(
                 manifest.downstream.remote.clone(),
@@ -259,22 +261,26 @@ impl App {
         pushed_refs.push(publication.branch_refspec.clone());
 
         if let Err(error) = run(&self.repo, "git", push) {
-            if let Some(domain) = error.downcast_ref::<DomainError>() {
-                return Err(DomainError::publication_rejected(domain).into());
-            }
-            return Err(error);
+            return match error {
+                AppError::Domain { error, .. } => {
+                    Err(DomainError::publication_rejected(&error).into())
+                }
+                AppError::Internal(_) => Err(error),
+            };
         }
 
-        ensure!(
-            self.downstream_sha()? == publication.head,
-            "published branch differs from HEAD"
-        );
+        if self.downstream_sha()? != publication.head {
+            return Err(AppError::internal_message(
+                "published branch differs from HEAD",
+            ));
+        }
         for (tag, object) in &recovery_tags {
             let tag_ref = format!("refs/tags/{tag}");
-            ensure!(
-                self.remote_ref_sha(&manifest.downstream.remote, &tag_ref)? == *object,
-                "published recovery tag {tag} differs"
-            );
+            if self.remote_ref_sha(&manifest.downstream.remote, &tag_ref)? != *object {
+                return Err(AppError::internal_message(format!(
+                    "published recovery tag {tag} differs"
+                )));
+            }
         }
         if publication.clears_operation {
             self.complete_published_operation()?;

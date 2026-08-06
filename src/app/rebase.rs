@@ -1,11 +1,10 @@
 use super::{App, write_atomic};
-use crate::error::DomainError;
+use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent, ReplayPathChange};
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, RebaseResult};
 use crate::report::{self, ExportEvidence, RebaseReport};
 use crate::state::{OperationKind, OperationState, ReportEvidence};
-use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
@@ -13,12 +12,8 @@ impl App {
     pub fn rebase(&mut self, selector: &str, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        if let Some(active) = self.read_active()? {
-            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
-        }
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_active_patch()?;
+        self.require_no_operation()?;
         self.check_repository(false)?;
         self.fetch_upstream(false)?;
         let target = self.resolve_target(selector)?;
@@ -58,10 +53,10 @@ impl App {
                 "forkctl operation continue".into(),
             ];
             self.write_operation(&operation)?;
-            return Err(error).context(format!(
+            return Err(error.context(format!(
                 "rebase stopped; recovery tag {}; resolve conflicts and run forkctl operation continue",
                 operation.recovery.tag
-            ));
+            )));
         }
         Ok(CommandResult::Rebase(Box::new(
             self.continue_rebase(operation)?,
@@ -243,7 +238,12 @@ impl App {
                     .old_patches
                     .iter()
                     .find(|evidence| evidence.name == patch.name)
-                    .with_context(|| format!("operation has no old commit for {}", patch.name))?
+                    .ok_or_else(|| {
+                        AppError::internal_message(format!(
+                            "operation has no old commit for {}",
+                            patch.name
+                        ))
+                    })?
                     .commit
                     .clone();
                 dropped.push(DroppedPatch {
@@ -273,14 +273,19 @@ impl App {
         let mut removed_exports = Vec::new();
         for item in &dropped {
             if item.patch.kind == crate::manifest::PatchKind::Source {
-                for entry in fs::read_dir(self.repo.join(&self.manifest()?.documents.exports))? {
-                    let path = entry?.path();
+                let exports = self.repo.join(&self.manifest()?.documents.exports);
+                for entry in
+                    fs::read_dir(&exports).internal(format!("read {}", exports.display()))?
+                {
+                    let path = entry
+                        .internal(format!("read entry in {}", exports.display()))?
+                        .path();
                     if path
                         .file_name()
                         .and_then(|name| name.to_str())
                         .is_some_and(|name| name.ends_with(&format!("-{}.patch", item.patch.name)))
                     {
-                        fs::remove_file(&path)?;
+                        fs::remove_file(&path).internal(format!("remove {}", path.display()))?;
                         removed_exports.push(path);
                     }
                 }
@@ -294,7 +299,9 @@ impl App {
     }
 
     fn report_path(&self, new_tip: &str) -> Result<PathBuf> {
-        let short = new_tip.get(..12).context("new tip is not a full SHA")?;
+        let short = new_tip
+            .get(..12)
+            .ok_or_else(|| AppError::internal_message("new tip is not a full SHA"))?;
         self.git_private_path(&format!("forkctl/rebases/{short}.md"))
     }
 
@@ -329,6 +336,7 @@ impl App {
             exports,
             range_diff: range.to_string(),
         })
+        .internal("render rebase report")
     }
 }
 

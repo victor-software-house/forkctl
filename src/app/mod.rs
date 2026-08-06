@@ -8,13 +8,12 @@ mod publish;
 mod rebase;
 mod status;
 
-use crate::error::DomainError;
+use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::ledger;
 use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind};
 use crate::manifest_codec::ManifestFormat;
 use crate::process::{capture, output, run, succeeds};
 use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
-use anyhow::{Context, Result, ensure};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -35,7 +34,7 @@ pub struct App {
 
 impl App {
     pub fn discover(manifest_arg: &Path) -> Result<Self> {
-        let cwd = env::current_dir().context("read current directory")?;
+        let cwd = env::current_dir().internal("read current directory")?;
         let repo = capture(&cwd, "git", ["rev-parse", "--show-toplevel"])
             .map(PathBuf::from)
             .map_err(|error| DomainError::repository_not_found(error.to_string()))?;
@@ -55,7 +54,10 @@ impl App {
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None),
             Err(error) => {
-                return Err(error).with_context(|| format!("read {}", manifest_path.display()));
+                return Err(AppError::internal(
+                    error,
+                    format!("read {}", manifest_path.display()),
+                ));
             }
         };
         Ok(Self {
@@ -89,7 +91,7 @@ impl App {
         }
         self.manifest
             .as_mut()
-            .context("forkctl manifest is unavailable")
+            .ok_or_else(|| AppError::internal_message("forkctl manifest is unavailable"))
     }
 
     pub(super) fn require_clean(&self) -> Result<()> {
@@ -99,6 +101,31 @@ impl App {
         } else {
             Err(DomainError::dirty_worktree(paths).into())
         }
+    }
+
+    pub(super) fn require_no_active_patch(&self) -> Result<()> {
+        match self.read_active()? {
+            Some(active) => Err(DomainError::active_patch_exists(active.name().to_string()).into()),
+            None => Ok(()),
+        }
+    }
+
+    pub(super) fn require_active_patch(&self) -> Result<ActivePatchState> {
+        self.read_active()?
+            .ok_or_else(|| DomainError::active_patch_required().into())
+    }
+
+    pub(super) fn require_no_operation(&self) -> Result<()> {
+        match self.read_operation()? {
+            Some(operation) => Err(DomainError::operation_in_progress(&operation).into()),
+            None => Ok(()),
+        }
+    }
+
+    pub(super) fn require_operation(&self) -> Result<OperationState> {
+        self.read_operation()?.ok_or_else(|| {
+            DomainError::invalid_request("no forkctl operation is in progress").into()
+        })
     }
 
     pub(super) fn require_declared_branch(&self) -> Result<()> {
@@ -207,7 +234,7 @@ impl App {
             .upstream
             .fetch_ref
             .strip_prefix("refs/heads/")
-            .context("validated upstream branch ref")?;
+            .ok_or_else(|| AppError::internal_message("validated upstream branch ref"))?;
         Ok(format!(
             "refs/remotes/{}/{branch}",
             manifest.upstream.remote
@@ -244,12 +271,12 @@ impl App {
         args.extend(["--no-tags", manifest.upstream.remote.as_str(), selector]);
         run(&self.repo, "git", args)?;
         let resolved = capture(&self.repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
-        ensure!(
-            resolved == target.commit,
-            "recorded target {} resolves to {resolved}, expected {}",
-            target.selector,
-            target.commit
-        );
+        if resolved != target.commit {
+            return Err(AppError::internal_message(format!(
+                "recorded target {} resolves to {resolved}, expected {}",
+                target.selector, target.commit
+            )));
+        }
         self.verify_target_evidence(target)
     }
 
@@ -259,27 +286,31 @@ impl App {
     }
 
     pub(super) fn verify_target_evidence(&self, target: &BaseTarget) -> Result<()> {
-        target.validate()?;
+        target
+            .validate()
+            .internal("validate recorded target evidence")?;
         run(
             &self.repo,
             "git",
             ["cat-file", "-e", &format!("{}^{{commit}}", target.commit)],
         )?;
         if let Some(object) = &target.tag_object {
-            ensure!(
-                capture(&self.repo, "git", ["cat-file", "-t", object])? == "tag",
-                "tag_object is not an annotated tag"
-            );
+            if capture(&self.repo, "git", ["cat-file", "-t", object])? != "tag" {
+                return Err(AppError::internal_message(
+                    "recorded tag_object is not an annotated tag",
+                ));
+            }
             let peeled = capture(
                 &self.repo,
                 "git",
                 ["rev-parse", &format!("{object}^{{commit}}")],
             )?;
-            ensure!(
-                peeled == target.commit,
-                "tag object peels to {peeled}, expected {}",
-                target.commit
-            );
+            if peeled != target.commit {
+                return Err(AppError::internal_message(format!(
+                    "tag object peels to {peeled}, expected {}",
+                    target.commit
+                )));
+            }
         }
         Ok(())
     }
@@ -305,10 +336,10 @@ impl App {
     }
 
     pub(super) fn export_patch(&self, patch: &Patch) -> Result<Vec<u8>> {
-        let directory = tempfile::tempdir().context("create patch export directory")?;
+        let directory = tempfile::tempdir().internal("create patch export directory")?;
         let template_path = directory.path().join("patchexport.tmpl");
         fs::write(&template_path, EXPORT_TEMPLATE)
-            .with_context(|| format!("write {}", template_path.display()))?;
+            .internal(format!("write {}", template_path.display()))?;
         Ok(output(
             &self.repo,
             "stg",
@@ -327,7 +358,7 @@ impl App {
         let manifest = self.manifest()?;
         let mut expected = Vec::new();
         let exports_dir = self.repo.join(&manifest.documents.exports);
-        fs::create_dir_all(&exports_dir)?;
+        fs::create_dir_all(&exports_dir).internal(format!("create {}", exports_dir.display()))?;
         for export in manifest.source_exports() {
             let path = self.repo.join(&export.path);
             write_atomic(&path, &self.export_patch(export.patch)?)?;
@@ -337,14 +368,18 @@ impl App {
             .iter()
             .cloned()
             .collect::<std::collections::HashSet<_>>();
-        for entry in fs::read_dir(exports_dir)? {
-            let path = entry?.path();
+        for entry in
+            fs::read_dir(&exports_dir).internal(format!("read {}", exports_dir.display()))?
+        {
+            let path = entry
+                .internal(format!("read entry in {}", exports_dir.display()))?
+                .path();
             if path
                 .extension()
                 .is_some_and(|extension| extension == "patch")
                 && !expected_set.contains(&path)
             {
-                fs::remove_file(&path)?;
+                fs::remove_file(&path).internal(format!("remove {}", path.display()))?;
                 expected.push(path);
             }
         }
@@ -353,7 +388,7 @@ impl App {
 
     pub(super) fn reconstruct_tree(&self) -> Result<String> {
         let manifest = self.manifest()?;
-        let temp = tempfile::tempdir().context("create verification directory")?;
+        let temp = tempfile::tempdir().internal("create verification directory")?;
         let clone = temp.path().join("repo");
         run(
             &self.repo,
@@ -409,16 +444,18 @@ impl App {
     }
 
     pub(super) fn write_manifest(&self) -> Result<()> {
-        write_atomic(
-            &self.manifest_path,
-            &self.manifest_format.serialize(self.manifest()?)?,
-        )
+        let bytes = self
+            .manifest_format
+            .serialize(self.manifest()?)
+            .internal(format!("serialize {}", self.manifest_path.display()))?;
+        write_atomic(&self.manifest_path, &bytes)
     }
 
     pub(super) fn write_ledger(&self) -> Result<PathBuf> {
         let manifest = self.manifest()?;
         let path = self.repo.join(&manifest.documents.ledger);
-        write_atomic(&path, ledger::render(manifest)?.as_bytes())?;
+        let rendered = ledger::render(manifest).internal("render patch ledger")?;
+        write_atomic(&path, rendered.as_bytes())?;
         Ok(path)
     }
 
@@ -473,11 +510,14 @@ impl App {
             ["ls-remote", "--exit-code", remote, git_ref],
         )?;
         let mut fields = line.split_whitespace();
-        let sha = fields.next().context("remote ref output has no SHA")?;
-        ensure!(
-            fields.next() == Some(git_ref),
-            "unexpected remote ref output: {line}"
-        );
+        let sha = fields
+            .next()
+            .ok_or_else(|| AppError::internal_message("remote ref output has no SHA"))?;
+        if fields.next() != Some(git_ref) {
+            return Err(AppError::internal_message(format!(
+                "unexpected remote ref output: {line}"
+            )));
+        }
         Ok(sha.to_string())
     }
 
@@ -538,11 +578,17 @@ impl App {
             return Ok(());
         }
         let snapshot = self.operation_manifest_snapshot_path()?;
-        let bytes = fs::read(&snapshot)
-            .with_context(|| format!("read operation manifest snapshot {}", snapshot.display()))?;
-        let manifest: Manifest = serde_json::from_slice(&bytes)
-            .with_context(|| format!("parse operation manifest snapshot {}", snapshot.display()))?;
-        manifest.validate(&self.repo, &self.manifest_path)?;
+        let bytes = fs::read(&snapshot).internal(format!(
+            "read operation manifest snapshot {}",
+            snapshot.display()
+        ))?;
+        let manifest: Manifest = serde_json::from_slice(&bytes).internal(format!(
+            "parse operation manifest snapshot {}",
+            snapshot.display()
+        ))?;
+        manifest
+            .validate(&self.repo, &self.manifest_path)
+            .internal("validate operation manifest snapshot")?;
         self.manifest = Some(manifest);
         self.manifest_error = None;
         Ok(())
@@ -579,9 +625,7 @@ impl App {
         kind: OperationKind,
         target: Option<BaseTarget>,
     ) -> Result<OperationState> {
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_operation()?;
         let manifest = self.manifest()?;
         let expected_remote_sha = self.downstream_sha()?;
         let old_base = capture(&self.repo, "stg", ["id", "{base}"])?;
@@ -598,12 +642,16 @@ impl App {
             .collect::<Result<Vec<_>>>()?;
         let epoch = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .context("system clock is before Unix epoch")?;
-        let short = old_tip.get(..12).context("old tip is not a full SHA")?;
+            .internal("system clock is before Unix epoch")?;
+        let short = old_tip
+            .get(..12)
+            .ok_or_else(|| AppError::internal_message("old tip is not a full SHA"))?;
         let id = format!("{}-{short}", epoch.as_nanos());
         let (tag, tag_object) = self.create_recovery_tag(&id, &old_tip, &format!("{kind:?}"))?;
         let snapshot = self.operation_manifest_snapshot_path()?;
-        write_atomic(&snapshot, &serde_json::to_vec_pretty(manifest)?)?;
+        let snapshot_bytes = serde_json::to_vec_pretty(manifest)
+            .internal("serialize operation manifest snapshot")?;
+        write_atomic(&snapshot, &snapshot_bytes)?;
         Ok(OperationState {
             schema: 1,
             id,
@@ -686,8 +734,10 @@ impl App {
 pub(super) fn recovery_id(commit: &str) -> Result<String> {
     let epoch = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .context("system clock is before Unix epoch")?;
-    let short = commit.get(..12).context("commit is not a full SHA")?;
+        .internal("system clock is before Unix epoch")?;
+    let short = commit
+        .get(..12)
+        .ok_or_else(|| AppError::internal_message("commit is not a full SHA"))?;
     Ok(format!("{}-{short}", epoch.as_nanos()))
 }
 
@@ -709,7 +759,10 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
     } else if selector.starts_with("refs/tags/") {
         TargetKind::Tag
     } else {
-        anyhow::bail!("target must be a full refs/heads ref, refs/tags ref, or commit SHA");
+        return Err(DomainError::invalid_request(
+            "target must be a full refs/heads ref, refs/tags ref, or commit SHA",
+        )
+        .into());
     };
     run(repo, "git", ["fetch", "--no-tags", remote, selector])?;
     let commit = capture(repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
@@ -718,7 +771,7 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
         let object = line
             .split_whitespace()
             .next()
-            .context("remote tag output has no object")?
+            .ok_or_else(|| AppError::internal_message("remote tag output has no object"))?
             .to_string();
         (capture(repo, "git", ["cat-file", "-t", &object])? == "tag").then_some(object)
     } else {
@@ -734,22 +787,33 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
         commit,
         tag_object,
     };
-    target.validate()?;
+    target.validate().internal("validate resolved target")?;
     Ok(target)
 }
 
 pub(super) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path.parent().context("output path has no parent")?;
-    fs::create_dir_all(parent)?;
-    let mut temporary = NamedTempFile::new_in(parent)?;
-    temporary.write_all(bytes)?;
-    temporary.as_file_mut().sync_all()?;
-    temporary.persist(path)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| AppError::internal_message("output path has no parent"))?;
+    fs::create_dir_all(parent).internal(format!("create {}", parent.display()))?;
+    let mut temporary = NamedTempFile::new_in(parent)
+        .internal(format!("create temporary file in {}", parent.display()))?;
+    temporary
+        .write_all(bytes)
+        .internal(format!("write temporary file for {}", path.display()))?;
+    temporary
+        .as_file_mut()
+        .sync_all()
+        .internal(format!("sync temporary file for {}", path.display()))?;
+    temporary
+        .persist(path)
+        .internal(format!("persist {}", path.display()))?;
     Ok(())
 }
 
 fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> Result<()> {
-    let mut bytes = serde_json::to_vec_pretty(value)?;
+    let mut bytes =
+        serde_json::to_vec_pretty(value).internal(format!("serialize {}", path.display()))?;
     bytes.push(b'\n');
     write_atomic(path, &bytes)
 }
@@ -757,10 +821,13 @@ fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> Result<()> {
 fn read_optional_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(
-            serde_json::from_slice(&bytes).with_context(|| format!("parse {}", path.display()))?,
+            serde_json::from_slice(&bytes).internal(format!("parse {}", path.display()))?,
         )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
+        Err(error) => Err(AppError::internal(
+            error,
+            format!("read {}", path.display()),
+        )),
     }
 }
 
@@ -768,12 +835,23 @@ fn remove_optional(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error).with_context(|| format!("remove {}", path.display())),
+        Err(error) => Err(AppError::internal(
+            error,
+            format!("remove {}", path.display()),
+        )),
     }
 }
 
 fn relative_to(repo: &Path, path: &Path) -> Result<String> {
-    Ok(path.strip_prefix(repo)?.to_string_lossy().into_owned())
+    Ok(path
+        .strip_prefix(repo)
+        .internal(format!(
+            "make {} relative to {}",
+            path.display(),
+            repo.display()
+        ))?
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn git_private_path(repo: &Path, relative: &str) -> Result<PathBuf> {

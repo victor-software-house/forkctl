@@ -1,16 +1,23 @@
 use super::App;
-use crate::error::DomainError;
+use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::ledger;
 use crate::manifest::{HistoryEvent, Patch};
 use crate::process::{capture, run};
 use crate::protocol::{CheckArgs, CheckResult, CheckScope};
 use crate::state::ActivePatchState;
-use anyhow::{Context, Result, ensure};
 use std::fs;
+
+macro_rules! ensure_check {
+    ($condition:expr, $($message:tt)*) => {
+        if !$condition {
+            return Err(DomainError::check_failed(format!($($message)*)).into());
+        }
+    };
+}
 
 impl App {
     pub fn check(&self, args: &CheckArgs) -> Result<CheckResult> {
-        let result = match args.scope {
+        match args.scope {
             CheckScope::Repository => {
                 if args.patch.is_some() {
                     return Err(DomainError::invalid_request("--patch requires --staged").into());
@@ -18,14 +25,7 @@ impl App {
                 self.check_repository(false)
             }
             CheckScope::Staged => self.check_staged(args.patch.as_deref()),
-        };
-        result.map_err(|error| {
-            if error.downcast_ref::<DomainError>().is_some() {
-                error
-            } else {
-                DomainError::check_failed(error.to_string()).into()
-            }
-        })
+        }
     }
 
     pub(super) fn check_repository(&self, allow_active: bool) -> Result<CheckResult> {
@@ -48,21 +48,20 @@ impl App {
             return Err(DomainError::active_patch_exists(active.name().to_string()).into());
         }
         self.check_remotes()?;
-        for (label, revision) in [
-            ("canonical base", manifest.base.canonical.as_str()),
-            ("stack base", manifest.base.stack.as_str()),
+        for revision in [
+            manifest.base.canonical.as_str(),
+            manifest.base.stack.as_str(),
         ] {
             run(
                 &self.repo,
                 "git",
                 ["cat-file", "-e", &format!("{revision}^{{commit}}")],
-            )
-            .with_context(|| format!("{label} commit is unavailable: {revision}"))?;
+            )?;
         }
         self.verify_target_evidence(&manifest.base.target)?;
         self.check_history()?;
         let actual_base = capture(&self.repo, "stg", ["id", "{base}"])?;
-        ensure!(
+        ensure_check!(
             actual_base == manifest.base.stack,
             "StGit base is {actual_base}, expected {}",
             manifest.base.stack
@@ -76,20 +75,20 @@ impl App {
                 self.upstream_tracking_ref()?.as_str(),
             ],
         )?;
-        ensure!(
+        ensure_check!(
             merge_base == manifest.base.canonical,
             "canonical merge base is {merge_base}, expected {}",
             manifest.base.canonical
         );
         let actual_stack = self.stg_series()?;
         let expected_stack = manifest.patch_names();
-        ensure!(
+        ensure_check!(
             actual_stack == expected_stack,
             "StGit patch order differs: got {}, expected {}",
             actual_stack.join(", "),
             expected_stack.join(", ")
         );
-        ensure!(
+        ensure_check!(
             capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? == "0",
             "all fork patches must be applied"
         );
@@ -102,7 +101,7 @@ impl App {
         for patch in &manifest.patches {
             let commit = self.patch_commit(&patch.name)?;
             let paths = self.patch_paths(&commit)?;
-            ensure!(!paths.is_empty(), "patch {} is empty", patch.name);
+            ensure_check!(!paths.is_empty(), "patch {} is empty", patch.name);
             Self::check_patch_paths(patch, &paths)?;
             self.check_patch_commit(patch, &commit)?;
         }
@@ -115,7 +114,7 @@ impl App {
         }
         let expected_tree = self.expected_reconstructed_tree()?;
         let reconstructed_tree = self.reconstruct_tree()?;
-        ensure!(
+        ensure_check!(
             reconstructed_tree == expected_tree,
             "exported patches reconstruct {reconstructed_tree}, expected {expected_tree}"
         );
@@ -212,19 +211,13 @@ impl App {
             &self.repo,
             "git",
             ["remote", "get-url", &manifest.downstream.remote],
-        )
-        .with_context(|| {
-            format!(
-                "downstream remote {} is unavailable",
-                manifest.downstream.remote
-            )
-        })?;
+        )?;
         let actual_url = capture(
             &self.repo,
             "git",
             ["remote", "get-url", &manifest.upstream.remote],
         )?;
-        ensure!(
+        ensure_check!(
             actual_url == manifest.upstream.url,
             "remote {} is {actual_url}, expected {}",
             manifest.upstream.remote,
@@ -235,7 +228,7 @@ impl App {
             "git",
             ["remote", "get-url", "--push", &manifest.upstream.remote],
         )?;
-        ensure!(
+        ensure_check!(
             push_url == "DISABLED",
             "remote {} push URL is {push_url}, expected DISABLED",
             manifest.upstream.remote
@@ -248,13 +241,13 @@ impl App {
                 "-e",
                 &format!("{}^{{commit}}", self.upstream_tracking_ref()?),
             ],
-        )
-        .context("upstream tracking commit is unavailable")
+        )?;
+        Ok(())
     }
 
     fn check_patch_paths(patch: &Patch, paths: &[String]) -> Result<()> {
         for path in paths {
-            ensure!(
+            ensure_check!(
                 patch.owns(path),
                 "path in patch {} is outside scope: {path}",
                 patch.name
@@ -272,7 +265,7 @@ impl App {
     ) -> Result<()> {
         let paths = capture(&self.repo, "git", ["diff", "--name-only", from, to])?;
         for path in paths.lines().filter(|line| !line.is_empty()) {
-            ensure!(
+            ensure_check!(
                 scope
                     .iter()
                     .any(|pattern| crate::manifest::scope_matches(pattern, path)),
@@ -294,7 +287,7 @@ impl App {
                 "git",
                 ["log", "-1", &format!("--format={format}"), commit],
             )?;
-            ensure!(
+            ensure_check!(
                 actual == expected,
                 "patch {} trailer {key} is {actual:?}, expected {expected:?}",
                 patch.name
@@ -314,8 +307,8 @@ impl App {
         for required in required_text {
             let path = self.repo.join(&required.path);
             let contents =
-                fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-            ensure!(
+                fs::read_to_string(&path).internal(format!("read {}", path.display()))?;
+            ensure_check!(
                 contents.contains(&required.contains),
                 "required contract missing from {}: {}",
                 required.path,
@@ -328,9 +321,9 @@ impl App {
     fn check_ledger(&self) -> Result<()> {
         let manifest = self.manifest()?;
         let path = self.repo.join(&manifest.documents.ledger);
-        let actual = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
-        let expected = ledger::render(manifest)?;
-        ensure!(
+        let actual = fs::read(&path).internal(format!("read {}", path.display()))?;
+        let expected = ledger::render(manifest).internal("render expected patch ledger")?;
+        ensure_check!(
             actual == expected.as_bytes(),
             "generated ledger differs: {}",
             path.display()
@@ -347,9 +340,9 @@ impl App {
             .collect::<HashSet<_>>();
         for export in manifest.source_exports() {
             let path = self.repo.join(&export.path);
-            let actual = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+            let actual = fs::read(&path).internal(format!("read {}", path.display()))?;
             let expected = self.export_patch(export.patch)?;
-            ensure!(
+            ensure_check!(
                 actual == expected,
                 "export differs for patch {}: {}",
                 export.patch.name,
@@ -358,9 +351,11 @@ impl App {
         }
         let exports = self.repo.join(&manifest.documents.exports);
         let mut unexpected = if exports.exists() {
-            fs::read_dir(exports)?
+            fs::read_dir(&exports)
+                .internal(format!("read {}", exports.display()))?
                 .map(|entry| entry.map(|entry| entry.path()))
-                .collect::<std::io::Result<Vec<_>>>()?
+                .collect::<std::io::Result<Vec<_>>>()
+                .internal(format!("read entries in {}", exports.display()))?
                 .into_iter()
                 .filter(|path| {
                     path.extension()
@@ -370,13 +365,14 @@ impl App {
                     path.strip_prefix(&self.repo)
                         .map(|path| path.to_string_lossy().into_owned())
                 })
-                .collect::<std::result::Result<Vec<_>, _>>()?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .internal(format!("make exports relative to {}", self.repo.display()))?
         } else {
             Vec::new()
         };
         unexpected.retain(|path| !expected.contains(path));
         unexpected.sort();
-        ensure!(
+        ensure_check!(
             unexpected.is_empty(),
             "unexpected generated patch exports: {}",
             unexpected.join(", ")
@@ -408,7 +404,7 @@ impl App {
                     )?;
                     let commits = commits.lines().collect::<HashSet<_>>();
                     for item in dropped {
-                        ensure!(
+                        ensure_check!(
                             commits.contains(item.commit.as_str()),
                             "historical patch {} is outside recovery stack",
                             item.patch.name
@@ -416,14 +412,14 @@ impl App {
                         self.check_historical_patch(&item.patch, &item.commit)?;
                     }
                     for item in path_changes {
-                        ensure!(
+                        ensure_check!(
                             commits.contains(item.commit.as_str()),
                             "replayed patch {} is outside recovery stack",
                             item.patch
                         );
                         let paths = self.patch_paths(&item.commit)?;
                         for path in &item.lost_paths {
-                            ensure!(
+                            ensure_check!(
                                 paths.contains(path),
                                 "replayed patch {} did not touch recorded path {path}",
                                 item.patch
@@ -470,7 +466,7 @@ impl App {
                 recovery.tag
             ))
         })?;
-        ensure!(
+        ensure_check!(
             local_object == recovery.tag_object,
             "history recovery tag {} differs",
             recovery.tag
@@ -480,7 +476,7 @@ impl App {
             "git",
             ["rev-parse", &format!("{}^{{commit}}", recovery.tag_object)],
         )?;
-        ensure!(
+        ensure_check!(
             old_tip == recovery.old_tip,
             "history recovery tag peels to wrong tip"
         );
@@ -489,7 +485,7 @@ impl App {
 
     fn check_historical_patch(&self, patch: &crate::manifest::Patch, commit: &str) -> Result<()> {
         let paths = self.patch_paths(commit)?;
-        ensure!(
+        ensure_check!(
             !paths.is_empty(),
             "historical patch {} is empty",
             patch.name
@@ -507,7 +503,7 @@ impl App {
                 &format!("refs/tags/{}", operation.recovery.tag),
             ],
         )?;
-        ensure!(
+        ensure_check!(
             local_object == operation.recovery.tag_object,
             "operation recovery tag object differs"
         );
@@ -519,7 +515,7 @@ impl App {
                 &format!("{}^{{commit}}", operation.recovery.tag_object),
             ],
         )?;
-        ensure!(
+        ensure_check!(
             peeled == operation.old_tip,
             "operation recovery tag peels to wrong tip"
         );
@@ -529,7 +525,7 @@ impl App {
                 "git",
                 ["rev-parse", &format!("refs/tags/{}", recovery.tag)],
             )?;
-            ensure!(
+            ensure_check!(
                 local_object == recovery.tag_object,
                 "publication recovery tag object differs"
             );
@@ -538,19 +534,19 @@ impl App {
                 "git",
                 ["rev-parse", &format!("{}^{{commit}}", recovery.tag_object)],
             )?;
-            ensure!(
+            ensure_check!(
                 peeled == recovery.old_tip,
                 "publication recovery tag peels to wrong tip"
             );
         }
         if let Some(new_tip) = &operation.new_tip {
-            ensure!(
+            ensure_check!(
                 capture(&self.repo, "git", ["rev-parse", "HEAD"])? == *new_tip,
                 "operation new tip differs from HEAD"
             );
         }
         if let Some(report) = &operation.report {
-            ensure!(
+            ensure_check!(
                 self.file_object_id(std::path::Path::new(&report.path))? == report.object_id,
                 "operation report differs"
             );
