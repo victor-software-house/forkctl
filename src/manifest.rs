@@ -1,4 +1,4 @@
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
 use globset::GlobBuilder;
 use serde::{Deserialize, Serialize};
@@ -330,7 +330,10 @@ impl Manifest {
         validate_repo_path(repo, &manifest_relative)?;
         validate_repo_path(repo, &self.documents.ledger)?;
         validate_repo_path(repo, &self.documents.exports)?;
-        let bookkeeping = self.patches.last().expect("patches validated as non-empty");
+        let bookkeeping = self
+            .patches
+            .last()
+            .context("validated manifest has no bookkeeping patch")?;
         ensure!(
             bookkeeping.name == self.bookkeeping_patch,
             "bookkeeping patch {} must be final",

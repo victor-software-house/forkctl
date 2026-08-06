@@ -161,7 +161,7 @@ impl App {
         }))
     }
 
-    fn hydrate(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
+    fn hydrate(&self, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
         self.require_no_operation()?;
