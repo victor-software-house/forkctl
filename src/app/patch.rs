@@ -1,5 +1,5 @@
 use super::App;
-use crate::error::DomainError;
+use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
 use crate::process::{capture, run};
 use crate::protocol::{
@@ -10,7 +10,6 @@ use crate::protocol::{
 };
 
 use crate::state::{ActivePatchState, OperationIntent, OperationKind, OperationState};
-use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::io::Write;
@@ -103,12 +102,8 @@ impl App {
         args: PatchCreateArgs,
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
-        if let Some(active) = self.read_active()? {
-            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
-        }
+        self.require_no_operation()?;
+        self.require_no_active_patch()?;
         let patch: Patch = args.into();
         patch
             .validate()
@@ -139,9 +134,7 @@ impl App {
     }
 
     pub fn patch_select(&self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_operation()?;
         if self.manifest()?.patch(name).is_none() {
             return Err(DomainError::patch_not_found(
                 name,
@@ -179,9 +172,7 @@ impl App {
     ) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_operation()?;
         let (name, mut patch) = self.resolve_patch(args.patch.as_deref())?;
         if self.manifest()?.patch(&name).is_none() {
             return Err(DomainError::invalid_request(
@@ -265,10 +256,10 @@ impl App {
                 "forkctl operation continue".into(),
             ];
             self.write_operation(&operation)?;
-            return Err(error).context(format!(
+            return Err(error.context(format!(
                 "patch edit stopped; recovery tag {}; resolve the StGit operation and continue",
                 operation.recovery.tag
-            ));
+            )));
         }
         self.finish_patch_edit(&operation, proposed, patch, old_commit)
     }
@@ -305,9 +296,9 @@ impl App {
         if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0"
             && let Err(error) = run(&self.repo, "stg", ["push", "--all"])
         {
-            return Err(error).context(
+            return Err(error.context(
                 "patch edit continuation stopped while restoring applied patches; resolve and continue again",
-            );
+            ));
         }
         let expected = proposed.patch_names();
         if self.stg_series()? != expected {
@@ -395,11 +386,12 @@ impl App {
     }
 
     fn reorder_series(&self, manifest: &crate::manifest::Manifest) -> Result<()> {
-        let mut series = tempfile::NamedTempFile::new_in(&self.repo)?;
+        let mut series = tempfile::NamedTempFile::new_in(&self.repo)
+            .internal(format!("create series file in {}", self.repo.display()))?;
         for patch in &manifest.patches {
-            writeln!(series, "{}", patch.name)?;
+            writeln!(series, "{}", patch.name).internal("write temporary StGit series")?;
         }
-        series.flush()?;
+        series.flush().internal("flush temporary StGit series")?;
         run(
             &self.repo,
             "stg",
@@ -417,12 +409,8 @@ impl App {
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
         self.require_declared_branch()?;
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
-        let active = self
-            .read_active()?
-            .ok_or_else(DomainError::active_patch_required)?;
+        self.require_no_operation()?;
+        let active = self.require_active_patch()?;
         let (name, patch) = self.resolve_patch(args.patch.as_deref())?;
         if active.name() != name {
             return Err(DomainError::invalid_request(format!(
@@ -493,10 +481,10 @@ impl App {
                 "forkctl operation continue".into(),
             ];
             self.write_operation(&operation)?;
-            return Err(error).context(format!(
+            return Err(error.context(format!(
                 "patch refresh stopped; recovery tag {}; resolve the StGit operation and continue",
                 operation.recovery.tag
-            ));
+            )));
         }
         self.finish_patch_refresh(&operation, patch, args.capture, capture_paths, old_commit)
     }
@@ -546,16 +534,16 @@ impl App {
                 ],
             )
         {
-            return Err(error).context(
+            return Err(error.context(
                 "refresh continuation stopped while squashing StGit's temporary patch; resolve and continue again",
-            );
+            ));
         }
         if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0"
             && let Err(error) = run(&self.repo, "stg", ["push", "--all"])
         {
-            return Err(error).context(
+            return Err(error.context(
                 "refresh continuation stopped while restoring applied patches; resolve and continue again",
-            );
+            ));
         }
         if capture(&self.repo, "stg", ["top"])? != self.manifest()?.bookkeeping_patch {
             return Err(DomainError::operation_conflict(
@@ -612,9 +600,7 @@ impl App {
     }
 
     pub fn patch_finish(&self, target: &PatchTarget, mode: ExecutionMode) -> Result<CommandResult> {
-        let active = self
-            .read_active()?
-            .ok_or_else(DomainError::active_patch_required)?;
+        let active = self.require_active_patch()?;
         let name = target
             .patch
             .clone()
@@ -672,12 +658,8 @@ impl App {
     ) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        if let Some(active) = self.read_active()? {
-            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
-        }
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_active_patch()?;
+        self.require_no_operation()?;
         self.check_repository(false)?;
         if args.reason.trim().is_empty() {
             return Err(DomainError::invalid_request("transition reason is required").into());
@@ -741,10 +723,10 @@ impl App {
                 "forkctl operation continue".into(),
             ];
             self.write_operation(&operation)?;
-            return Err(error).context(format!(
+            return Err(error.context(format!(
                 "{command} stopped; recovery tag {}",
                 operation.recovery.tag
-            ));
+            )));
         }
         self.finish_patch_deactivate(
             &mut operation,
@@ -787,12 +769,8 @@ impl App {
     pub fn patch_enable(&mut self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        if let Some(active) = self.read_active()? {
-            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
-        }
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_active_patch()?;
+        self.require_no_operation()?;
         self.check_repository(false)?;
         let record = self
             .manifest()?
@@ -838,10 +816,10 @@ impl App {
                 "forkctl operation continue".into(),
             ];
             self.write_operation(&operation)?;
-            return Err(error).context(format!(
+            return Err(error.context(format!(
                 "patch enable stopped; recovery tag {}",
                 operation.recovery.tag
-            ));
+            )));
         }
         let manifest = self.manifest_mut()?;
         manifest
@@ -871,9 +849,11 @@ impl App {
             "git",
             ["format-patch", "--stdout", "-1", &record.commit],
         )?;
-        let mut file = tempfile::NamedTempFile::new_in(&self.repo)?;
-        file.write_all(patch.as_bytes())?;
-        file.flush()?;
+        let mut file = tempfile::NamedTempFile::new_in(&self.repo)
+            .internal(format!("create patch file in {}", self.repo.display()))?;
+        file.write_all(patch.as_bytes())
+            .internal("write temporary patch file")?;
+        file.flush().internal("flush temporary patch file")?;
         run(
             &self.repo,
             "stg",

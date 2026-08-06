@@ -1,4 +1,4 @@
-use crate::error::DomainError;
+use crate::error::{AppResult, DomainError};
 use crate::manifest::Manifest;
 use anyhow::{Context, Result};
 use serde_saphyr::RequireIndent;
@@ -14,7 +14,7 @@ pub enum ManifestFormat {
 }
 
 impl ManifestFormat {
-    pub fn from_path(path: &Path) -> Result<Self> {
+    pub fn from_path(path: &Path) -> AppResult<Self> {
         match path.extension().and_then(|extension| extension.to_str()) {
             Some("yaml" | "yml") => Ok(Self::Yaml),
             Some("json") => Ok(Self::Json),

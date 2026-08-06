@@ -1,5 +1,4 @@
-use crate::error::DomainError;
-use anyhow::{Context, Result};
+use crate::error::{AppResult, DomainError, InternalResultExt as _};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::{Command, Output};
@@ -16,19 +15,19 @@ pub fn command(dir: &Path, program: &str) -> Command {
     command
 }
 
-pub fn capture<I, S>(dir: &Path, program: &str, args: I) -> Result<String>
+pub fn capture<I, S>(dir: &Path, program: &str, args: I) -> AppResult<String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let output = output(dir, program, args)?;
     Ok(String::from_utf8(output.stdout)
-        .with_context(|| format!("{program} output is not UTF-8"))?
+        .internal(format!("decode {program} output as UTF-8"))?
         .trim()
         .to_string())
 }
 
-pub fn output<I, S>(dir: &Path, program: &str, args: I) -> Result<Output>
+pub fn output<I, S>(dir: &Path, program: &str, args: I) -> AppResult<Output>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -37,7 +36,7 @@ where
     let output = command(dir, program)
         .args(&args)
         .output()
-        .with_context(|| format!("run {program}"))?;
+        .internal(format!("run {program}"))?;
     if output.status.success() {
         Ok(output)
     } else {
@@ -45,7 +44,7 @@ where
     }
 }
 
-pub fn succeeds<I, S>(dir: &Path, program: &str, args: I) -> Result<bool>
+pub fn succeeds<I, S>(dir: &Path, program: &str, args: I) -> AppResult<bool>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -53,12 +52,12 @@ where
     Ok(command(dir, program)
         .args(args)
         .output()
-        .with_context(|| format!("run {program}"))?
+        .internal(format!("run {program}"))?
         .status
         .success())
 }
 
-pub fn run<I, S>(dir: &Path, program: &str, args: I) -> Result<()>
+pub fn run<I, S>(dir: &Path, program: &str, args: I) -> AppResult<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,

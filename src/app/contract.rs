@@ -1,10 +1,10 @@
 use super::App;
+use crate::error::AppResult as Result;
 use crate::error::DomainError;
 use crate::manifest::Contracts;
 use crate::protocol::{
     CommandResult, ContractEditArgs, ContractEditResult, ExecutionMode, MutationPlan,
 };
-use anyhow::Result;
 
 impl App {
     pub fn contract_edit(
@@ -14,12 +14,8 @@ impl App {
     ) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        if let Some(active) = self.read_active()? {
-            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
-        }
-        if let Some(operation) = self.read_operation()? {
-            return Err(DomainError::operation_in_progress(&operation).into());
-        }
+        self.require_no_active_patch()?;
+        self.require_no_operation()?;
         if !args.clear && args.allow_base.is_empty() && args.required_text.is_empty() {
             return Err(DomainError::invalid_request(
                 "contract edit requires --clear, --allow-base, or --required-text",

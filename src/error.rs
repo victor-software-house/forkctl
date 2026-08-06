@@ -1,8 +1,95 @@
 use crate::protocol::{ApiError, ApiErrorCode, ErrorDetails};
 use crate::state::OperationState;
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::path::Path;
 use std::process::Output;
+
+pub type AppResult<T> = std::result::Result<T, AppError>;
+
+#[derive(Debug)]
+pub enum AppError {
+    Domain {
+        error: Box<DomainError>,
+        causes: Vec<String>,
+    },
+    Internal(anyhow::Error),
+}
+
+impl AppError {
+    pub fn internal(
+        error: impl Into<anyhow::Error>,
+        context: impl Display + Send + Sync + 'static,
+    ) -> Self {
+        Self::Internal(error.into().context(context))
+    }
+
+    pub fn internal_message(message: impl Into<String>) -> Self {
+        Self::Internal(anyhow::Error::msg(message.into()))
+    }
+
+    pub fn context(self, context: impl Into<String>) -> Self {
+        let context = context.into();
+        match self {
+            Self::Domain { error, mut causes } => {
+                causes.insert(0, context);
+                Self::Domain { error, causes }
+            }
+            Self::Internal(error) => Self::Internal(error.context(context)),
+        }
+    }
+
+    pub fn to_api_error(&self) -> ApiError {
+        match self {
+            Self::Domain { error, causes } => error.to_api_error(causes.clone()),
+            Self::Internal(error) => ApiError {
+                code: ApiErrorCode::InternalError,
+                message: error.to_string(),
+                causes: error.chain().skip(1).map(ToString::to_string).collect(),
+                details: ErrorDetails::None,
+                retryable: false,
+                suggested_command: None,
+            },
+        }
+    }
+}
+
+impl From<DomainError> for AppError {
+    fn from(error: DomainError) -> Self {
+        Self::Domain {
+            error: Box::new(error),
+            causes: Vec::new(),
+        }
+    }
+}
+
+impl std::fmt::Display for AppError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Domain { error, .. } => error.fmt(formatter),
+            Self::Internal(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for AppError {}
+
+/// Explicitly marks an infrastructure failure as internal.
+///
+/// `AppError` intentionally has no blanket `From<anyhow::Error>` or I/O conversion: callers must
+/// choose domain classification or invoke this adapter with actionable context.
+pub trait InternalResultExt<T> {
+    fn internal(self, context: impl Display + Send + Sync + 'static) -> AppResult<T>;
+}
+
+impl<T, E> InternalResultExt<T> for std::result::Result<T, E>
+where
+    E: Into<anyhow::Error>,
+{
+    fn internal(self, context: impl Display + Send + Sync + 'static) -> AppResult<T> {
+        self.map_err(|error| AppError::internal(error, context))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DomainError {
@@ -265,3 +352,29 @@ impl std::fmt::Display for DomainError {
 }
 
 impl std::error::Error for DomainError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn domain_error_keeps_public_classification_and_context() {
+        let error = AppError::from(DomainError::invalid_request("bad request"))
+            .context("while dispatching command");
+
+        let api = error.to_api_error();
+        assert_eq!(api.code.to_string(), "invalid_request");
+        assert_eq!(api.message, "bad request");
+        assert_eq!(api.causes, ["while dispatching command"]);
+    }
+
+    #[test]
+    fn internal_error_preserves_contextual_causes() {
+        let error = AppError::internal(std::io::Error::other("disk failure"), "write state");
+
+        let api = error.to_api_error();
+        assert_eq!(api.code.to_string(), "internal_error");
+        assert_eq!(api.message, "write state");
+        assert_eq!(api.causes, ["disk failure"]);
+    }
+}
