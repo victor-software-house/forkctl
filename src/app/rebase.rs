@@ -1,10 +1,11 @@
 use super::{App, write_atomic};
+use crate::error::DomainError;
 use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent, ReplayPathChange};
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, RebaseResult};
 use crate::report::{self, ExportEvidence, RebaseReport};
 use crate::state::{OperationKind, OperationState, ReportEvidence};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
@@ -12,14 +13,12 @@ impl App {
     pub fn rebase(&mut self, selector: &str, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        ensure!(
-            self.read_active()?.is_none(),
-            "active patch must be finished before rebase"
-        );
-        ensure!(
-            self.read_operation()?.is_none(),
-            "another forkctl operation is in progress"
-        );
+        if let Some(active) = self.read_active()? {
+            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
+        }
+        if let Some(operation) = self.read_operation()? {
+            return Err(DomainError::operation_in_progress(&operation).into());
+        }
         self.check_repository(false)?;
         self.fetch_upstream(false)?;
         let target = self.resolve_target(selector)?;
@@ -73,29 +72,8 @@ impl App {
         &mut self,
         mut operation: OperationState,
     ) -> Result<RebaseResult> {
-        ensure!(
-            operation.kind == OperationKind::Rebase,
-            "current operation is not rebase"
-        );
-        let target = operation
-            .target
-            .clone()
-            .context("rebase operation has no target")?;
-        ensure!(
-            capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? == "0",
-            "rebase is incomplete; apply all patches before continuing"
-        );
-        let new_base = capture(&self.repo, "stg", ["id", "{base}"])?;
-        ensure!(
-            new_base == target.commit,
-            "StGit base is {new_base}, expected {}",
-            target.commit
-        );
-        let bookkeeping = self.manifest()?.bookkeeping_patch.clone();
-        ensure!(
-            capture(&self.repo, "stg", ["top"])? == bookkeeping,
-            "bookkeeping patch must be top"
-        );
+        let target = self.validate_rebase_continuation(&operation)?;
+        let new_base = target.commit.clone();
         let dropped = self.drop_upstream_merged(&target, &operation)?;
         let path_changes = self.replay_path_changes(&operation)?;
         let upstream_tracking = self.upstream_tracking_ref()?;
@@ -170,6 +148,43 @@ impl App {
                 .collect::<Vec<_>>(),
             check,
         })
+    }
+
+    fn validate_rebase_continuation(&self, operation: &OperationState) -> Result<BaseTarget> {
+        if operation.kind != OperationKind::Rebase {
+            return Err(DomainError::operation_conflict(
+                "current operation is not rebase",
+                Some(operation),
+            )
+            .into());
+        }
+        let target = operation.target.clone().ok_or_else(|| {
+            DomainError::operation_conflict("rebase operation has no target", Some(operation))
+        })?;
+        if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0" {
+            return Err(DomainError::operation_conflict(
+                "rebase is incomplete; apply all patches before continuing",
+                Some(operation),
+            )
+            .into());
+        }
+        let new_base = capture(&self.repo, "stg", ["id", "{base}"])?;
+        if new_base != target.commit {
+            return Err(DomainError::operation_conflict(
+                format!("StGit base is {new_base}, expected {}", target.commit),
+                Some(operation),
+            )
+            .into());
+        }
+        let bookkeeping = self.manifest()?.bookkeeping_patch.clone();
+        if capture(&self.repo, "stg", ["top"])? != bookkeeping {
+            return Err(DomainError::operation_conflict(
+                "bookkeeping patch must be top",
+                Some(operation),
+            )
+            .into());
+        }
+        Ok(target)
     }
 
     /// Records paths a surviving patch no longer touches after replay.

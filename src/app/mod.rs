@@ -104,11 +104,13 @@ impl App {
     pub(super) fn require_declared_branch(&self) -> Result<()> {
         let manifest = self.manifest()?;
         let actual = self.current_branch()?;
-        ensure!(
-            actual == manifest.downstream.branch,
-            "current branch is {actual}, expected {}",
-            manifest.downstream.branch
-        );
+        if actual != manifest.downstream.branch {
+            return Err(DomainError::invalid_request(format!(
+                "current branch is {actual}, expected {}",
+                manifest.downstream.branch
+            ))
+            .into());
+        }
         let tracking = capture(
             &self.repo,
             "git",
@@ -123,10 +125,12 @@ impl App {
             "{}/{}",
             manifest.downstream.remote, manifest.downstream.branch
         );
-        ensure!(
-            tracking == expected,
-            "branch tracks {tracking}, expected {expected}"
-        );
+        if tracking != expected {
+            return Err(DomainError::invalid_request(format!(
+                "branch tracks {tracking}, expected {expected}"
+            ))
+            .into());
+        }
         Ok(())
     }
 
@@ -136,7 +140,7 @@ impl App {
             "git",
             ["symbolic-ref", "--quiet", "--short", "HEAD"],
         )
-        .context("repository is in detached HEAD state")
+        .map_err(|_| DomainError::invalid_request("repository is in detached HEAD state").into())
     }
 
     pub(super) fn worktree_inventory(&self) -> Result<WorktreeInventory> {
@@ -695,7 +699,9 @@ pub(super) struct WorktreeInventory {
 }
 
 pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Result<BaseTarget> {
-    ensure!(!selector.trim().is_empty(), "target is required");
+    if selector.trim().is_empty() {
+        return Err(DomainError::invalid_request("target is required").into());
+    }
     let kind = if crate::manifest::is_full_sha(selector) {
         TargetKind::Commit
     } else if selector.starts_with("refs/heads/") {

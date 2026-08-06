@@ -54,6 +54,33 @@ fn pretty_output_respects_terminal_width() {
     assert!(max_line_width(&error.stderr) <= 40);
 }
 
+#[test]
+fn narrow_help_preserves_complete_tokens() {
+    for width in [40, 50, 60] {
+        let root = forkctl()
+            .env("COLUMNS", width.to_string())
+            .args(["--color", "never", "--help"])
+            .output()
+            .unwrap();
+        assert!(root.status.success());
+        let root = String::from_utf8(root.stdout).unwrap();
+        for token in ["--manifest", "FORK_MANIFEST", "patches/fork.yaml"] {
+            assert!(root.contains(token), "{width}-column help split {token:?}");
+        }
+
+        let patch = forkctl()
+            .env("COLUMNS", width.to_string())
+            .args(["--color", "never", "patch", "create", "--help"])
+            .output()
+            .unwrap();
+        assert!(patch.status.success());
+        let patch = String::from_utf8(patch.stdout).unwrap();
+        for token in ["--upstream-status", "[source|tooling]", "--check-glob"] {
+            assert!(patch.contains(token), "{width}-column help split {token:?}");
+        }
+    }
+}
+
 fn complete_in(directory: &std::path::Path, words: &[&str], index: usize) -> std::process::Output {
     forkctl()
         .env("COMPLETE", "bash")
@@ -110,6 +137,11 @@ fn schema_bundle_exposes_all_contracts() {
     ] {
         assert!(schema["schemas"][key].is_object(), "missing {key}");
     }
+    let schema_text = schema.to_string();
+    assert!(
+        schema_text.contains("complete applied stack, in a disposable clone with no origin remote")
+    );
+    assert!(!schema_text.contains("complete applied stack, in the repository itself"));
 }
 
 #[test]
@@ -243,6 +275,70 @@ fn api_domain_errors_are_typed_at_the_boundary() {
     assert_eq!(staged["error"]["details"]["type"], "paths");
     assert_eq!(staged["error"]["details"]["patch"], "fork-tooling");
     assert_eq!(staged["error"]["details"]["paths"][0], "outside.txt");
+}
+
+#[test]
+fn mutation_preconditions_are_typed_client_errors() {
+    let fixture = Fixture::new();
+
+    let duplicate = fixture.api_call(
+        "execute",
+        &serde_json::json!({
+            "command":"patch.create",
+            "arguments":{
+                "name":"fork-tooling",
+                "kind":"tooling",
+                "purpose":"duplicate patch",
+                "upstream_status":"not-submitted",
+                "drop_when":"never",
+                "scope":["FORK.md"]
+            }
+        }),
+    );
+    assert!(!duplicate.status.success());
+    let duplicate: serde_json::Value = serde_json::from_slice(&duplicate.stdout).unwrap();
+    assert_eq!(duplicate["error"]["code"], "invalid_request");
+    assert_eq!(duplicate["error"]["details"]["type"], "request");
+    assert_eq!(
+        duplicate["error"]["message"],
+        "patch already exists: fork-tooling"
+    );
+
+    for (command, arguments) in [
+        ("operation.continue", serde_json::json!({})),
+        ("operation.abort", serde_json::json!({"confirmed": true})),
+    ] {
+        let missing_operation = fixture.api_call(
+            "execute",
+            &serde_json::json!({"command": command, "arguments": arguments}),
+        );
+        assert!(!missing_operation.status.success());
+        let missing_operation: serde_json::Value =
+            serde_json::from_slice(&missing_operation.stdout).unwrap();
+        assert_eq!(missing_operation["error"]["code"], "invalid_request");
+        assert_eq!(missing_operation["error"]["details"]["type"], "request");
+        assert_eq!(
+            missing_operation["error"]["message"],
+            "no forkctl operation is in progress"
+        );
+    }
+
+    support::git_ok(&fixture.repo, ["checkout", "-b", "other"]);
+    let wrong_branch = fixture.api_call(
+        "execute",
+        &serde_json::json!({
+            "command":"patch.edit",
+            "arguments":{"patch":"fork-tooling","purpose":"new purpose"}
+        }),
+    );
+    assert!(!wrong_branch.status.success());
+    let wrong_branch: serde_json::Value = serde_json::from_slice(&wrong_branch.stdout).unwrap();
+    assert_eq!(wrong_branch["error"]["code"], "invalid_request");
+    assert_eq!(wrong_branch["error"]["details"]["type"], "request");
+    assert_eq!(
+        wrong_branch["error"]["message"],
+        "current branch is other, expected main"
+    );
 }
 
 #[test]

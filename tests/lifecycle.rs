@@ -1,7 +1,7 @@
 mod support;
 
 use std::fs;
-use support::{Fixture, git_ok};
+use support::{Fixture, git_ok, isolated_command};
 
 #[test]
 fn bootstrap_and_fresh_clone_hydration_are_idempotent() {
@@ -57,6 +57,34 @@ fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
     assert_eq!(
         series.lines().collect::<Vec<_>>(),
         ["source-change", "fork-tooling"]
+    );
+}
+
+#[test]
+fn complete_check_rejects_unexpected_tracked_patch_export() {
+    let fixture = Fixture::new();
+    let stale = fixture.repo.join("patches/downstream/9999-stale.patch");
+    fs::create_dir_all(stale.parent().unwrap()).unwrap();
+    fs::write(&stale, "stale generated evidence\n").unwrap();
+    git_ok(
+        &fixture.repo,
+        ["add", "patches/downstream/9999-stale.patch"],
+    );
+    let refresh = isolated_command(&fixture.repo, "stg")
+        .args(["refresh", "--patch", "fork-tooling", "--index"])
+        .output()
+        .unwrap();
+    assert!(
+        refresh.status.success(),
+        "{}",
+        String::from_utf8_lossy(&refresh.stderr)
+    );
+
+    let check = fixture.forkctl(&["check"]);
+    assert!(!check.status.success());
+    assert!(
+        String::from_utf8_lossy(&check.stderr)
+            .contains("unexpected generated patch exports: patches/downstream/9999-stale.patch")
     );
 }
 

@@ -19,9 +19,10 @@ pub fn constrain(table: &mut Table) {
 }
 
 pub fn wrap(value: &str) -> String {
-    let Some(width) = terminal_width() else {
-        return value.to_string();
-    };
+    terminal_width().map_or_else(|| value.to_string(), |width| wrap_to(value, width))
+}
+
+fn wrap_to(value: &str, width: u16) -> String {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
@@ -38,6 +39,19 @@ pub fn wrap(value: &str) -> String {
         .map(str::trim_end)
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+pub fn push_indented(output: &mut String, value: &str, indentation: u16) {
+    let prefix = " ".repeat(usize::from(indentation));
+    let wrapped = terminal_width().map_or_else(
+        || value.to_string(),
+        |width| wrap_to(value, width.saturating_sub(indentation)),
+    );
+    for line in wrapped.lines() {
+        output.push_str(&prefix);
+        output.push_str(line);
+        output.push('\n');
+    }
 }
 
 pub fn push_line(output: &mut String, value: &str) {

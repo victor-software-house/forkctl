@@ -39,7 +39,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 ## CLI and integration
 
 - Supported runtimes are Linux and macOS. Windows remains unsupported while mounted tasks require a POSIX shell and declared checks execute through `sh -c`; PowerShell completion generation does not imply Windows runtime support.
-- Pull requests and branch pushes must pass `verify`, `test:isolated`, and `build` on GitHub's free public-repository `ubuntu-latest` and `macos-latest` hosted runners; concurrency must collapse same-repository push/PR duplicates by branch. Pin every external action to a full commit SHA and keep workflow permissions read-only unless a new capability proves otherwise.
+- Pull requests and pushes to `main` must pass `verify`, `test:isolated`, and `build` on GitHub's free public-repository `ubuntu-latest` and `macos-latest` hosted runners. Pin every external action to a full commit SHA and keep workflow permissions read-only unless a new capability proves otherwise.
 - Keep core verbs top-level. Use `patch`, `operation`, and `api` subcommands only for distinct actions; modes of one operation are parameters, not optional subcommands.
 - Leaf parameters are orthogonal and composable, with repeatable values, visible defaults, and collision-audited short forms.
 - Help, Usage KDL, shell completion, CLI requests, and JSON Schema derive from the authoritative Clap/protocol types rather than copied literals.

@@ -10,7 +10,7 @@ use crate::protocol::{
 };
 
 use crate::state::{ActivePatchState, OperationIntent, OperationKind, OperationState};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::io::Write;
@@ -113,11 +113,13 @@ impl App {
         patch
             .validate()
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
-        ensure!(
-            self.manifest()?.patch(&patch.name).is_none(),
-            "patch already exists: {}",
-            patch.name
-        );
+        if self.manifest()?.patch(&patch.name).is_some() {
+            return Err(DomainError::invalid_request(format!(
+                "patch already exists: {}",
+                patch.name
+            ))
+            .into());
+        }
         let state = ActivePatchState::Draft { metadata: patch };
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(MutationPlan {
@@ -422,10 +424,12 @@ impl App {
             .read_active()?
             .ok_or_else(DomainError::active_patch_required)?;
         let (name, patch) = self.resolve_patch(args.patch.as_deref())?;
-        ensure!(
-            active.name() == name,
-            "requested patch {name} is not active"
-        );
+        if active.name() != name {
+            return Err(DomainError::invalid_request(format!(
+                "requested patch {name} is not active"
+            ))
+            .into());
+        }
         let capture_paths = self.capture_paths(&patch, &args.capture)?;
         if capture_paths.is_empty() {
             return Err(DomainError::capture_conflict("no changes selected for capture").into());
@@ -615,14 +619,15 @@ impl App {
             .patch
             .clone()
             .unwrap_or_else(|| active.name().to_string());
-        ensure!(
-            active.name() == name,
-            "requested patch {name} is not active"
-        );
-        ensure!(
-            matches!(active, ActivePatchState::Existing { .. }),
-            "draft patch has not been refreshed"
-        );
+        if active.name() != name {
+            return Err(DomainError::invalid_request(format!(
+                "requested patch {name} is not active"
+            ))
+            .into());
+        }
+        if !matches!(active, ActivePatchState::Existing { .. }) {
+            return Err(DomainError::invalid_request("draft patch has not been refreshed").into());
+        }
         self.require_clean()?;
         let check = self.check_repository(true)?;
         if mode == ExecutionMode::Plan {
@@ -667,19 +672,16 @@ impl App {
     ) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        ensure!(
-            self.read_active()?.is_none(),
-            "active patch must be finished first"
-        );
-        ensure!(
-            self.read_operation()?.is_none(),
-            "another forkctl operation is in progress"
-        );
+        if let Some(active) = self.read_active()? {
+            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
+        }
+        if let Some(operation) = self.read_operation()? {
+            return Err(DomainError::operation_in_progress(&operation).into());
+        }
         self.check_repository(false)?;
-        ensure!(
-            !args.reason.trim().is_empty(),
-            "transition reason is required"
-        );
+        if args.reason.trim().is_empty() {
+            return Err(DomainError::invalid_request("transition reason is required").into());
+        }
         let available = self.manifest()?.patch_names();
         let position = self
             .manifest()?
@@ -688,10 +690,12 @@ impl App {
             .position(|patch| patch.name == args.patch)
             .ok_or_else(|| DomainError::patch_not_found(&args.patch, available, None))?;
         let patch = self.manifest()?.patches[position].clone();
-        ensure!(
-            patch.name != self.manifest()?.bookkeeping_patch,
-            "bookkeeping patch cannot be removed or disabled"
-        );
+        if patch.name == self.manifest()?.bookkeeping_patch {
+            return Err(DomainError::invalid_request(
+                "bookkeeping patch cannot be removed or disabled",
+            )
+            .into());
+        }
         let commit = self.patch_commit(&patch.name)?;
         let command = if disable {
             "patch.disable"
@@ -783,14 +787,12 @@ impl App {
     pub fn patch_enable(&mut self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
-        ensure!(
-            self.read_active()?.is_none(),
-            "active patch must be finished first"
-        );
-        ensure!(
-            self.read_operation()?.is_none(),
-            "another forkctl operation is in progress"
-        );
+        if let Some(active) = self.read_active()? {
+            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
+        }
+        if let Some(operation) = self.read_operation()? {
+            return Err(DomainError::operation_in_progress(&operation).into());
+        }
         self.check_repository(false)?;
         let record = self
             .manifest()?
@@ -900,11 +902,16 @@ impl App {
             "git",
             ["diff", "--name-only", "--diff-filter=U"],
         )?;
-        ensure!(
-            conflicts.is_empty(),
-            "unresolved paths remain: {}",
-            conflicts.lines().collect::<Vec<_>>().join(", ")
-        );
+        if !conflicts.is_empty() {
+            return Err(DomainError::operation_conflict(
+                format!(
+                    "unresolved paths remain: {}",
+                    conflicts.lines().collect::<Vec<_>>().join(", ")
+                ),
+                Some(&operation),
+            )
+            .into());
+        }
         if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0" {
             run(&self.repo, "stg", ["push", "--all"])?;
         }
@@ -991,7 +998,11 @@ impl App {
                 paths
             }
             CaptureSource::Paths { pathspecs } => {
-                ensure!(!pathspecs.is_empty(), "at least one pathspec is required");
+                if pathspecs.is_empty() {
+                    return Err(
+                        DomainError::invalid_request("at least one pathspec is required").into(),
+                    );
+                }
                 let mut command = vec![
                     "ls-files",
                     "--modified",

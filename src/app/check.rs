@@ -339,7 +339,13 @@ impl App {
     }
 
     fn check_exports(&self) -> Result<()> {
-        for export in self.manifest()?.source_exports() {
+        let manifest = self.manifest()?;
+        let expected = manifest
+            .source_exports()
+            .into_iter()
+            .map(|export| export.path.clone())
+            .collect::<HashSet<_>>();
+        for export in manifest.source_exports() {
             let path = self.repo.join(&export.path);
             let actual = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
             let expected = self.export_patch(export.patch)?;
@@ -350,6 +356,31 @@ impl App {
                 export.path
             );
         }
+        let exports = self.repo.join(&manifest.documents.exports);
+        let mut unexpected = if exports.exists() {
+            fs::read_dir(exports)?
+                .map(|entry| entry.map(|entry| entry.path()))
+                .collect::<std::io::Result<Vec<_>>>()?
+                .into_iter()
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|extension| extension == "patch")
+                })
+                .map(|path| {
+                    path.strip_prefix(&self.repo)
+                        .map(|path| path.to_string_lossy().into_owned())
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
+        unexpected.retain(|path| !expected.contains(path));
+        unexpected.sort();
+        ensure!(
+            unexpected.is_empty(),
+            "unexpected generated patch exports: {}",
+            unexpected.join(", ")
+        );
         Ok(())
     }
 

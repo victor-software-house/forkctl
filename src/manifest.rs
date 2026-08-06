@@ -116,10 +116,10 @@ pub struct Check {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum CheckStage {
-    /// The complete applied stack, in the repository itself.
+    /// The complete applied stack, in a disposable clone with no origin remote.
     #[default]
     Stack,
-    /// The declaring patch's own commit, in a disposable clone.
+    /// The declaring patch's own commit, in a disposable clone with no origin remote.
     Patch,
 }
 
