@@ -61,6 +61,20 @@ fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
 }
 
 #[test]
+fn discover_restores_missing_mise_toml_from_workspace_snapshot() {
+    let fixture = Fixture::new();
+    let snap_dir = fixture.repo.join(".git/forkctl/workspace");
+    fs::create_dir_all(&snap_dir).unwrap();
+    fs::write(snap_dir.join("mise.toml"), "min_version = \"2026.7.7\"\n").unwrap();
+    assert!(!fixture.repo.join("mise.toml").exists());
+    fixture.forkctl_ok(&["status"]);
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("mise.toml")).unwrap(),
+        "min_version = \"2026.7.7\"\n"
+    );
+}
+
+#[test]
 fn complete_check_rejects_unexpected_tracked_patch_export() {
     let fixture = Fixture::new();
     let stale = fixture.repo.join("patches/downstream/9999-stale.patch");

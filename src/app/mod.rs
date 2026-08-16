@@ -39,6 +39,10 @@ impl App {
         let repo = capture(&cwd, "git", ["rev-parse", "--show-toplevel"])
             .map(PathBuf::from)
             .map_err(|error| DomainError::repository_not_found(error.to_string()))?;
+        // Later patches may own mise.toml / the manifest. An in-flight
+        // refresh pops them. Restore the last snapshot so `mise run fork`
+        // and operation continue/abort stay usable.
+        restore_workspace_bootstrap(&repo);
         let manifest_path = if manifest_arg.is_absolute() {
             manifest_arg.to_owned()
         } else {
@@ -517,6 +521,14 @@ impl App {
         self.git_private_path("forkctl/manifest.json")
     }
 
+    pub(super) fn snapshot_workspace_bootstrap(&self) -> Result<()> {
+        snapshot_workspace_bootstrap(&self.repo)
+    }
+
+    pub(super) fn clear_restored_workspace_bootstrap(&self) -> Result<()> {
+        clear_restored_workspace_bootstrap(&self.repo)
+    }
+
     pub(super) fn read_active(&self) -> Result<Option<ActivePatchState>> {
         read_optional_json(&self.active_path()?)
     }
@@ -604,6 +616,7 @@ impl App {
         let (tag, tag_object) = self.create_recovery_tag(&id, &old_tip, &format!("{kind:?}"))?;
         let snapshot = self.operation_manifest_snapshot_path()?;
         write_atomic(&snapshot, &serde_json::to_vec_pretty(manifest)?)?;
+        self.snapshot_workspace_bootstrap()?;
         Ok(OperationState {
             schema: 1,
             id,
@@ -783,6 +796,67 @@ fn git_private_path(repo: &Path, relative: &str) -> Result<PathBuf> {
     } else {
         repo.join(path)
     })
+}
+
+const WORKSPACE_BOOTSTRAP_FILES: &[&str] = &["mise.toml", "mise.lock"];
+
+fn snapshot_workspace_bootstrap(repo: &Path) -> Result<()> {
+    let dir = git_private_path(repo, "forkctl/workspace")?;
+    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    for name in WORKSPACE_BOOTSTRAP_FILES {
+        let src = repo.join(name);
+        if src.is_file() {
+            fs::copy(&src, dir.join(name))
+                .with_context(|| format!("snapshot {}", src.display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn restored_list_path(dir: &Path) -> PathBuf {
+    dir.join("restored")
+}
+
+fn restore_workspace_bootstrap(repo: &Path) {
+    let Ok(dir) = git_private_path(repo, "forkctl/workspace") else {
+        return;
+    };
+    if !dir.is_dir() {
+        return;
+    }
+    let mut restored = Vec::new();
+    for name in WORKSPACE_BOOTSTRAP_FILES {
+        let dest = repo.join(name);
+        let src = dir.join(name);
+        if !dest.exists() && src.is_file() && fs::copy(&src, &dest).is_ok() {
+            restored.push((*name).to_string());
+        }
+    }
+    if !restored.is_empty() {
+        let _ = fs::write(restored_list_path(&dir), restored.join("\n"));
+    }
+}
+
+fn clear_restored_workspace_bootstrap(repo: &Path) -> Result<()> {
+    let dir = git_private_path(repo, "forkctl/workspace")?;
+    let list = restored_list_path(&dir);
+    if !list.is_file() {
+        return Ok(());
+    }
+    let contents = fs::read_to_string(&list).with_context(|| format!("read {}", list.display()))?;
+    for name in contents
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        let dest = repo.join(name);
+        if dest.is_file() {
+            fs::remove_file(&dest)
+                .with_context(|| format!("remove restored bootstrap {}", dest.display()))?;
+        }
+    }
+    fs::remove_file(&list).with_context(|| format!("remove {}", list.display()))?;
+    Ok(())
 }
 
 fn nonempty_lines(value: &str) -> Vec<String> {

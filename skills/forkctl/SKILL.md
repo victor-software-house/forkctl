@@ -19,8 +19,12 @@ Treat forkctl as the policy owner for an explicit StGit downstream patch stack. 
 
 1. Read repository guidance before changing anything.
 2. Determine the supported invocation:
-   - use `mise run fork -- <args>` when the repository mounts the forkctl task;
-   - otherwise use `forkctl <args>`.
+   - **Always** `mise run fork -- <args>` when the repository mounts the forkctl task.
+   - Never invoke a PATH-global `forkctl` or `stg`. Never `find` an install dir.
+   - If `mise run fork` is gone because a mid-stack refresh popped `mise.toml`,
+     run `mise x github:victor-software-house/forkctl -- forkctl operation status`
+     then `continue` or `abort --yes`. Do not reconstruct the stack by hand.
+   - Prefer a new top patch over refreshing a non-top patch.
 3. Respect an explicit `--manifest PATH` or `FORK_MANIFEST`. Do not guess a different manifest when discovery fails.
 4. Run `status`, then the complete read-only `check`, before mutation.
 5. Use `<invocation> --help` and `<invocation> instructions` as the authoritative installed-version contract. Do not invent aliases for rejected commands or fields.
@@ -30,14 +34,13 @@ mise run fork -- status
 mise run fork -- check
 ```
 
-Use the direct binary instead when no mounted task exists:
+If the mounted task is missing (later patch popped `mise.toml`), do **not** call a PATH-global binary:
 
 ```sh
-forkctl status
-forkctl check
+mise x github:victor-software-house/forkctl -- forkctl operation status
 ```
 
-The remaining examples use the direct binary for brevity. In a mounted consumer, replace `forkctl` with `mise run fork --` without changing the arguments.
+The remaining examples use `mise run fork --`. Never `stg` or a global `forkctl`.
 
 ## Capture a downstream change
 
@@ -46,7 +49,7 @@ The operator chooses patch intent; forkctl never routes changes by filename.
 Create a metadata-only patch intent before editing:
 
 ```sh
-forkctl patch create PATCH \
+mise run fork -- patch create PATCH \
   --kind source \
   --purpose 'Why this downstream change exists.' \
   --upstream-status not-submitted \
@@ -65,9 +68,9 @@ Then edit normally and use Git's index as the default explicit capture boundary:
 
 ```sh
 git add -- path/to/file
-forkctl check --staged
-forkctl patch refresh
-forkctl patch finish
+mise run fork -- check --staged
+mise run fork -- patch refresh
+mise run fork -- patch finish
 ```
 
 Rules:
@@ -120,10 +123,10 @@ Do not replace a failing check with raw Git/StGit commands or manual generated-f
 Mutations that can stop partway use one Git-private operation journal:
 
 ```sh
-forkctl operation status
-forkctl operation continue
-forkctl operation abort --dry-run
-forkctl operation abort --yes
+mise run fork -- operation status
+mise run fork -- operation continue
+mise run fork -- operation abort --dry-run
+mise run fork -- operation abort --yes
 ```
 
 On conflict:

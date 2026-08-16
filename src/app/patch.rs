@@ -490,7 +490,8 @@ impl App {
             operation.next_actions = vec![
                 "resolve conflict content".into(),
                 "git add --update".into(),
-                "forkctl operation continue".into(),
+                "mise run fork -- operation continue".into(),
+                "if mise.toml is missing: mise x github:victor-software-house/forkctl -- forkctl operation continue".into(),
             ];
             self.write_operation(&operation)?;
             return Err(error).context(format!(

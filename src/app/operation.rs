@@ -20,6 +20,7 @@ impl App {
             .read_operation()?
             .ok_or_else(|| DomainError::invalid_request("no forkctl operation is in progress"))?;
         self.load_operation_manifest()?;
+        self.clear_restored_workspace_bootstrap()?;
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(MutationPlan {
                 command: "operation.continue".into(),
@@ -130,6 +131,7 @@ impl App {
         {
             return Err(DomainError::active_patch_exists(active.name().to_string()).into());
         }
+        self.clear_restored_workspace_bootstrap()?;
         self.restore_operation_stack(&operation)?;
         self.verify_restored_operation_stack(&operation)?;
         self.manifest = None;
