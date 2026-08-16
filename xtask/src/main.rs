@@ -7,7 +7,7 @@ const FORKCTL_REF_MARKER: &str = "forkctl.git//tasks/fork?ref=v";
 const MIN_MISE_MARKER: &str = "min_version = \"";
 const RUST_TOOL_MARKER: &str = "rust = \"";
 const STGIT_TOOL_MARKER: &str = "\"cargo:stgit\" = { version = \"";
-const NEXTEST_TOOL_MARKER: &str = "\"cargo:cargo-nextest\" = { version = \"";
+const NEXTEST_TOOL_MARKER: &str = "\"github:nextest-rs/nextest\" = \"";
 const LEFTHOOK_TOOL_MARKER: &str = "lefthook = \"";
 const USAGE_TOOL_MARKER: &str = "usage = \"";
 const GH_TOOL_MARKER: &str = "gh = \"";
@@ -110,7 +110,7 @@ fn check_lock(path: &Path, versions: &ToolVersions) -> Result<(), String> {
         fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
     for (tool, expected) in [
         ("ast-grep", versions.ast_grep.as_str()),
-        ("cargo:cargo-nextest", versions.nextest.as_str()),
+        ("github:nextest-rs/nextest", versions.nextest.as_str()),
         ("cargo:stgit", versions.stgit.as_str()),
         ("gh", versions.gh.as_str()),
         ("lefthook", versions.lefthook.as_str()),

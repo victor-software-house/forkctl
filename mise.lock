@@ -29,18 +29,6 @@ checksum = "sha256:a1b5b7c06994992755d4cd0b9cf10c2f4a6e7b4a82d2810edee5985a59f67
 url = "https://github.com/ast-grep/ast-grep/releases/download/0.45.0/app-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/ast-grep/ast-grep/releases/assets/487376855"
 
-[[tools."cargo:cargo-deny"]]
-version = "0.18.9"
-backend = "cargo:cargo-deny"
-
-[[tools."cargo:cargo-machete"]]
-version = "0.9.1"
-backend = "cargo:cargo-machete"
-
-[[tools."cargo:cargo-nextest"]]
-version = "0.9.143"
-backend = "cargo:cargo-nextest"
-
 [[tools."cargo:stgit"]]
 version = "2.6.1"
 backend = "cargo:stgit"
@@ -89,6 +77,131 @@ provenance = "github-attestations"
 checksum = "sha256:19a7154161ada9cfaa9e57edb752ecc679b75c391a62e4f7b586eea1df30b5bb"
 url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_windows_amd64.zip"
 url_api = "https://api.github.com/repos/cli/cli/releases/assets/450526025"
+provenance = "github-attestations"
+
+[[tools."github:EmbarkStudios/cargo-deny"]]
+version = "0.18.9"
+backend = "github:EmbarkStudios/cargo-deny"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-arm64"]
+checksum = "sha256:8bc65cc9f5573e1538f914a227e87f70586a50922b73d0def28ffd6f74514a53"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/cargo-deny-0.18.9-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/325915758"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-arm64-musl"]
+checksum = "sha256:8bc65cc9f5573e1538f914a227e87f70586a50922b73d0def28ffd6f74514a53"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/cargo-deny-0.18.9-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/325915758"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-x64"]
+checksum = "sha256:491d04e4c05d7c92582e3d40ec94126c52472a546326a6d29473a5a4e73babd2"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/cargo-deny-0.18.9-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/325915679"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-x64-musl"]
+checksum = "sha256:491d04e4c05d7c92582e3d40ec94126c52472a546326a6d29473a5a4e73babd2"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/cargo-deny-0.18.9-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/325915679"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.macos-arm64"]
+checksum = "sha256:a06e6cbab3d51f51997c5bb986580e4127b65ac323d2f354535bcca0a5d9b67f"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/cargo-deny-0.18.9-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/325915860"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.macos-x64"]
+checksum = "sha256:4d49f9e0764b018fbffe90e6159aed29eef828ea17042f9c08049ca96c1fe9ca"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/cargo-deny-0.18.9-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/325915951"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.windows-x64"]
+checksum = "sha256:86a3f6dfa497b1e4e34e037e5be98ec2abde5949bed312948525864e9291827f"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/cargo-deny-0.18.9-x86_64-pc-windows-msvc.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/325916508"
+
+[[tools."github:bnjbvr/cargo-machete"]]
+version = "0.9.1"
+backend = "github:bnjbvr/cargo-machete"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.linux-arm64"]
+checksum = "sha256:ec71436fb90acd8cb1e22ec1e9f9fe507abffcd66741b20b481a0d0f13ce4fa0"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/282938034"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.linux-arm64-musl"]
+checksum = "sha256:ec71436fb90acd8cb1e22ec1e9f9fe507abffcd66741b20b481a0d0f13ce4fa0"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/282938034"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.linux-x64"]
+checksum = "sha256:640b0814480b401e4e72201e52a13e1311b8eb8d7c27faa08bbe9886f252f26d"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/282938086"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.linux-x64-musl"]
+checksum = "sha256:640b0814480b401e4e72201e52a13e1311b8eb8d7c27faa08bbe9886f252f26d"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/282938086"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.macos-arm64"]
+checksum = "sha256:72355383848acb154060e6fea2d5b7d58a825ed49fef157b46a6fe25180f8638"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/282938101"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.macos-x64"]
+checksum = "sha256:fd0c0dbcc9db0c1b8745fe9dc4f273d838b04391c6e487d1146957bf687a9703"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/282938137"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.windows-x64"]
+checksum = "sha256:c812550857db16ae352ae0b3a67ad806a172e7caf33380fc338fca298faf3ec8"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-x86_64-pc-windows-msvc.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/282938290"
+
+[[tools."github:nextest-rs/nextest"]]
+version = "cargo-nextest-0.9.143"
+backend = "github:nextest-rs/nextest"
+
+[tools."github:nextest-rs/nextest"."platforms.linux-arm64"]
+checksum = "sha256:2a64b3566a92508550a7ab29c3e8db25472ca37730ecb4d22100b6aa440c2a68"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501881925"
+provenance = "github-attestations"
+
+[tools."github:nextest-rs/nextest"."platforms.linux-arm64-musl"]
+checksum = "sha256:0560ce0ce017f368c54b5db86588370fc03b470985490fa81200e62a657dda05"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501882957"
+provenance = "github-attestations"
+
+[tools."github:nextest-rs/nextest"."platforms.linux-x64"]
+checksum = "sha256:66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501882467"
+provenance = "github-attestations"
+
+[tools."github:nextest-rs/nextest"."platforms.linux-x64-musl"]
+checksum = "sha256:6d891c18105ec2d33f6e441a4f92b7ccab47ba263e22055c8bb66884243f3389"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501883394"
+provenance = "github-attestations"
+
+[tools."github:nextest-rs/nextest"."platforms.macos-arm64"]
+checksum = "sha256:4830d430411148d17602a75cc880bfb4dc8dac153dea59a48a2ef4cc93577f07"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-universal-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501885637"
+provenance = "github-attestations"
+provenance_verified = true
+
+[tools."github:nextest-rs/nextest"."platforms.macos-x64"]
+checksum = "sha256:4830d430411148d17602a75cc880bfb4dc8dac153dea59a48a2ef4cc93577f07"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-universal-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501885637"
+provenance = "github-attestations"
+
+[tools."github:nextest-rs/nextest"."platforms.windows-x64"]
+checksum = "sha256:c670ba18e8731fd2eff33a47af33a0fa53d1afa6d0678344e82dc6f8fc7344ac"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501885754"
 provenance = "github-attestations"
 
 [[tools.gitleaks]]
