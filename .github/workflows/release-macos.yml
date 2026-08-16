@@ -1,9 +1,9 @@
-name: CI
+name: Release macOS
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,13 +14,13 @@ env:
   GIT_CONFIG_VALUE_0: main
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ github.event.pull_request.base.sha || github.sha }}
-  cancel-in-progress: true
+  group: release-macos-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   verify:
-    name: Verify
-    runs-on: ubuntu-latest
+    name: Verify (macos-latest)
+    runs-on: macos-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
