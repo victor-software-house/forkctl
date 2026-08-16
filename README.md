@@ -1,4 +1,7 @@
-# forkctl
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
+  <img src="docs/banner.svg" alt="forkctl — Downstream forks as audited StGit patch stacks.">
+</picture>
 
 Explicit, audited lifecycle control for downstream forks carried as [StGit](https://stacked-git.github.io/) patch stacks.
 
