@@ -6,9 +6,9 @@ lockfile = true
 [tools]
 rust = "1.97.1"
 "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
-"cargo:cargo-nextest" = { version = "0.9.143", depends = ["rust"] }
-"cargo:cargo-deny" = { version = "0.18.9", depends = ["rust"] }
-"cargo:cargo-machete" = { version = "0.9.1", depends = ["rust"] }
+"github:nextest-rs/nextest" = "cargo-nextest-0.9.143"
+"github:EmbarkStudios/cargo-deny" = "0.18.9"
+"github:bnjbvr/cargo-machete" = "0.9.1"
 lefthook = "2.1.10"
 gitleaks = "8.30.0"
 usage = "4.1.0"
@@ -47,11 +47,11 @@ run = "cargo nextest run --workspace --all-features --test-threads=1"
 
 [tasks.deny]
 description = "License, advisory, and source policy"
-run = "cargo deny check"
+run = "cargo-deny check"
 
 [tasks.deps]
 description = "Unused crate analysis"
-run = "cargo machete"
+run = "cargo-machete"
 
 [tasks."hooks:secrets:staged"]
 description = "Scan staged blobs for secrets"
