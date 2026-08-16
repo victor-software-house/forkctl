@@ -2,6 +2,39 @@
 
 `forkctl` maintains one explicit audited StGit downstream patch stack.
 
+## Invocation
+
+Always use the consumer's mise-provisioned task. Never call a PATH-global
+`forkctl` or `stg` binary.
+
+```
+mise run fork -- status
+mise run fork -- operation status
+```
+
+If a mid-stack refresh popped later patches that own `mise.toml`, the
+mounted task disappears. Do not hunt install paths. Use the same mise
+backend the task pins:
+
+```
+mise x github:victor-software-house/forkctl -- forkctl operation status
+mise x github:victor-software-house/forkctl -- forkctl operation abort --yes
+```
+
+forkctl snapshots `mise.toml` and `mise.lock` into
+`.git/forkctl/workspace/` at operation start. If they vanish from the
+worktree, it restores them as temporary files so `mise run fork` still
+works. Continue/abort remove those temps before StGit reapplies later
+patches, so they cannot block `stg push`. The tracked manifest is not
+copied into the worktree; the Git-private JSON snapshot already covers
+operation continue/abort.
+
+Everyday follow-up is a **new top patch**. `patch refresh` on a non-top
+patch is refused unless you pass `--rewrite-below`. That flag unapplies
+everything above the patch (including tooling that owns mise). It is
+recoverable via `operation continue` / `abort`; it is not the everyday
+edit path.
+
 ## Sources of truth
 
 - Git commits and refs are canonical repository history.

@@ -9,6 +9,6 @@ FORK_MANIFEST = "patches/fork.yaml"
 
 [task_config]
 includes = [
-  "git::https://github.com/victor-software-house/forkctl.git//tasks/fork?ref=v0.0.20",
+  "git::https://github.com/victor-software-house/forkctl.git//tasks/fork?ref=v0.0.21",
   "mise-tasks",
 ]

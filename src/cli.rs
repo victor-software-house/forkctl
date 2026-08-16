@@ -331,6 +331,10 @@ pub struct PatchRefreshCliArgs {
     /// Stage and capture an explicit Git pathspec; repeatable.
     #[arg(short = 'p', long = "path", help_heading = "Capture", value_hint = clap::ValueHint::AnyPath)]
     pub paths: Vec<String>,
+    /// Refresh a non-top patch and unapply every patch above it.
+    /// Everyday follow-up work should be a new top patch instead.
+    #[arg(long, help_heading = "Stack")]
+    pub rewrite_below: bool,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -574,6 +578,7 @@ fn patch_action(command: PatchCommand) -> Result<CliAction> {
                 request: Box::new(ApiRequest::PatchRefresh(PatchRefreshArgs {
                     patch: args.name,
                     capture,
+                    rewrite_below: args.rewrite_below,
                 })),
                 mode: mode(args.execution.dry_run),
             }

@@ -285,6 +285,9 @@ pub struct PatchRefreshArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
     pub capture: CaptureSource,
+    /// Unapply patches above this one. Default is false: create a new top patch instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rewrite_below: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]

@@ -61,6 +61,48 @@ fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
 }
 
 #[test]
+fn discover_restores_missing_mise_toml_from_workspace_snapshot() {
+    let fixture = Fixture::new();
+    let snap_dir = fixture.repo.join(".git/forkctl/workspace");
+    fs::create_dir_all(&snap_dir).unwrap();
+    fs::write(snap_dir.join("mise.toml"), "min_version = \"2026.7.7\"\n").unwrap();
+    assert!(!fixture.repo.join("mise.toml").exists());
+    fixture.forkctl_ok(&["status"]);
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("mise.toml")).unwrap(),
+        "min_version = \"2026.7.7\"\n"
+    );
+}
+
+#[test]
+fn refresh_below_the_top_is_refused_without_rewrite_below() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "other.txt", "upper\n");
+    fixture.forkctl_ok(&["patch", "select", "lower"]);
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+
+    let refresh = fixture.forkctl(&["--format", "json", "patch", "refresh"]);
+    assert!(!refresh.status.success());
+    let refresh: serde_json::Value = serde_json::from_slice(&refresh.stdout).unwrap();
+    assert_eq!(refresh["error"]["code"], "operation_conflict");
+    assert!(
+        refresh["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--rewrite-below")
+    );
+    assert_eq!(
+        refresh["error"]["suggested_command"],
+        "mise run fork -- patch create NAME"
+    );
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+}
+
+#[test]
 fn complete_check_rejects_unexpected_tracked_patch_export() {
     let fixture = Fixture::new();
     let stale = fixture.repo.join("patches/downstream/9999-stale.patch");
@@ -326,7 +368,7 @@ fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
     fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
     git_ok(&fixture.repo, ["add", "shared.txt"]);
 
-    let refresh = fixture.forkctl(&["--format", "json", "patch", "refresh"]);
+    let refresh = fixture.forkctl(&["--format", "json", "patch", "refresh", "--rewrite-below"]);
     assert!(!refresh.status.success());
     let refresh: serde_json::Value = serde_json::from_slice(&refresh.stdout).unwrap();
     assert_eq!(refresh["error"]["code"], "subprocess_failed");
@@ -388,7 +430,12 @@ fn patch_refresh_abort_restores_stack_and_active_patch() {
     let old_series = stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]);
     fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
     git_ok(&fixture.repo, ["add", "shared.txt"]);
-    assert!(!fixture.forkctl(&["patch", "refresh"]).status.success());
+    assert!(
+        !fixture
+            .forkctl(&["patch", "refresh", "--rewrite-below"])
+            .status
+            .success()
+    );
 
     fixture.forkctl_ok(&["operation", "abort", "--yes"]);
     assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
@@ -493,7 +540,7 @@ fn no_op_refresh_does_not_create_an_operation() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
     fixture.forkctl_ok(&["patch", "select", "source-change"]);
-    let output = fixture.forkctl(&["--format", "json", "patch", "refresh"]);
+    let output = fixture.forkctl(&["--format", "json", "patch", "refresh", "--rewrite-below"]);
     assert!(!output.status.success());
     let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(output["error"]["code"], "capture_conflict");
@@ -1103,7 +1150,12 @@ fn recovery_commands_survive_an_unreadable_tracked_manifest() {
     fixture.forkctl_ok(&["patch", "select", "lower"]);
     fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
     git_ok(&fixture.repo, ["add", "shared.txt"]);
-    assert!(!fixture.forkctl(&["patch", "refresh"]).status.success());
+    assert!(
+        !fixture
+            .forkctl(&["patch", "refresh", "--rewrite-below"])
+            .status
+            .success()
+    );
 
     fs::create_dir_all(fixture.repo.join("patches")).unwrap();
     fs::write(
@@ -1371,7 +1423,7 @@ fn staged_check_reports_both_sides_of_a_rename() {
         .map(|value| value.as_str().unwrap())
         .collect::<Vec<_>>();
     assert_eq!(checked, vec!["renamed.txt", "source.txt"]);
-    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
     fixture.forkctl_ok(&["patch", "finish"]);
     fixture.forkctl_ok(&["check"]);
 }

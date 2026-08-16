@@ -430,6 +430,10 @@ impl App {
             ))
             .into());
         }
+        let above = self.patches_above(&name)?;
+        if !above.is_empty() && !args.rewrite_below {
+            return Err(DomainError::rewrite_below_required(&name, &above).into());
+        }
         let capture_paths = self.capture_paths(&patch, &args.capture)?;
         if capture_paths.is_empty() {
             return Err(DomainError::capture_conflict("no changes selected for capture").into());
@@ -490,7 +494,8 @@ impl App {
             operation.next_actions = vec![
                 "resolve conflict content".into(),
                 "git add --update".into(),
-                "forkctl operation continue".into(),
+                "mise run fork -- operation continue".into(),
+                "if mise.toml is missing: mise x github:victor-software-house/forkctl -- forkctl operation continue".into(),
             ];
             self.write_operation(&operation)?;
             return Err(error).context(format!(
