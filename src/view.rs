@@ -155,10 +155,19 @@ fn render_result(output: &mut String, result: &CommandResult) {
             [
                 ("branch", result.branch.clone()),
                 ("head", result.head.clone()),
+                ("mode", result.mode.to_string()),
                 (
                     "publication",
                     if result.already_published {
                         "already published".into()
+                    } else if result.proposal_branch.is_some() {
+                        format!(
+                            "proposal {}",
+                            result
+                                .proposal_url
+                                .as_deref()
+                                .unwrap_or(result.proposal_branch.as_deref().unwrap_or("open"))
+                        )
                     } else if result.fast_forward {
                         "fast-forward".into()
                     } else {
@@ -307,6 +316,7 @@ fn render_status(output: &mut String, result: &StatusResult) {
                     result.declared_branch
                 ),
             ),
+            ("publish", result.publish_mode.to_string()),
             (
                 "downstream",
                 format!(

@@ -1767,3 +1767,81 @@ fn json_manifest_is_a_first_class_lifecycle_codec() {
     assert_eq!(response["status"], "success");
     fixture.forkctl_ok(&["check"]);
 }
+
+#[test]
+fn repository_publish_mode_defaults_to_rewrite_and_can_be_changed() {
+    let fixture = Fixture::new();
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["publish_mode"], "rewrite");
+
+    fixture.forkctl_ok(&["contract", "edit", "--publish-mode", "append"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["publish_mode"], "append");
+}
+
+#[test]
+fn publish_append_keeps_the_previous_tip_as_an_ancestor() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    fixture.forkctl_ok(&["publish"]);
+    let first = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    fixture.forkctl_ok(&["patch", "select", "source-change"]);
+    fs::write(fixture.repo.join("source.txt"), "second\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+
+    let published = fixture.forkctl_ok(&["--format", "json", "publish", "--append"]);
+    let published: serde_json::Value = serde_json::from_str(&published).unwrap();
+    assert_eq!(published["result"]["mode"], "append");
+    assert_eq!(published["result"]["fast_forward"], true);
+
+    let second = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+    assert_ne!(first, second);
+    git_ok(
+        &fixture.repo,
+        ["merge-base", "--is-ancestor", &first, &second],
+    );
+}
+
+#[test]
+fn publish_propose_then_promote_moves_the_lease() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    fixture.forkctl_ok(&["publish"]);
+    let first = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    fixture.forkctl_ok(&["patch", "select", "source-change"]);
+    fs::write(fixture.repo.join("source.txt"), "proposed\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+
+    let proposed = fixture.forkctl_ok(&["--format", "json", "publish", "--propose"]);
+    let proposed: serde_json::Value = serde_json::from_str(&proposed).unwrap();
+    assert_eq!(proposed["result"]["mode"], "propose");
+    assert_eq!(
+        proposed["result"]["proposal_branch"],
+        "forkctl/proposal/main"
+    );
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
+        first
+    );
+    let review = proposed["result"]["head"].as_str().unwrap();
+    let review_tree =
+        git_capture_dynamic(&fixture.repo, &["rev-parse", &format!("{review}^{{tree}}")]);
+    let head_tree = git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD^{tree}"]);
+    assert_eq!(review_tree, head_tree);
+
+    let promoted = fixture.forkctl_ok(&["--format", "json", "publish", "--promote"]);
+    let promoted: serde_json::Value = serde_json::from_str(&promoted).unwrap();
+    assert_eq!(promoted["result"]["mode"], "rewrite");
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
+        git_capture(&fixture.repo, ["rev-parse", "HEAD"])
+    );
+}

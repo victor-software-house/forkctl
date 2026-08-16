@@ -20,9 +20,13 @@ impl App {
         if let Some(operation) = self.read_operation()? {
             return Err(DomainError::operation_in_progress(&operation).into());
         }
-        if !args.clear && args.allow_base.is_empty() && args.required_text.is_empty() {
+        if !args.clear
+            && args.allow_base.is_empty()
+            && args.required_text.is_empty()
+            && args.publish_mode.is_none()
+        {
             return Err(DomainError::invalid_request(
-                "contract edit requires --clear, --allow-base, or --required-text",
+                "contract edit requires --clear, --allow-base, --required-text, or --publish-mode",
             )
             .into());
         }
@@ -47,6 +51,9 @@ impl App {
 
         let mut proposed = self.manifest()?.clone();
         proposed.contracts = contracts.clone();
+        if let Some(mode) = args.publish_mode {
+            proposed.downstream.publish = mode;
+        }
         proposed
             .validate(&self.repo, &self.manifest_path)
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;

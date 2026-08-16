@@ -78,8 +78,10 @@ Checks run during `check` after structural validation, so they gate `patch refre
 - Resolve conflicts with supported Git/StGit commands, then run `mise run fork operation continue`.
 - `mise run fork operation status` reports the exact phase and next actions; `operation abort -n` plans restoration and `operation abort -y` performs it. These remain usable when an in-flight conflict leaves the tracked manifest unreadable.
 - Review the range-diff report and consumer semantic checks before `mise run fork publish`.
-- `mise run fork publish` publishes any unpublished downstream state. It reports `already_published` when nothing changed, fast-forwards when the published tip is an ancestor, and otherwise creates an annotated recovery tag at the overwritten published tip before one atomic explicit-ref push. Pretty mode streams `git push` and hook output to stderr; JSON captures it.
-- Publish is one atomic explicit-ref push with an exact lease and no fallback. A rewrite requires the published tip to equal the reviewed rebase lease, or the fetched downstream tracking ref when no operation is in flight; otherwise it fails with `remote_advanced`.
+- `mise run fork publish` uses the repository default (`downstream.publish`, shown by `status`). `rewrite` is the default: exact-lease rewrite with a recovery tag at the overwritten tip. `append` keeps that tip as an ancestor and fast-forwards. `propose` pushes `forkctl/proposal/<branch>` (net tree vs the current tip) and opens a PR when `gh` is available. `publish --promote` moves the lease after the proposal tree matches HEAD.
+- Set the default once: `init --publish append` or `contract edit --publish-mode append`. Override one shot with `--rewrite`, `--append`, or `--propose`. `--set-default MODE` persists a default without publishing.
+- Parallel work is a worktree plus `init --downstream-branch wip/foo`. Two worktrees must not share one lease on the same branch.
+- Publish is one atomic explicit-ref push with an exact lease and no fallback. A rewrite requires the published tip to equal the reviewed rebase lease, or the fetched downstream tracking ref when no operation is in flight; otherwise it fails with `remote_advanced`. Pretty mode streams `git push` and hook output to stderr; JSON captures it.
 
 ## Hook integration
 

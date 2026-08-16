@@ -113,7 +113,7 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         ApiRequest::PatchEnable(args) => app.patch_enable(&args.patch, mode)?,
         ApiRequest::ContractEdit(args) => app.contract_edit(args, mode)?,
         ApiRequest::Rebase(args) => app.rebase(&args.onto, mode)?,
-        ApiRequest::Publish(_) => app.publish(mode)?,
+        ApiRequest::Publish(args) => app.publish(&args, mode)?,
         ApiRequest::OperationStatus(_) => {
             CommandResult::OperationStatus(Box::new(app.operation_status()?))
         }
