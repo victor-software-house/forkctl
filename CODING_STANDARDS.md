@@ -40,7 +40,7 @@ Write tracked and Git-private JSON atomically. Refresh only explicitly selected 
 
 ### 3.3 Hook environment
 
-Every production child comes from `process.rs`, clears only repository-local variables reported by `git rev-parse --local-env-vars`, applies an explicit cwd, and preserves transport/auth variables.
+Every production child comes from `process.rs`, clears only repository-local variables reported by `git rev-parse --local-env-vars`, applies an explicit cwd, and preserves transport/auth variables. Long-running operator children (`run_operator`) tee the child's stdout and stderr onto process stderr when pretty output is selected so hooks stream live. JSON and `api call` keep the captured-only path.
 
 ### 3.4 No compatibility
 

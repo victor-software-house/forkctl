@@ -968,6 +968,52 @@ fn publish_has_no_fallback_when_remote_lacks_atomic_push() {
 }
 
 #[test]
+fn pretty_publish_streams_pre_push_output_and_json_does_not() {
+    let fixture = Fixture::new();
+    let hook = fixture.repo.join(".git/hooks/pre-push");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\necho FORKCTL_HOOK_STREAM\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&hook).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&hook, permissions).unwrap();
+    }
+
+    let pretty = fixture.forkctl(&["publish"]);
+    assert!(
+        pretty.status.success(),
+        "pretty publish failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&pretty.stdout),
+        String::from_utf8_lossy(&pretty.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&pretty.stderr).contains("FORKCTL_HOOK_STREAM"),
+        "pretty publish must stream hook output to stderr: {}",
+        String::from_utf8_lossy(&pretty.stderr)
+    );
+
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let json = fixture.forkctl(&["--format", "json", "publish"]);
+    assert!(
+        json.status.success(),
+        "json publish failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&json.stdout),
+        String::from_utf8_lossy(&json.stderr)
+    );
+    assert!(
+        json.stderr.is_empty(),
+        "json publish must keep stderr empty, got: {}",
+        String::from_utf8_lossy(&json.stderr)
+    );
+    assert!(
+        !String::from_utf8_lossy(&json.stdout).contains("FORKCTL_HOOK_STREAM"),
+        "json stdout must not contain hook output"
+    );
+}
+
+#[test]
 fn patch_work_publishes_under_an_exact_lease_with_recovery() {
     let fixture = Fixture::new();
     let bootstrap = fixture.forkctl_ok(&["--format", "json", "publish"]);

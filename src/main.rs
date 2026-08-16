@@ -49,6 +49,9 @@ fn main() -> ExitCode {
         Ok(CliAction::Candidates(kind)) => emit_candidates(kind),
         Ok(CliAction::UsageSpec(bin)) => emit_usage_spec(&bin),
         Ok(CliAction::Request { request, mode }) => {
+            if output == OutputFormat::Pretty {
+                process::set_stream_operator_output(true);
+            }
             let command = request.command();
             let response = execute(manifest.as_deref(), *request, mode).map_or_else(
                 |error| ApiResponse::error(command, mode, api_error(&error)),

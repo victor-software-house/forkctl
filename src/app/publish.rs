@@ -1,7 +1,7 @@
 use super::{App, recovery_id};
 use crate::error::DomainError;
 use crate::manifest::RecoveryEvidence;
-use crate::process::{capture, run};
+use crate::process::{capture, run_operator};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishResult};
 use anyhow::{Context, Result, ensure};
 
@@ -246,6 +246,7 @@ impl App {
         let mut push = vec![
             "push".to_string(),
             "--atomic".to_string(),
+            "--progress".to_string(),
             publication.lease.clone(),
             manifest.downstream.remote.clone(),
         ];
@@ -258,7 +259,7 @@ impl App {
         push.push(publication.branch_refspec.clone());
         pushed_refs.push(publication.branch_refspec.clone());
 
-        if let Err(error) = run(&self.repo, "git", push) {
+        if let Err(error) = run_operator(&self.repo, "git", push) {
             if let Some(domain) = error.downcast_ref::<DomainError>() {
                 return Err(DomainError::publication_rejected(domain).into());
             }

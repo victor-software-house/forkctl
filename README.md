@@ -207,6 +207,8 @@ If the branch already matches while a ready operation remains, `publish` verifie
 
 Every rewrite requires exact evidence that it was computed against the current published tip: the reviewed rebase lease when an operation journal exists, otherwise the fetched downstream tracking ref. A remote that advanced beyond that evidence fails with `remote_advanced` and changes no ref. There is no force, lease, or atomic fallback and no provider ruleset administration.
 
+Pretty `publish` streams `git push` and hook output to stderr as it happens (pre-push Jest, husky, remote progress). `--format json` and `api call` still capture that output and keep stderr empty.
+
 ## Hooks
 
 Forkctl exposes ordinary read-only checks and does not own a hook manager:

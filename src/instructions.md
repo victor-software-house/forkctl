@@ -45,7 +45,7 @@ Checks run during `check` after structural validation, so they gate `patch refre
 - Resolve conflicts with supported Git/StGit commands, then run `mise run fork operation continue`.
 - `mise run fork operation status` reports the exact phase and next actions; `operation abort -n` plans restoration and `operation abort -y` performs it. These remain usable when an in-flight conflict leaves the tracked manifest unreadable.
 - Review the range-diff report and consumer semantic checks before `mise run fork publish`.
-- `mise run fork publish` publishes any unpublished downstream state. It reports `already_published` when nothing changed, fast-forwards when the published tip is an ancestor, and otherwise creates an annotated recovery tag at the overwritten published tip before one atomic explicit-ref push.
+- `mise run fork publish` publishes any unpublished downstream state. It reports `already_published` when nothing changed, fast-forwards when the published tip is an ancestor, and otherwise creates an annotated recovery tag at the overwritten published tip before one atomic explicit-ref push. Pretty mode streams `git push` and hook output to stderr; JSON captures it.
 - Publish is one atomic explicit-ref push with an exact lease and no fallback. A rewrite requires the published tip to equal the reviewed rebase lease, or the fetched downstream tracking ref when no operation is in flight; otherwise it fails with `remote_advanced`.
 
 ## Hook integration

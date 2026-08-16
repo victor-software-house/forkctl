@@ -9,7 +9,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - `src/protocol.rs` is the versioned Serde/Schemars request/result/notice/error/schema contract.
 - `src/app/` owns typed repository operations and never prints or chooses a view.
 - `src/view.rs` owns pretty command output; `src/help.rs` owns help derived from Clap metadata; `src/layout.rs` owns shared terminal-width detection and wrapping. All use one semantic Anstyle/Comfy Table system.
-- `src/process.rs` is the only production child-process factory and clears Git repository-local hook variables for explicit cwd execution.
+- `src/process.rs` is the only production child-process factory and clears Git repository-local hook variables for explicit cwd execution. `run_operator` tees long-running children (publication `git push` / hooks) to stderr in pretty mode; JSON stays captured.
 - Git-private active/operation state lives under `$(git rev-parse --git-path forkctl/)`.
 - The tracked manifest defaults to `patches/fork.yaml`; `.yaml`/`.yml` and `.json` are first-class codecs selected only by extension and both map to the same typed `Manifest`. Git-private state and the JSON API remain JSON.
 - Askama templates own generated Markdown document structure.
