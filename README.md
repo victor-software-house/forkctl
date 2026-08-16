@@ -360,7 +360,7 @@ mise run test:isolated
 mise run build
 ```
 
-Pull requests and pushes to `main` run those gates on GitHub's free public-repository `ubuntu-latest` and `macos-latest` hosted runners. External actions are pinned to immutable commits; CI has read-only repository permissions.
+Pull requests and pushes to `main` run those gates on GitHub's free public-repository `ubuntu-latest` and `macos-latest` hosted runners. cargo-deny, cargo-machete, and nextest come from GitHub release tarballs; `mise-action` and `Swatinem/rust-cache` restore the toolchain and Cargo target. External actions are pinned to immutable commits; CI has read-only repository permissions.
 
 `mise run test` uses Rust's standard parallel harness. `test:isolated` runs the same suite with cargo-nextest, one test per process. Real Git/StGit lifecycle tests use a fresh `tempfile` sandbox with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment; they never read operator aliases, credential helpers, hooks, or global config. Mounted-task tests reuse only the caller's mise installation store for the repository's exact pinned tools. Containers are reserved for future scenarios that actually require another OS, daemon, network, or toolchain image.
 
