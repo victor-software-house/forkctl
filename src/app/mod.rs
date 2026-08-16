@@ -288,6 +288,15 @@ impl App {
         Ok(())
     }
 
+    pub(super) fn patches_above(&self, name: &str) -> Result<Vec<String>> {
+        let series = self.stg_series()?;
+        let index = series.iter().position(|candidate| candidate == name);
+        match index {
+            Some(index) => Ok(series[index + 1..].to_vec()),
+            None => Ok(Vec::new()),
+        }
+    }
+
     pub(super) fn stg_series(&self) -> Result<Vec<String>> {
         Ok(nonempty_lines(&capture(
             &self.repo,

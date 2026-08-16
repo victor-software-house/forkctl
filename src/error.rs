@@ -105,6 +105,22 @@ impl DomainError {
         .suggest("forkctl patch edit --add-scope GLOB")
     }
 
+    pub fn rewrite_below_required(patch: &str, above: &[String]) -> Self {
+        let above_list = above.join(", ");
+        Self::new(
+            ApiErrorCode::OperationConflict,
+            format!(
+                "patch {patch} has {} patch(es) above it ({above_list}). Everyday follow-up is a new top patch. Pass --rewrite-below only when you intend to unapply those patches.",
+                above.len()
+            ),
+            ErrorDetails::Request {
+                field: Some("rewrite_below".into()),
+                issue: format!("patches above {patch}: {above_list}"),
+            },
+        )
+        .suggest("mise run fork -- patch create NAME")
+    }
+
     pub fn capture_conflict(message: impl Into<String>) -> Self {
         Self::new(ApiErrorCode::CaptureConflict, message, ErrorDetails::None)
     }

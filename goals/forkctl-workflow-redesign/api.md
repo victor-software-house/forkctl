@@ -193,9 +193,12 @@ At least one metadata/scope edit is required. `set` cannot combine with add/remo
 ```json
 {
   "patch": null,
-  "capture": {"source": "staged"}
+  "capture": {"source": "staged"},
+  "rewrite_below": false
 }
 ```
+
+`rewrite_below` defaults to false. Refreshing a non-top patch is refused unless it is true.
 
 Capture is one of:
 

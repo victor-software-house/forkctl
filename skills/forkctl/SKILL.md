@@ -24,6 +24,8 @@ Treat forkctl as the policy owner for an explicit StGit downstream patch stack. 
    - If `mise run fork` is gone because a mid-stack refresh popped `mise.toml`,
      run `mise x github:victor-software-house/forkctl -- forkctl operation status`
      then `continue` or `abort --yes`. Do not reconstruct the stack by hand.
+   - Everyday follow-up is a new top patch. `patch refresh` on a non-top
+     patch is refused unless `--rewrite-below` is passed.
    - Prefer a new top patch over refreshing a non-top patch.
 3. Respect an explicit `--manifest PATH` or `FORK_MANIFEST`. Do not guess a different manifest when discovery fails.
 4. Run `status`, then the complete read-only `check`, before mutation.

@@ -29,9 +29,11 @@ patches, so they cannot block `stg push`. The tracked manifest is not
 copied into the worktree; the Git-private JSON snapshot already covers
 operation continue/abort.
 
-Prefer a **new top patch** over refreshing a non-top patch. Refreshing a
-mid-stack patch unapplies everything above it (including tooling that
-owns mise). That is recoverable; it is not the everyday edit path.
+Everyday follow-up is a **new top patch**. `patch refresh` on a non-top
+patch is refused unless you pass `--rewrite-below`. That flag unapplies
+everything above the patch (including tooling that owns mise). It is
+recoverable via `operation continue` / `abort`; it is not the everyday
+edit path.
 
 ## Sources of truth
 
