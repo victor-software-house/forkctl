@@ -2,8 +2,8 @@ use crate::manifest::{Check, CheckStage, PatchKind, RequiredText};
 use crate::protocol::{
     ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ColorMode, ContractEditArgs,
     EmptyArgs, ExecutionMode, InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs,
-    PatchEditArgs, PatchName, PatchRefreshArgs, PatchTarget, PatchTransitionArgs, RebaseArgs,
-    SchemaKind, ScopeEdit,
+    PatchEditArgs, PatchName, PatchRefreshArgs, PatchTarget, PatchTransitionArgs, PublishArgs,
+    RebaseArgs, SchemaKind, ScopeEdit,
 };
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
@@ -80,8 +80,8 @@ pub enum Command {
         #[command(subcommand)]
         command: ContractCommand,
     },
-    /// Atomically publish the branch and recovery tag under an exact lease.
-    Publish(DryRunArgs),
+    /// Publish the managed branch using the repository default, or an explicit mode.
+    Publish(PublishCliArgs),
     /// Inspect, continue, or abort the current operation.
     Operation {
         #[command(subcommand)]
@@ -130,6 +130,9 @@ pub struct InitCliArgs {
     /// Managed downstream branch name.
     #[arg(long, help_heading = "Repository")]
     pub downstream_branch: Option<String>,
+    /// Default publish mode for this repository.
+    #[arg(long, help_heading = "Repository", value_enum)]
+    pub publish: Option<crate::manifest::PublishMode>,
     /// Initial full branch/tag ref or commit SHA.
     #[arg(short = 'b', long, help_heading = "Repository", add = crate::completion::ref_completer())]
     pub base: Option<String>,
@@ -342,7 +345,7 @@ pub struct PatchRefreshCliArgs {
 #[derive(Args)]
 #[command(group(
     ArgGroup::new("contract_change")
-        .args(["clear", "allow_base", "required_text"])
+        .args(["clear", "allow_base", "required_text", "publish_mode"])
         .required(true)
         .multiple(true)
 ))]
@@ -356,6 +359,9 @@ pub struct ContractEditCliArgs {
     /// Add a required repository contract as PATH=TEXT; repeatable.
     #[arg(short = 'r', long, help_heading = "Contracts", value_parser = parse_required_text)]
     pub required_text: Vec<RequiredText>,
+    /// Set the repository default publish mode.
+    #[arg(long, help_heading = "Contracts", value_enum)]
+    pub publish_mode: Option<crate::manifest::PublishMode>,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -371,6 +377,31 @@ pub struct RebaseCliArgs {
     /// Full upstream branch/tag ref or commit SHA.
     #[arg(short = 'o', long, help_heading = "Target", add = crate::completion::ref_completer())]
     pub onto: String,
+    #[command(flatten)]
+    pub execution: DryRunArgs,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PublishCliArgs {
+    /// Exact-lease rewrite. Overrides the repository default.
+    #[arg(long, group = "publish_mode", help_heading = "Mode")]
+    pub rewrite: bool,
+    /// Keep the previous tip as an ancestor and fast-forward.
+    #[arg(long, group = "publish_mode", help_heading = "Mode")]
+    pub append: bool,
+    /// Push a net-tree proposal branch and open a PR when `gh` is available.
+    #[arg(long, group = "publish_mode", help_heading = "Mode")]
+    pub propose: bool,
+    /// Promote an exact proposal to the downstream branch.
+    #[arg(long, group = "publish_mode", help_heading = "Mode")]
+    pub promote: bool,
+    /// Proposal branch, tag, or URL used by --promote.
+    #[arg(long, help_heading = "Mode")]
+    pub proposal: Option<String>,
+    /// Persist this mode as the repository default, then publish unless --set-default is the only action.
+    #[arg(long, value_enum, help_heading = "Mode")]
+    pub set_default: Option<crate::manifest::PublishMode>,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -446,6 +477,7 @@ impl Cli {
                     bookkeeping_scope: args.bookkeeping_scope,
                     allow_base: args.allow_base,
                     required_text: args.required_text,
+                    publish: args.publish,
                 })),
                 mode: mode(args.execution.dry_run),
             },
@@ -469,14 +501,31 @@ impl Cli {
                         clear: args.clear,
                         allow_base: args.allow_base,
                         required_text: args.required_text,
+                        publish_mode: args.publish_mode,
                     })),
                     mode: mode(args.execution.dry_run),
                 },
             },
-            Command::Publish(args) => CliAction::Request {
-                request: Box::new(ApiRequest::Publish(EmptyArgs::default())),
-                mode: mode(args.dry_run),
-            },
+            Command::Publish(args) => {
+                let publish_mode = if args.rewrite {
+                    Some(crate::manifest::PublishMode::Rewrite)
+                } else if args.append {
+                    Some(crate::manifest::PublishMode::Append)
+                } else if args.propose {
+                    Some(crate::manifest::PublishMode::Propose)
+                } else {
+                    None
+                };
+                CliAction::Request {
+                    request: Box::new(ApiRequest::Publish(PublishArgs {
+                        mode: publish_mode,
+                        set_default: args.set_default,
+                        promote: args.promote,
+                        proposal: args.proposal,
+                    })),
+                    mode: mode(args.execution.dry_run),
+                }
+            }
             Command::Operation { command } => operation_action(command),
             Command::Instructions => request(ApiRequest::Instructions(EmptyArgs::default())),
             Command::Completion { shell } => CliAction::Completion(shell),

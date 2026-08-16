@@ -53,6 +53,7 @@ impl App {
             manifest: self.manifest_path.display().to_string(),
             current_branch: self.current_branch().ok(),
             declared_branch: manifest.downstream.branch.clone(),
+            publish_mode: manifest.downstream.publish,
             downstream_remote: manifest.downstream.remote.clone(),
             downstream_sha: self.downstream_sha().ok(),
             upstream_remote: manifest.upstream.remote.clone(),

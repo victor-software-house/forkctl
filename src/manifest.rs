@@ -29,6 +29,54 @@ pub struct Downstream {
     pub remote: String,
     pub branch: String,
     pub recovery_tag_prefix: String,
+    /// How `publish` moves this branch when no CLI flag is given.
+    #[serde(default, skip_serializing_if = "skip_rewrite_mode")]
+    pub publish: PublishMode,
+}
+
+/// How a repository publishes the managed downstream branch.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Deserialize,
+    Eq,
+    PartialEq,
+    schemars::JsonSchema,
+    Serialize,
+    ValueEnum,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum PublishMode {
+    /// Exact-lease rewrite of the downstream ref. Recovery tags keep the overwritten tip.
+    #[default]
+    Rewrite,
+    /// Keep the previous tip as an ancestor and fast-forward. `git log` stays a line.
+    Append,
+    /// Open a proposal of the net tree. `publish --promote` later moves the lease.
+    Propose,
+}
+
+impl PublishMode {
+    pub fn is_rewrite(self) -> bool {
+        matches!(self, Self::Rewrite)
+    }
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn skip_rewrite_mode(mode: &PublishMode) -> bool {
+    mode.is_rewrite()
+}
+
+impl std::fmt::Display for PublishMode {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Rewrite => "rewrite",
+            Self::Append => "append",
+            Self::Propose => "propose",
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
@@ -766,6 +814,7 @@ mod tests {
                 remote: "origin".into(),
                 branch: "main".into(),
                 recovery_tag_prefix: "forkctl/recovery".into(),
+                publish: PublishMode::Rewrite,
             },
             upstream: Upstream {
                 remote: "upstream".into(),

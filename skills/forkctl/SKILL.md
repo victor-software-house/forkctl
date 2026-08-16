@@ -26,7 +26,11 @@ Treat forkctl as the policy owner for an explicit StGit downstream patch stack. 
      then `continue` or `abort --yes`. Do not reconstruct the stack by hand.
    - Everyday follow-up is a new top patch. `patch refresh` on a non-top
      patch is refused unless `--rewrite-below` is passed.
-   - Prefer a new top patch over refreshing a non-top patch.
+   - Parallel work is a worktree plus `init --downstream-branch wip/foo`.
+     Two worktrees must not share one lease on the same branch.
+   - Repository publish default is `downstream.publish` (`status` shows it).
+     Set with `init --publish append` or `contract edit --publish-mode append`.
+     One-shot: `publish --rewrite` / `--append` / `--propose` / `--promote`.
 3. Respect an explicit `--manifest PATH` or `FORK_MANIFEST`. Do not guess a different manifest when discovery fails.
 4. Run `status`, then the complete read-only `check`, before mutation.
 5. Use `<invocation> --help` and `<invocation> instructions` as the authoritative installed-version contract. Do not invent aliases for rejected commands or fields.

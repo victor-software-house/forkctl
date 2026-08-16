@@ -70,7 +70,7 @@ pub enum ApiRequest {
     #[serde(rename = "rebase")]
     Rebase(RebaseArgs),
     #[serde(rename = "publish")]
-    Publish(EmptyArgs),
+    Publish(PublishArgs),
     #[serde(rename = "operation.status")]
     OperationStatus(EmptyArgs),
     #[serde(rename = "operation.continue")]
@@ -151,6 +151,8 @@ pub struct InitArgs {
     pub allow_base: Vec<String>,
     #[serde(default)]
     pub required_text: Vec<RequiredText>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish: Option<crate::manifest::PublishMode>,
 }
 
 impl InitArgs {
@@ -167,6 +169,7 @@ impl InitArgs {
             || !self.bookkeeping_scope.is_empty()
             || !self.allow_base.is_empty()
             || !self.required_text.is_empty()
+            || self.publish.is_some()
     }
 }
 
@@ -299,6 +302,8 @@ pub struct ContractEditArgs {
     pub allow_base: Vec<String>,
     #[serde(default)]
     pub required_text: Vec<RequiredText>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish_mode: Option<crate::manifest::PublishMode>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
@@ -311,6 +316,23 @@ pub struct RebaseArgs {
 #[serde(deny_unknown_fields)]
 pub struct OperationAbortArgs {
     pub confirmed: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublishArgs {
+    /// Override the repository default for this invocation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<crate::manifest::PublishMode>,
+    /// Persist a new repository default without publishing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub set_default: Option<crate::manifest::PublishMode>,
+    /// Promote an exact proposal instead of publishing HEAD.
+    #[serde(default)]
+    pub promote: bool,
+    /// Proposal branch, tag, or URL. Defaults to the repo's proposal branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
@@ -535,6 +557,7 @@ pub struct StatusResult {
     pub manifest: String,
     pub current_branch: Option<String>,
     pub declared_branch: String,
+    pub publish_mode: crate::manifest::PublishMode,
     pub downstream_remote: String,
     pub downstream_sha: Option<String>,
     pub upstream_remote: String,
@@ -667,9 +690,14 @@ pub struct PublishResult {
     pub head: String,
     pub already_published: bool,
     pub fast_forward: bool,
+    pub mode: crate::manifest::PublishMode,
     pub recovery_tags: Vec<String>,
     pub pushed_refs: Vec<String>,
     pub expected_lease: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]

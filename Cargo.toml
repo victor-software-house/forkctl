@@ -14,12 +14,15 @@ categories = ["command-line-utilities", "development-tools"]
 [lints]
 workspace = true
 
+[package.metadata.cargo-machete]
+ignored = ["usage-lib"]
+
 [workspace]
 members = ["xtask"]
 resolver = "3"
 
 [workspace.package]
-version = "0.0.21"
+version = "0.0.22"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

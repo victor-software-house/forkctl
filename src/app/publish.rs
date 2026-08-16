@@ -1,8 +1,8 @@
 use super::{App, recovery_id};
 use crate::error::DomainError;
-use crate::manifest::RecoveryEvidence;
-use crate::process::{capture, run_operator};
-use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishResult};
+use crate::manifest::{PublishMode, RecoveryEvidence};
+use crate::process::{capture, run, run_operator};
+use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishArgs, PublishResult};
 use anyhow::{Context, Result, ensure};
 
 const READY_TO_PUBLISH: &str = "ready_to_publish";
@@ -21,18 +21,274 @@ struct Publication {
 }
 
 impl App {
-    pub fn publish(&self, mode: ExecutionMode) -> Result<CommandResult> {
+    pub fn publish(&mut self, args: &PublishArgs, mode: ExecutionMode) -> Result<CommandResult> {
+        if args.promote && args.mode.is_some() {
+            return Err(DomainError::invalid_request(
+                "publish --promote cannot be combined with --rewrite, --append, or --propose",
+            )
+            .into());
+        }
+        if let Some(default) = args.set_default {
+            self.persist_publish_mode(default, mode)?;
+            if args.mode.is_none() && !args.promote {
+                return self.publish_default_updated(default, mode);
+            }
+        }
+        if args.promote {
+            return self.publish_promote(args.proposal.as_deref(), mode);
+        }
+        match args.mode.unwrap_or(self.manifest()?.downstream.publish) {
+            PublishMode::Rewrite => self.publish_rewrite(mode),
+            PublishMode::Append => self.publish_append(mode),
+            PublishMode::Propose => self.publish_propose(mode),
+        }
+    }
+
+    fn persist_publish_mode(&mut self, publish: PublishMode, mode: ExecutionMode) -> Result<()> {
+        self.require_clean()?;
+        self.require_declared_branch()?;
+        if let Some(active) = self.read_active()? {
+            return Err(DomainError::active_patch_exists(active.name().to_string()).into());
+        }
+        if mode == ExecutionMode::Plan {
+            return Ok(());
+        }
+        let mut proposed = self.manifest()?.clone();
+        proposed.downstream.publish = publish;
+        proposed
+            .validate(&self.repo, &self.manifest_path)
+            .map_err(|error| DomainError::invalid_request(error.to_string()))?;
+        self.manifest = Some(proposed);
+        self.write_manifest()?;
+        let ledger = self.write_ledger()?;
+        self.refresh_bookkeeping(&[self.manifest_path.clone(), ledger])?;
+        Ok(())
+    }
+
+    fn publish_default_updated(
+        &self,
+        publish: PublishMode,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
+        if mode == ExecutionMode::Plan {
+            return Ok(CommandResult::Plan(MutationPlan {
+                command: "publish".into(),
+                reads: vec![self.manifest_path.display().to_string()],
+                writes: vec![self.manifest_path.display().to_string()],
+                hooks: vec!["bookkeeping refresh".into()],
+                ref_updates: Vec::new(),
+                paths: Vec::new(),
+                requires_confirmation: false,
+            }));
+        }
+        let head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+        Ok(CommandResult::Publish(PublishResult {
+            branch: self.manifest()?.downstream.branch.clone(),
+            head,
+            already_published: true,
+            fast_forward: true,
+            mode: publish,
+            recovery_tags: Vec::new(),
+            pushed_refs: Vec::new(),
+            expected_lease: String::new(),
+            proposal_branch: None,
+            proposal_url: None,
+        }))
+    }
+
+    fn publish_rewrite(&self, mode: ExecutionMode) -> Result<CommandResult> {
         let publication = self.preflight_publication()?;
         if publication.remote_sha == publication.head
             && (!publication.clears_operation
                 || self.operation_recovery_is_published(&publication)?)
         {
-            return self.already_published(&publication, mode);
+            return self.already_published(&publication, PublishMode::Rewrite, mode);
         }
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(publication_plan(&publication)));
         }
-        self.execute_publication(&publication)
+        self.execute_publication(&publication, PublishMode::Rewrite)
+    }
+
+    fn publish_append(&self, mode: ExecutionMode) -> Result<CommandResult> {
+        let publication = self.preflight_publication()?;
+        if publication.remote_sha == publication.head
+            && (!publication.clears_operation
+                || self.operation_recovery_is_published(&publication)?)
+        {
+            return self.already_published(&publication, PublishMode::Append, mode);
+        }
+        if mode == ExecutionMode::Plan {
+            return Ok(CommandResult::Plan(publication_plan(&publication)));
+        }
+        if !publication.fast_forward {
+            let short = &publication.remote_sha[..publication.remote_sha.len().min(12)];
+            let message = format!("forkctl: keep published history {short}");
+            run(
+                &self.repo,
+                "git",
+                [
+                    "merge",
+                    "-s",
+                    "ours",
+                    "--no-ff",
+                    "-m",
+                    &message,
+                    &publication.remote_sha,
+                ],
+            )?;
+        }
+        let publication = self.preflight_publication()?;
+        ensure!(
+            publication.fast_forward,
+            "append epoch did not produce a fast-forward"
+        );
+        self.execute_publication(&publication, PublishMode::Append)
+    }
+
+    fn proposal_branch(&self) -> Result<String> {
+        Ok(format!(
+            "forkctl/proposal/{}",
+            self.manifest()?.downstream.branch
+        ))
+    }
+
+    fn publish_propose(&self, mode: ExecutionMode) -> Result<CommandResult> {
+        let publication = self.preflight_publication()?;
+        if publication.remote_sha == publication.head {
+            return self.already_published(&publication, PublishMode::Propose, mode);
+        }
+        let proposal_branch = self.proposal_branch()?;
+        if mode == ExecutionMode::Plan {
+            return Ok(CommandResult::Plan(MutationPlan {
+                command: "publish".into(),
+                reads: vec![publication.head.clone(), publication.remote_sha.clone()],
+                writes: Vec::new(),
+                hooks: vec!["git push of proposal branch".into()],
+                ref_updates: vec![format!("HEAD^{{tree}} -> refs/heads/{proposal_branch}")],
+                paths: Vec::new(),
+                requires_confirmation: false,
+            }));
+        }
+        let tree = capture(&self.repo, "git", ["rev-parse", "HEAD^{tree}"])?;
+        let review = capture(
+            &self.repo,
+            "git",
+            [
+                "commit-tree",
+                &tree,
+                "-p",
+                &publication.remote_sha,
+                "-m",
+                "forkctl: proposal of net tree",
+            ],
+        )?;
+        let local_ref = format!("refs/heads/{proposal_branch}");
+        run(&self.repo, "git", ["update-ref", &local_ref, &review])?;
+        let remote = self.manifest()?.downstream.remote.clone();
+        run_operator(
+            &self.repo,
+            "git",
+            [
+                "push",
+                "--progress",
+                &remote,
+                &format!("{local_ref}:{local_ref}"),
+            ],
+        )?;
+        let proposal_url = self.open_proposal_pr(&proposal_branch).ok().flatten();
+        Ok(CommandResult::Publish(PublishResult {
+            branch: self.manifest()?.downstream.branch.clone(),
+            head: review,
+            already_published: false,
+            fast_forward: false,
+            mode: PublishMode::Propose,
+            recovery_tags: Vec::new(),
+            pushed_refs: vec![format!("{local_ref}:{local_ref}")],
+            expected_lease: publication.remote_sha,
+            proposal_branch: Some(proposal_branch),
+            proposal_url,
+        }))
+    }
+
+    fn open_proposal_pr(&self, proposal_branch: &str) -> Result<Option<String>> {
+        let base = self.manifest()?.downstream.branch.clone();
+        let output = std::process::Command::new("gh")
+            .args([
+                "pr",
+                "create",
+                "--draft",
+                "--base",
+                &base,
+                "--head",
+                proposal_branch,
+                "--title",
+                "forkctl: proposal of net tree",
+                "--body",
+                "Exact candidate is the current stack tip. Promote with `mise run fork -- publish --promote`.",
+            ])
+            .current_dir(&self.repo)
+            .output()?;
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let url = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .find(|line| line.starts_with("http"))
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        Ok((!url.is_empty()).then_some(url))
+    }
+
+    fn publish_promote(
+        &self,
+        proposal: Option<&str>,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
+        let publication = self.preflight_publication()?;
+        let proposal_branch = proposal
+            .map(ToOwned::to_owned)
+            .unwrap_or(self.proposal_branch()?);
+        let review = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("{proposal_branch}^{{commit}}")],
+        )
+        .or_else(|_| {
+            capture(
+                &self.repo,
+                "git",
+                [
+                    "rev-parse",
+                    &format!(
+                        "refs/remotes/{}/{proposal_branch}",
+                        self.manifest()?.downstream.remote
+                    ),
+                ],
+            )
+        })?;
+        let review_tree = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("{review}^{{tree}}")],
+        )?;
+        let head_tree = capture(&self.repo, "git", ["rev-parse", "HEAD^{tree}"])?;
+        ensure!(
+            review_tree == head_tree,
+            "proposal {proposal_branch} tree {review_tree} does not match HEAD {head_tree}; check out the candidate stack first"
+        );
+        let parent = capture(&self.repo, "git", ["rev-parse", &format!("{review}^")])?;
+        if parent != publication.remote_sha {
+            return Err(DomainError::remote_advanced(
+                self.manifest()?.downstream.remote.clone(),
+                self.downstream_ref()?,
+                parent,
+                publication.remote_sha,
+            )
+            .into());
+        }
+        self.publish_rewrite(mode)
     }
 
     fn preflight_publication(&self) -> Result<Publication> {
@@ -113,6 +369,7 @@ impl App {
     fn already_published(
         &self,
         publication: &Publication,
+        publish_mode: PublishMode,
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
         if mode == ExecutionMode::Plan {
@@ -137,9 +394,12 @@ impl App {
             head: publication.head.clone(),
             already_published: true,
             fast_forward: true,
+            mode: publish_mode,
             recovery_tags: Vec::new(),
             pushed_refs: Vec::new(),
             expected_lease: publication.remote_sha.clone(),
+            proposal_branch: None,
+            proposal_url: None,
         }))
     }
 
@@ -229,7 +489,11 @@ impl App {
         Ok(tags)
     }
 
-    fn execute_publication(&self, publication: &Publication) -> Result<CommandResult> {
+    fn execute_publication(
+        &self,
+        publication: &Publication,
+        publish_mode: PublishMode,
+    ) -> Result<CommandResult> {
         let manifest = self.manifest()?;
         let recovery_tags = self.publication_recovery_tags(publication)?;
         let actual_remote = self.downstream_sha()?;
@@ -285,12 +549,15 @@ impl App {
             head: publication.head.clone(),
             already_published: false,
             fast_forward: publication.fast_forward,
+            mode: publish_mode,
             recovery_tags: recovery_tags
                 .into_iter()
                 .map(|(tag, object)| format!("{tag} -> {object}"))
                 .collect(),
             pushed_refs,
             expected_lease: publication.remote_sha.clone(),
+            proposal_branch: None,
+            proposal_url: None,
         }))
     }
 }

@@ -92,6 +92,7 @@ impl App {
                 remote: downstream_remote,
                 branch: downstream_branch,
                 recovery_tag_prefix: "forkctl/recovery".into(),
+                publish: args.publish.unwrap_or_default(),
             },
             upstream: Upstream {
                 remote: upstream_remote,
