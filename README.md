@@ -1,5 +1,10 @@
 # forkctl
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
+  <img src="docs/banner.svg" alt="forkctl — Downstream forks as audited StGit patch stacks.">
+</picture>
+
 Explicit, audited lifecycle control for downstream forks carried as [StGit](https://stacked-git.github.io/) patch stacks.
 
 Forkctl is a Rust policy CLI over real `git` and `stg` commands. The operator declares patch intent; forkctl owns staged capture, targeted refresh, generated exports/ledger/manifest, recovery evidence, exact-lease publication, and typed CLI/API output.
