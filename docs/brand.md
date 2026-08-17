@@ -28,14 +28,22 @@ Banner-only tints: `#6f675c` (muted on cream), `#8d857a` (muted on ink),
 
 ## Construction
 
-A 32-unit square, corner radius 6, mirrored about `y 16`. Upstream is a 7×10
-block at `x 3.5`. Every connector is 3 units thick: a stem out to the bus, the
-bus itself at `x 15.5` running `y 6.5` to `25.5`, and two branches off it. The
-bus ends flush with the outer edge of each branch and the branches sit on the
-fork centres (`y 8` and `y 24`) — junctions that miss by even half a unit read
-as a mistake at 96px. The forks are 7×8 at `x 21.5`, the lower one rust. The
-3-unit gaps between parts are load bearing: closed up, the graph renders as one
+A 32-unit square, corner radius 6, mirrored about `y 16`, the figure clearing
+the field by 4 units left and right and 5 top and bottom. Upstream is a 7×8
+block at `x 4`. Every connector is 3 units thick: a stem out to the bus, the
+bus itself at `x 14.5` running `y 7.5` to `24.5`, and two branches at `x 17.5`.
+The bus ends flush with the outer edge of each branch and the branches sit on
+the fork centres (`y 9` and `y 23`) — junctions that miss by even half a unit
+read as a mistake at 96px. The forks are 6.5×8 at `x 21.5`, the lower one rust.
+The gaps between parts are load bearing: closed up, the graph renders as one
 blob at 16px, which is the size it gets judged at.
+
+All the ink parts are subpaths of **one** `<path>`, and the same for rust. As
+separate `<rect>`s they each antialias against the field, so a shared edge on a
+fractional coordinate composites to roughly 75% coverage and shows as a grey
+hairline through the figure — measured at the bus edge, `srgb(77,76,74)` where
+it should be `srgb(22,22,22)`. One path is rasterised in one pass and the seam
+cannot occur. Anything added to this mark goes in the same path.
 
 ## Banner text
 
