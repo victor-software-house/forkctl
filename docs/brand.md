@@ -1,9 +1,9 @@
 # Mark
 
-The mark is what forkctl carries: two patches stacked on the upstream base,
-the top patch in rust. Same palette and 32-unit grid as `verctl` and `qctl`;
-each tool's topology differs — a rising history there, a carried stack here,
-an ordered queue in `qctl`.
+The mark is the topology forkctl works in: one upstream, forks branching off
+it, and the one we maintain in rust. Same palette and 32-unit grid as `verctl`
+and `qctl`; each tool's topology differs — a rising history there, a fork graph
+here, a queue split by a rule in `qctl`.
 
 | File | Use |
 |:--|:--|
@@ -21,18 +21,21 @@ header does. Never recolour a single file at the call site.
 |:--|:--|:--|
 | Cream | `#f3efe6` | Field, or figure on ink |
 | Ink | `#161616` | Figure, or field |
-| Rust | `#c45c2a` | The top patch. One accent, never two |
+| Rust | `#c45c2a` | The fork we maintain. One accent, never two |
 
 Banner-only tints: `#6f675c` (muted on cream), `#8d857a` (muted on ink),
 `#ddd6c8` / `#2f2f2f` (hairline).
 
 ## Construction
 
-A 32-unit square, corner radius 6. Upstream is a 3.5-unit bar at `y 25`
-spanning `x 3` to `29`. Two 8.5-unit patches stack above it on the same centre
-line at `y 14` and `y 3.5`, the top one rust. The 2 and 2.5-unit gaps are load
-bearing: closed up, the stack renders as one blob at 16px, which is the size
-it gets judged at.
+A 32-unit square, corner radius 6, mirrored about `y 16`. Upstream is a 7×10
+block at `x 3.5`. Every connector is 3 units thick: a stem out to the bus, the
+bus itself at `x 15.5` running `y 6.5` to `25.5`, and two branches off it. The
+bus ends flush with the outer edge of each branch and the branches sit on the
+fork centres (`y 8` and `y 24`) — junctions that miss by even half a unit read
+as a mistake at 96px. The forks are 7×8 at `x 21.5`, the lower one rust. The
+3-unit gaps between parts are load bearing: closed up, the graph renders as one
+blob at 16px, which is the size it gets judged at.
 
 ## Banner text
 
