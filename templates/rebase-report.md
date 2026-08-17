@@ -11,12 +11,13 @@
 
 ## Exports
 
-{% for export in exports %}- `{{ export.path }}` — `{{ export.hash }}`
-{% else %}- None
+{% for export in exports -%}
+- `{{ export.path }}` — `{{ export.hash }}`
+{% else -%}
+- None
 {% endfor %}
 ## Range diff
 
 ```diff
 {{ range_diff }}
 ```
-

@@ -6,26 +6,33 @@ Base: `{{ target_selector }}` (`{{ base_sha }}`)
 
 | Order | Patch | Kind | Purpose | Upstream status | Drop condition |
 |--:|:--|:--|:--|:--|:--|
-{% for patch in patches %}| {{ loop.index }} | `{{ patch.name }}` | {{ patch.kind }} | {{ patch.purpose }} | {{ patch.upstream_status }} | {{ patch.drop_when }} |
+{% for patch in patches -%}
+| {{ loop.index }} | `{{ patch.name }}` | {{ patch.kind }} | {{ patch.purpose }} | {{ patch.upstream_status }} | {{ patch.drop_when }} |
 {% endfor %}
 ## Disabled
 
 | Patch | Former commit | Original position | Reason |
 |:--|:--|--:|:--|
-{% for patch in disabled %}| `{{ patch.name }}` | `{{ patch.commit }}` | {{ patch.position }} | {{ patch.reason }} |
-{% else %}| None | — | — | — |
+{% for patch in disabled -%}
+| `{{ patch.name }}` | `{{ patch.commit }}` | {{ patch.position }} | {{ patch.reason }} |
+{% else -%}
+| None | — | — | — |
 {% endfor %}
 ## Checks
 
 | Patch | Check | Applied at | Files | Command |
 |:--|:--|:--|:--|:--|
-{% for check in checks %}| `{{ check.patch }}` | `{{ check.name }}` | {{ check.stage }} | `{{ check.glob }}` | `{{ check.run }}` |
-{% else %}| None | — | — | — | — |
+{% for check in checks -%}
+| `{{ check.patch }}` | `{{ check.name }}` | {{ check.stage }} | `{{ check.glob }}` | `{{ check.run }}` |
+{% else -%}
+| None | — | — | — | — |
 {% endfor %}
 ## History
 
 | Event | Patch | Former commit | Target | Purpose |
 |:--|:--|:--|:--|:--|
-{% for event in history %}| {{ event.kind }} | `{{ event.patch }}` | `{{ event.commit }}` | `{{ event.target }}` (`{{ event.target_commit }}`) | {{ event.purpose }} |
-{% else %}| None | — | — | — | — |
+{% for event in history -%}
+| {{ event.kind }} | `{{ event.patch }}` | `{{ event.commit }}` | `{{ event.target }}` (`{{ event.target_commit }}`) | {{ event.purpose }} |
+{% else -%}
+| None | — | — | — | — |
 {% endfor %}
