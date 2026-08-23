@@ -45,8 +45,7 @@ askama = { version = "=0.16.0", default-features = false, features = ["config", 
 clap = { version = "=4.6.6", features = ["derive", "env", "string"] }
 clap_complete = { version = "=4.6.8", features = ["unstable-dynamic"] }
 comfy-table = { version = "=7.2.2", default-features = false, features = ["custom_styling"] }
-# `help` is required: ctl-core 0.1.0 prelude re-exports `go` un-cfg'd.
-ctl-core = { version = "0.1.0", default-features = false, features = ["usage", "help"] }
+ctl-core = { version = "=0.1.1", default-features = false, features = ["usage"] }
 globset = { version = "=0.4.19", default-features = false }
 schemars = "=1.2.2"
 serde = { version = "=1.0.229", features = ["derive"] }
