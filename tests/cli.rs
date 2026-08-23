@@ -145,25 +145,39 @@ fn schema_bundle_exposes_all_contracts() {
 }
 
 #[test]
-fn usage_spec_contains_full_mounted_grammar() {
+fn usage_spec_is_the_mounted_fork_grammar() {
     let output = forkctl().arg("--usage-spec=fork").output().unwrap();
     assert!(output.status.success());
     let spec = String::from_utf8(output.stdout).unwrap();
-    assert!(spec.contains("name fork"));
-    assert!(spec.contains("cmd patch"));
-    assert!(spec.contains("cmd refresh"));
-    assert!(spec.contains("cmd contract"));
-    assert!(spec.contains("cmd edit"));
-    assert!(spec.contains("flag \"-s --staged\""));
-    assert!(spec.contains("flag \"-a --allow-base\""));
-    assert!(spec.contains("flag \"-r --required-text\""));
-    assert!(spec.contains("complete patch run=\"mise run --quiet fork -- __candidates patch\""));
-    assert!(spec.contains("complete onto run=\"mise run --quiet fork -- __candidates ref\""));
-    assert!(
-        spec.contains(
-            "complete upstream_remote run=\"mise run --quiet fork -- __candidates remote\""
-        )
-    );
+    insta::with_settings!({
+        filters => vec![(r#"version "[^"]+""#, r#"version "<version>""#)],
+        omit_expression => true,
+    }, {
+        insta::assert_snapshot!(spec);
+    });
+}
+
+#[test]
+fn usage_spec_bare_defaults_to_fork() {
+    let output = forkctl().arg("--usage-spec").output().unwrap();
+    assert!(output.status.success());
+    let fork =
+        String::from_utf8(forkctl().arg("--usage-spec=fork").output().unwrap().stdout).unwrap();
+    let bare = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(bare, fork);
+}
+
+#[test]
+fn task_mount_line_is_ctl_core() {
+    let task = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tasks/fork/fork"),
+    )
+    .unwrap();
+    let line = task
+        .lines()
+        .find(|line| line.starts_with("#USAGE mount"))
+        .unwrap_or_else(|| panic!("no #USAGE mount in task:\n{task}"));
+    assert_eq!(line, ctl_core::mount_line("fork"));
 }
 
 #[test]

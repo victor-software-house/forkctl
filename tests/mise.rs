@@ -153,7 +153,7 @@ impl MountedCatalog {
                 "",
             )
             .replace(
-                "exec \"$(mise where github:victor-software-house/forkctl)/forkctl\" \"$@\"",
+                "exec forkctl \"$@\"",
                 &format!("exec {} \"$@\"", env!("CARGO_BIN_EXE_forkctl")),
             );
         assert!(

@@ -30,8 +30,14 @@ use std::process::ExitCode;
 const DEFAULT_MANIFEST: &str = "patches/fork.yaml";
 const INSTRUCTIONS: &str = include_str!("instructions.md");
 
+#[cfg(test)]
+mod operator_docs;
+
 fn main() -> ExitCode {
     clap_complete::CompleteEnv::with_factory(Cli::command).complete();
+    if let Some(bin) = ctl_core::spec_bin(std::env::args().skip(1), "fork") {
+        return emit_usage_spec(&bin);
+    }
     match help::try_emit::<Cli>() {
         Ok(true) => return ExitCode::SUCCESS,
         Ok(false) => {}
@@ -47,7 +53,6 @@ fn main() -> ExitCode {
         Ok(CliAction::ApiCall) => run_api_call(),
         Ok(CliAction::Completion(shell)) => emit_completion(shell),
         Ok(CliAction::Candidates(kind)) => emit_candidates(kind),
-        Ok(CliAction::UsageSpec(bin)) => emit_usage_spec(&bin),
         Ok(CliAction::Request { request, mode }) => {
             if output == OutputFormat::Pretty {
                 process::set_stream_operator_output(true);

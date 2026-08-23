@@ -225,7 +225,7 @@ impl App {
                 "--title",
                 "forkctl: proposal of net tree",
                 "--body",
-                "Exact candidate is the current stack tip. Promote with `mise run fork -- publish --promote`.",
+                "Exact candidate is the current stack tip. Promote with `mise run fork publish --promote`.",
             ])
             .current_dir(&self.repo)
             .output()?;

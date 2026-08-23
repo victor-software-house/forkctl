@@ -8,9 +8,12 @@ Always use the consumer's mise-provisioned task. Never call a PATH-global
 `forkctl` or `stg` binary.
 
 ```
-mise run fork -- status
-mise run fork -- operation status
+mise run fork status
+mise run fork operation status
 ```
+
+Never `mise run fork --`. The `--` in `#USAGE mount` is mise's completion
+bootstrap.
 
 If a mid-stack refresh popped later patches that own `mise.toml`, the
 mounted task disappears. Do not hunt install paths. Use the same mise
