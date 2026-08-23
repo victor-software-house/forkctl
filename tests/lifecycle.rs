@@ -95,7 +95,7 @@ fn refresh_below_the_top_is_refused_without_rewrite_below() {
     );
     assert_eq!(
         refresh["error"]["suggested_command"],
-        "mise run fork -- patch create NAME"
+        "mise run fork patch create NAME"
     );
     let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();

@@ -46,16 +46,6 @@ pub struct Cli {
     #[arg(short = 'q', long, global = true, help_heading = "Output")]
     pub quiet: bool,
 
-    #[arg(
-        long,
-        global = true,
-        hide = true,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "forkctl"
-    )]
-    pub usage_spec: Option<String>,
-
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -453,14 +443,10 @@ pub enum CliAction {
     ApiCall,
     Completion(CompletionShell),
     Candidates(crate::completion::CandidateKind),
-    UsageSpec(String),
 }
 
 impl Cli {
     pub fn into_action(self) -> Result<CliAction> {
-        if let Some(bin) = self.usage_spec {
-            return Ok(CliAction::UsageSpec(bin));
-        }
         let command = self.command.context("a command is required")?;
         let action = match command {
             Command::Init(args) => CliAction::Request {

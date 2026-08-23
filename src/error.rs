@@ -118,7 +118,7 @@ impl DomainError {
                 issue: format!("patches above {patch}: {above_list}"),
             },
         )
-        .suggest("mise run fork -- patch create NAME")
+        .suggest("mise run fork patch create NAME")
     }
 
     pub fn capture_conflict(message: impl Into<String>) -> Self {

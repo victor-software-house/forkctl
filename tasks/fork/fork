@@ -7,4 +7,4 @@
 #USAGE mount "mise run --quiet fork -- --usage-spec=fork"
 
 set -euo pipefail
-exec "$(mise where github:victor-software-house/forkctl)/forkctl" "$@"
+exec forkctl "$@"
