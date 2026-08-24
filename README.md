@@ -9,7 +9,7 @@ Explicit, audited lifecycle control for downstream forks carried as [StGit](http
 
 Forkctl is a Rust policy CLI over real `git` and `stg` commands. The operator declares patch intent; forkctl owns staged capture, targeted refresh, generated exports/ledger/manifest, recovery evidence, exact-lease publication, and typed CLI/API output.
 
-Clap and the local JSON API execute the same typed handlers. Domain modules never print, detect terminals, or construct tables. A centralized Anstyle/Comfy Table renderer owns pretty output and colored width-aware help; Serde/Schemars own the versioned JSON contract and JSON Schema 2020-12.
+Clap and the local JSON API execute the same typed handlers. Domain modules never print, detect terminals, or construct tables. Forkctl maps its versioned protocol onto ctl-core semantic documents; ctl-core alone owns pretty/JSON/colorless rendering, help, streams, width, styling, and tables. Serde/Schemars retain the JSON contract and JSON Schema 2020-12.
 
 ## Consumer setup
 
@@ -240,7 +240,7 @@ forkctl completion nu
 forkctl --usage-spec=fork
 ```
 
-Most long options have collision-audited mnemonic shorts. Leaf parameters are grouped by subject, metadata/scope, capture, execution, and output. Help is generated from Clap metadata into colored width-aware panels; no second parameter specification exists. Pretty help, result tables, notices, and errors wrap to the detected terminal width; captured non-TTY output may provide the standard `COLUMNS` fallback. JSON, schemas, Usage KDL, and completion scripts never reflow.
+Most long options have collision-audited mnemonic shorts. Leaf parameters are grouped by subject, metadata/scope, capture, execution, and output. Help is generated from Clap metadata through ctl-core; no second parameter specification exists. Pretty help, result tables, notices, and errors wrap to the detected terminal width; captured non-TTY output may provide the standard `COLUMNS` fallback. JSON, schemas, Usage KDL, and completion scripts never reflow.
 
 Completion supports bash, elvish, fish, Nushell, PowerShell, and zsh, including commands, flags, enum values, files, local Git remotes/refs, live patch names, and current operation values. Candidate lookup is local and fail-silent.
 

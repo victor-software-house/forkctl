@@ -1,50 +1,28 @@
 use crate::manifest::{Check, CheckStage, PatchKind, RequiredText};
 use crate::protocol::{
-    ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ColorMode, ContractEditArgs,
-    EmptyArgs, ExecutionMode, InitArgs, OperationAbortArgs, OutputFormat, PatchCreateArgs,
-    PatchEditArgs, PatchName, PatchRefreshArgs, PatchTarget, PatchTransitionArgs, PublishArgs,
-    RebaseArgs, SchemaKind, ScopeEdit,
+    ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ContractEditArgs, EmptyArgs,
+    ExecutionMode, InitArgs, OperationAbortArgs, PatchCreateArgs, PatchEditArgs, PatchName,
+    PatchRefreshArgs, PatchTarget, PatchTransitionArgs, PublishArgs, RebaseArgs, SchemaKind,
+    ScopeEdit,
 };
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
+use ctl_core::{DryRunArgs, OutputArgs};
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
     version,
     about = "Maintain an explicit audited StGit downstream patch stack",
-    arg_required_else_help = false
+    arg_required_else_help = true
 )]
 pub struct Cli {
     /// Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.yaml`.
     #[arg(short = 'm', long, global = true, value_hint = clap::ValueHint::FilePath, help_heading = "Output")]
     pub manifest: Option<PathBuf>,
 
-    /// Output representation.
-    #[arg(
-        short = 'f',
-        long = "format",
-        global = true,
-        value_enum,
-        default_value = "pretty",
-        help_heading = "Output"
-    )]
-    pub output: OutputFormat,
-
-    /// Pretty-output color policy.
-    #[arg(
-        short = 'c',
-        long,
-        global = true,
-        value_enum,
-        default_value = "auto",
-        help_heading = "Output"
-    )]
-    pub color: ColorMode,
-
-    /// Suppress successful pretty output.
-    #[arg(short = 'q', long, global = true, help_heading = "Output")]
-    pub quiet: bool,
+    #[command(flatten)]
+    pub output: OutputArgs,
 
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -94,13 +72,6 @@ pub enum Command {
         #[arg(value_enum)]
         kind: crate::completion::CandidateKind,
     },
-}
-
-#[derive(Args, Default)]
-pub struct DryRunArgs {
-    /// Validate and show the mutation plan without writes, hooks, or ref updates.
-    #[arg(short = 'n', long, help_heading = "Execution")]
-    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -522,7 +493,7 @@ impl Cli {
             Command::Candidates { kind } => CliAction::Candidates(kind),
         };
         ensure!(
-            !(self.quiet && self.output == OutputFormat::Json),
+            !(self.output.quiet && self.output.format.is_json()),
             "--quiet conflicts with --format json"
         );
         Ok(action)

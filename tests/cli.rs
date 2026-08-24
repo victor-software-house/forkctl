@@ -111,11 +111,36 @@ fn instructions_work_outside_a_repository() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert!(
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .contains("forkctl")
-    );
+    assert_eq!(output.stderr, &[] as &[u8]);
+    let expected =
+        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/instructions.md"))
+            .unwrap();
+    assert_eq!(output.stdout, expected);
+}
+
+#[test]
+fn quiet_suppresses_successful_human_output_only() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = forkctl()
+        .args(["--quiet", "instructions"])
+        .current_dir(directory.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, &[] as &[u8]);
+    assert_eq!(output.stderr, &[] as &[u8]);
+
+    let json = forkctl()
+        .args(["--format", "json", "instructions"])
+        .current_dir(directory.path())
+        .output()
+        .unwrap();
+    assert!(json.status.success());
+    assert_eq!(json.stderr, &[] as &[u8]);
+    assert!(!json.stdout.contains(&b'\x1b'));
+    let response: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(response["status"], "success");
+    assert_eq!(response["command"], "instructions");
 }
 
 #[test]
@@ -379,7 +404,7 @@ fn repository_discovery_failure_is_typed() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(!output.status.success());
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, &[] as &[u8]);
     let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(response["error"]["code"], "repository_not_found");
 }
@@ -427,7 +452,7 @@ fn cli_and_api_execute_the_same_status_handler() {
         &serde_json::json!({"command":"status","arguments":{}}),
     );
     assert!(api.status.success());
-    assert!(api.stderr.is_empty());
+    assert_eq!(api.stderr, &[] as &[u8]);
     let cli: serde_json::Value = serde_json::from_slice(&cli.stdout).unwrap();
     let api: serde_json::Value = serde_json::from_slice(&api.stdout).unwrap();
     assert_eq!(cli["result"], api["result"]);
@@ -457,7 +482,7 @@ fn domain_failure_is_one_json_error_with_empty_stderr() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(!output.status.success());
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, &[] as &[u8]);
     let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(response["status"], "error");
     assert_eq!(response["command"], "check");

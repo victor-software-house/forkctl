@@ -3,12 +3,21 @@ use std::path::{Path, PathBuf};
 
 #[test]
 fn command_and_domain_modules_do_not_render_or_print() {
+    let manifest =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")).unwrap();
+    for dependency in ["anstream =", "anstyle =", "comfy-table ="] {
+        assert!(
+            !manifest.lines().any(|line| line.starts_with(dependency)),
+            "forkctl directly depends on {dependency}"
+        );
+    }
+
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut violations = Vec::new();
     visit(&root, &mut |path| {
         if matches!(
             path.file_name().and_then(|name| name.to_str()),
-            Some("view.rs" | "help.rs" | "layout.rs" | "main.rs" | "cli.rs")
+            Some("main.rs" | "cli.rs")
         ) {
             return;
         }
