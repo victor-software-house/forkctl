@@ -5,256 +5,287 @@ name fork
 bin fork
 version "<version>"
 about "Maintain an explicit audited StGit downstream patch stack"
+unknown_flags error
+arg_required_else_help #true
+args_override_self #false
 usage "Usage: fork [OPTIONS] [COMMAND]"
-flag "-m --manifest" help="Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.yaml`" global=#true {
+flag "-m --manifest" help="Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.yaml`" global=#true help_heading=Output {
     arg <MANIFEST>
 }
-flag "-f --format" help="Output representation" global=#true default=pretty {
-    arg <OUTPUT> {
-        choices pretty json
-    }
-}
-flag "-c --color" help="Pretty-output color policy" global=#true default=auto {
-    arg <COLOR> {
-        choices auto always never
-    }
-}
-flag "-q --quiet" help="Suppress successful pretty output" global=#true
-cmd init help="Bootstrap a new contract or hydrate a fresh clone" {
-    flag --upstream-remote help="Fetch-only upstream remote name" {
-        arg <UPSTREAM_REMOTE>
-    }
-    flag "-u --upstream-url" help="Exact upstream repository URL" {
-        arg <UPSTREAM_URL>
-    }
-    flag --upstream-ref help="Full upstream branch ref, such as refs/heads/main" {
-        arg <UPSTREAM_REF>
-    }
-    flag --downstream-remote help="Downstream publication remote name" {
-        arg <DOWNSTREAM_REMOTE>
-    }
-    flag --downstream-branch help="Managed downstream branch name" {
-        arg <DOWNSTREAM_BRANCH>
-    }
-    flag --publish help="Default publish mode for this repository" {
-        arg <PUBLISH> {
-            choices rewrite append propose
+flag "-f --format" help="Output representation" global=#true help_heading=Output default=pretty {
+    arg <FORMAT> {
+        choices {
+            choice pretty help="Human text, optionally colored"
+            choice json help="Machine JSON. Never contains ANSI"
         }
     }
-    flag "-b --base" help="Initial full branch/tag ref or commit SHA" {
+}
+flag "-c --color" help="Pretty-output color policy. JSON never contains ANSI" global=#true help_heading=Output default=auto {
+    arg <COLOR> {
+        choices {
+            choice auto help="Honor the stream: color if it is a TTY"
+            choice always help="Always emit ANSI"
+            choice never help="Never emit ANSI"
+        }
+    }
+}
+flag --no-color help="Force colorless pretty output. Wins over `--color`" global=#true help_heading=Output
+flag "-q --quiet" help="Suppress successful pretty output" global=#true help_heading=Output
+complete manifest type=path
+cmd init display_order=5 args_override_self=#false help="Bootstrap a new contract or hydrate a fresh clone" unknown_flags=error {
+    flag --upstream-remote help="Fetch-only upstream remote name" help_heading=Repository {
+        arg <UPSTREAM_REMOTE>
+    }
+    flag "-u --upstream-url" help="Exact upstream repository URL" help_heading=Repository {
+        arg <UPSTREAM_URL>
+    }
+    flag --upstream-ref help="Full upstream branch ref, such as refs/heads/main" help_heading=Repository {
+        arg <UPSTREAM_REF>
+    }
+    flag --downstream-remote help="Downstream publication remote name" help_heading=Repository {
+        arg <DOWNSTREAM_REMOTE>
+    }
+    flag --downstream-branch help="Managed downstream branch name" help_heading=Repository {
+        arg <DOWNSTREAM_BRANCH>
+    }
+    flag --publish help="Default publish mode for this repository" help_heading=Repository {
+        arg <PUBLISH> {
+            choices {
+                choice rewrite help="Exact-lease rewrite of the downstream ref. Recovery tags keep the overwritten tip"
+                choice append help="Keep the previous tip as an ancestor and fast-forward. `git log` stays a line"
+                choice propose help="Open a proposal of the net tree. `publish --promote` later moves the lease"
+            }
+        }
+    }
+    flag "-b --base" help="Initial full branch/tag ref or commit SHA" help_heading=Repository {
         arg <BASE>
     }
-    flag "-l --ledger" help="Generated patch ledger path" {
+    flag "-l --ledger" help="Generated patch ledger path" help_heading=Documents {
         arg <LEDGER>
     }
-    flag "-e --exports" help="Generated source-patch export directory" {
+    flag "-e --exports" help="Generated source-patch export directory" help_heading=Documents {
         arg <EXPORTS>
     }
-    flag "-k --bookkeeping-patch" help="Final tooling patch name" {
+    flag "-k --bookkeeping-patch" help="Final tooling patch name" help_heading=Bookkeeping {
         arg <BOOKKEEPING_PATCH>
     }
-    flag "-p --bookkeeping-path" help="Additional bookkeeping ownership scope; repeatable" var=#true {
-        arg <BOOKKEEPING_SCOPE>
+    flag "-p --bookkeeping-path" help="Additional bookkeeping ownership scope; repeatable" var=#true help_heading=Bookkeeping {
+        arg <BOOKKEEPING_SCOPE>… var=#true
     }
-    flag "-a --allow-base" help="Base-drift ownership glob allowed below the patch stack; repeatable" var=#true {
-        arg <ALLOW_BASE>
+    flag "-a --allow-base" help="Base-drift ownership glob allowed below the patch stack; repeatable" var=#true help_heading=Contracts {
+        arg <ALLOW_BASE>… var=#true
     }
-    flag "-r --required-text" help="Required repository text as PATH=TEXT; repeatable" var=#true {
-        arg <REQUIRED_TEXT>
+    flag "-r --required-text" help="Required repository text as PATH=TEXT; repeatable" var=#true help_heading=Contracts {
+        arg <REQUIRED_TEXT>… var=#true
     }
-    flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+    flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
+    complete ledger type=path
+    complete exports type=dir
+    complete bookkeeping_scope type=path
     complete base run="mise run --quiet fork -- __candidates ref" descriptions=#true
     complete upstream_remote run="mise run --quiet fork -- __candidates remote" descriptions=#true
     complete downstream_remote run="mise run --quiet fork -- __candidates remote" descriptions=#true
 }
-cmd status help="Inspect repository, patch, worktree, check, and operation state"
-cmd check help="Check the complete repository or the staged index" {
-    flag "-s --staged" help="Check the staged index against an explicit or active patch"
-    flag "-p --patch" help="Patch used by staged check; defaults to the active patch" {
+cmd status display_order=6 args_override_self=#false help="Inspect repository, patch, worktree, check, and operation state" unknown_flags=error
+cmd check display_order=7 args_override_self=#false help="Check the complete repository or the staged index" unknown_flags=error {
+    flag "-s --staged" help="Check the staged index against an explicit or active patch" help_heading="Check scope"
+    flag "-p --patch" help="Patch used by staged check; defaults to the active patch" help_heading="Check scope" {
         arg <PATCH>
     }
     complete patch run="mise run --quiet fork -- __candidates patch" descriptions=#true
 }
-cmd patch subcommand_required=#true help="Create, inspect, select, edit, refresh, or finish patches" {
-    cmd list help="List the declared series and active patch"
-    cmd show help="Show one patch; defaults to the active patch" {
+cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Create, inspect, select, edit, refresh, or finish patches" unknown_flags=error {
+    cmd list display_order=0 args_override_self=#false help="List the declared series and active patch" unknown_flags=error
+    cmd show display_order=1 args_override_self=#false help="Show one patch; defaults to the active patch" unknown_flags=error {
         arg "[NAME]" help="Patch name; defaults to the active patch" required=#false
         complete name run="mise run --quiet fork -- __candidates patch" descriptions=#true
     }
-    cmd create help="Record a metadata-only active patch draft" {
-        flag "-k --kind" help="Patch layer" required=#true {
+    cmd create display_order=2 args_override_self=#false help="Record a metadata-only active patch draft" unknown_flags=error {
+        flag "-k --kind" help="Patch layer" required=#true help_heading="Patch metadata" {
             arg <KIND> {
                 choices source tooling
             }
         }
-        flag "-p --purpose" help="Why this downstream patch exists" required=#true {
+        flag "-p --purpose" help="Why this downstream patch exists" required=#true help_heading="Patch metadata" {
             arg <PURPOSE>
         }
-        flag "-u --upstream-status" help="Current upstream disposition" required=#true {
+        flag "-u --upstream-status" help="Current upstream disposition" required=#true help_heading="Patch metadata" {
             arg <UPSTREAM_STATUS>
         }
-        flag "-d --drop-when" help="Objective condition for removing this patch" required=#true {
+        flag "-d --drop-when" help="Objective condition for removing this patch" required=#true help_heading="Patch metadata" {
             arg <DROP_WHEN>
         }
-        flag "-s --scope" help="Persistent ownership glob; repeatable" required=#true var=#true {
-            arg <SCOPE>
+        flag "-s --scope" help="Persistent ownership glob; repeatable" required=#true var=#true help_heading=Ownership {
+            arg <SCOPE>… var=#true
         }
-        flag "-C --check" help="Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable" var=#true {
-            arg <CHECKS>
+        flag "-C --check" help="Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable" var=#true help_heading=Checks {
+            arg <CHECKS>… var=#true
         }
-        flag "-g --check-glob" help="Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable" var=#true {
-            arg <CHECK_GLOBS>
+        flag "-g --check-glob" help="Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable" var=#true help_heading=Checks {
+            arg <CHECK_GLOBS>… var=#true
         }
-        flag --check-at help="Evaluate a declared check at its own patch commit as NAME=patch; repeatable" var=#true {
-            arg <CHECK_STAGES>
+        flag --check-at help="Evaluate a declared check at its own patch commit as NAME=patch; repeatable" var=#true help_heading=Checks {
+            arg <CHECK_STAGES>… var=#true
         }
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg <NAME> help="Unique patch name"
     }
-    cmd select help="Select an existing patch locally" {
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+    cmd select display_order=3 args_override_self=#false help="Select an existing patch locally" unknown_flags=error {
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg <NAME> help="Existing patch to select"
         complete name run="mise run --quiet fork -- __candidates patch" descriptions=#true
     }
-    cmd edit help="Edit metadata or ownership scope" {
-        flag "-k --kind" help="Replacement patch layer" {
+    cmd edit display_order=4 args_override_self=#false help="Edit metadata or ownership scope" unknown_flags=error {
+        flag "-k --kind" help="Replacement patch layer" help_heading="Patch metadata" {
             arg <KIND> {
                 choices source tooling
             }
         }
-        flag "-p --purpose" help="Replacement downstream purpose" {
+        flag "-p --purpose" help="Replacement downstream purpose" help_heading="Patch metadata" {
             arg <PURPOSE>
         }
-        flag "-u --upstream-status" help="Replacement upstream disposition" {
+        flag "-u --upstream-status" help="Replacement upstream disposition" help_heading="Patch metadata" {
             arg <UPSTREAM_STATUS>
         }
-        flag "-d --drop-when" help="Objective condition for removing this patch" {
+        flag "-d --drop-when" help="Objective condition for removing this patch" help_heading="Patch metadata" {
             arg <DROP_WHEN>
         }
-        flag "-s --set-scope" help="Replace complete ownership scope; repeatable" var=#true {
-            arg <SET_SCOPE>
+        flag "-s --set-scope" help="Replace complete ownership scope; repeatable" var=#true help_heading=Ownership {
+            conflicts "--add-scope" "--remove-scope"
+            arg <SET_SCOPE>… var=#true
         }
-        flag "-a --add-scope" help="Add ownership globs; repeatable" var=#true {
-            arg <ADD_SCOPE>
+        flag "-a --add-scope" help="Add ownership globs; repeatable" var=#true conflicts=--set-scope help_heading=Ownership {
+            arg <ADD_SCOPE>… var=#true
         }
-        flag "-r --remove-scope" help="Remove exact ownership globs; repeatable" var=#true {
-            arg <REMOVE_SCOPE>
+        flag "-r --remove-scope" help="Remove exact ownership globs; repeatable" var=#true conflicts=--set-scope help_heading=Ownership {
+            arg <REMOVE_SCOPE>… var=#true
         }
-        flag --clear-checks help="Replace the complete check set before adding supplied checks"
-        flag "-C --check" help="Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable" var=#true {
-            arg <CHECKS>
+        flag --clear-checks help="Replace the complete check set before adding supplied checks" help_heading=Checks
+        flag "-C --check" help="Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable" var=#true help_heading=Checks {
+            arg <CHECKS>… var=#true
         }
-        flag "-g --check-glob" help="Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable" var=#true {
-            arg <CHECK_GLOBS>
+        flag "-g --check-glob" help="Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable" var=#true help_heading=Checks {
+            arg <CHECK_GLOBS>… var=#true
         }
-        flag --check-at help="Evaluate a declared check at its own patch commit as NAME=patch; repeatable" var=#true {
-            arg <CHECK_STAGES>
+        flag --check-at help="Evaluate a declared check at its own patch commit as NAME=patch; repeatable" var=#true help_heading=Checks {
+            arg <CHECK_STAGES>… var=#true
         }
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg "[NAME]" help="Patch name; defaults to the active patch" required=#false
         complete name run="mise run --quiet fork -- __candidates patch" descriptions=#true
     }
-    cmd refresh help="Capture staged, owned, or path-limited changes" {
-        flag "-s --staged" help="Explicitly select staged-index capture (the default)"
-        flag "-a --all" help="Stage and capture every changed path owned by the patch"
-        flag "-p --path" help="Stage and capture an explicit Git pathspec; repeatable" var=#true {
-            arg <PATHS>
+    cmd refresh display_order=5 args_override_self=#false help="Capture staged, owned, or path-limited changes" unknown_flags=error {
+        flag "-s --staged" help="Explicitly select staged-index capture (the default)" help_heading=Capture
+        flag "-a --all" help="Stage and capture every changed path owned by the patch" help_heading=Capture
+        flag "-p --path" help="Stage and capture an explicit Git pathspec; repeatable" var=#true help_heading=Capture {
+            arg <PATHS>… var=#true
         }
-        flag --rewrite-below help="Refresh a non-top patch and unapply every patch above it. Everyday follow-up work should be a new top patch instead"
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+        flag --rewrite-below help="Refresh a non-top patch and unapply every patch above it. Everyday follow-up work should be a new top patch instead" help_heading=Stack
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
+        arg "[NAME]" help="Patch name; defaults to the active patch" required=#false
+        group capture "--staged" "--all" "--path"
+        complete paths type=path
+        complete name run="mise run --quiet fork -- __candidates patch" descriptions=#true
+    }
+    cmd finish display_order=6 args_override_self=#false help="Run the full check and clear active state" unknown_flags=error {
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg "[NAME]" help="Patch name; defaults to the active patch" required=#false
         complete name run="mise run --quiet fork -- __candidates patch" descriptions=#true
     }
-    cmd finish help="Run the full check and clear active state" {
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
-        arg "[NAME]" help="Patch name; defaults to the active patch" required=#false
-        complete name run="mise run --quiet fork -- __candidates patch" descriptions=#true
-    }
-    cmd remove help="Permanently remove a patch while preserving recovery evidence" {
-        flag "-r --reason" help="Auditable operator reason for this transition" required=#true {
+    cmd remove display_order=7 args_override_self=#false help="Permanently remove a patch while preserving recovery evidence" unknown_flags=error {
+        flag "-r --reason" help="Auditable operator reason for this transition" required=#true help_heading=Audit {
             arg <REASON>
         }
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg <NAME> help="Patch name"
     }
-    cmd disable help="Disable a patch while retaining enough evidence to re-enable it" {
-        flag "-r --reason" help="Auditable operator reason for this transition" required=#true {
+    cmd disable display_order=8 args_override_self=#false help="Disable a patch while retaining enough evidence to re-enable it" unknown_flags=error {
+        flag "-r --reason" help="Auditable operator reason for this transition" required=#true help_heading=Audit {
             arg <REASON>
         }
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg <NAME> help="Patch name"
     }
-    cmd enable help="Re-enable a previously disabled patch" {
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+    cmd enable display_order=9 args_override_self=#false help="Re-enable a previously disabled patch" unknown_flags=error {
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg <NAME> help="Disabled patch name"
     }
 }
-cmd rebase help="Replay the declared stack onto an exact upstream target" {
-    flag "-o --onto" help="Full upstream branch/tag ref or commit SHA" required=#true {
+cmd rebase display_order=9 args_override_self=#false help="Replay the declared stack onto an exact upstream target" unknown_flags=error {
+    flag "-o --onto" help="Full upstream branch/tag ref or commit SHA" required=#true help_heading=Target {
         arg <ONTO>
     }
-    flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+    flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
     complete onto run="mise run --quiet fork -- __candidates ref" descriptions=#true
 }
-cmd contract subcommand_required=#true help="Edit declarative repository contracts" {
-    cmd edit help="Append contracts or clear and replace the complete contract set" {
-        flag --clear help="Clear all existing contracts before adding the supplied values"
-        flag "-a --allow-base" help="Add an allowed base-drift ownership glob; repeatable" var=#true {
-            arg <ALLOW_BASE>
+cmd contract display_order=10 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Edit declarative repository contracts" unknown_flags=error {
+    cmd edit display_order=0 args_override_self=#false help="Append contracts or clear and replace the complete contract set" unknown_flags=error {
+        flag --clear help="Clear all existing contracts before adding the supplied values" help_heading=Contracts
+        flag "-a --allow-base" help="Add an allowed base-drift ownership glob; repeatable" var=#true help_heading=Contracts {
+            arg <ALLOW_BASE>… var=#true
         }
-        flag "-r --required-text" help="Add a required repository contract as PATH=TEXT; repeatable" var=#true {
-            arg <REQUIRED_TEXT>
+        flag "-r --required-text" help="Add a required repository contract as PATH=TEXT; repeatable" var=#true help_heading=Contracts {
+            arg <REQUIRED_TEXT>… var=#true
         }
-        flag --publish-mode help="Set the repository default publish mode" {
+        flag --publish-mode help="Set the repository default publish mode" help_heading=Contracts {
             arg <PUBLISH_MODE> {
-                choices rewrite append propose
+                choices {
+                    choice rewrite help="Exact-lease rewrite of the downstream ref. Recovery tags keep the overwritten tip"
+                    choice append help="Keep the previous tip as an ancestor and fast-forward. `git log` stays a line"
+                    choice propose help="Open a proposal of the net tree. `publish --promote` later moves the lease"
+                }
             }
         }
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
+        group contract_change "--clear" "--allow-base" "--required-text" "--publish-mode" required=#true multiple=#true
     }
 }
-cmd publish help="Publish the managed branch using the repository default, or an explicit mode" {
-    flag --rewrite help="Exact-lease rewrite. Overrides the repository default"
-    flag --append help="Keep the previous tip as an ancestor and fast-forward"
-    flag --propose help="Push a net-tree proposal branch and open a PR when `gh` is available"
-    flag --promote help="Promote an exact proposal to the downstream branch"
-    flag --proposal help="Proposal branch, tag, or URL used by --promote" {
+cmd publish display_order=11 args_override_self=#false help="Publish the managed branch using the repository default, or an explicit mode" unknown_flags=error {
+    flag --rewrite help="Exact-lease rewrite. Overrides the repository default" help_heading=Mode
+    flag --append help="Keep the previous tip as an ancestor and fast-forward" help_heading=Mode
+    flag --propose help="Push a net-tree proposal branch and open a PR when `gh` is available" help_heading=Mode
+    flag --promote help="Promote an exact proposal to the downstream branch" help_heading=Mode
+    flag --proposal help="Proposal branch, tag, or URL used by --promote" help_heading=Mode {
         arg <PROPOSAL>
     }
-    flag --set-default help="Persist this mode as the repository default, then publish unless --set-default is the only action" {
+    flag --set-default help="Persist this mode as the repository default, then publish unless --set-default is the only action" help_heading=Mode {
         arg <SET_DEFAULT> {
-            choices rewrite append propose
+            choices {
+                choice rewrite help="Exact-lease rewrite of the downstream ref. Recovery tags keep the overwritten tip"
+                choice append help="Keep the previous tip as an ancestor and fast-forward. `git log` stays a line"
+                choice propose help="Open a proposal of the net tree. `publish --promote` later moves the lease"
+            }
         }
     }
-    flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+    flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
 }
-cmd operation subcommand_required=#true help="Inspect, continue, or abort the current operation" {
-    cmd status help="Show the current operation and exact next actions"
-    cmd continue help="Resume after operator conflict resolution" {
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+cmd operation display_order=12 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Inspect, continue, or abort the current operation" unknown_flags=error {
+    cmd status display_order=0 args_override_self=#false help="Show the current operation and exact next actions" unknown_flags=error
+    cmd continue display_order=1 args_override_self=#false help="Resume after operator conflict resolution" unknown_flags=error {
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
     }
-    cmd abort help="Restore the recorded old state" {
+    cmd abort display_order=2 args_override_self=#false help="Restore the recorded old state" unknown_flags=error {
         flag "-y --yes" help="Confirm destructive restoration of the recorded old state"
-        flag "-n --dry-run" help="Validate and show the mutation plan without writes, hooks, or ref updates"
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
     }
 }
-cmd instructions help="Print the generated operator and repository contract"
-cmd completion help="Generate shell completion registration" {
+cmd instructions display_order=13 args_override_self=#false help="Print the generated operator and repository contract" unknown_flags=error
+cmd completion display_order=14 args_override_self=#false help="Generate shell completion registration" unknown_flags=error {
     arg <SHELL> help="Shell whose registration script should be emitted" {
         choices bash elvish fish nu powershell zsh
     }
 }
-cmd api subcommand_required=#true help="Use the versioned local JSON API" {
-    cmd schema help="Emit JSON Schema 2020-12" {
+cmd api display_order=15 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Use the versioned local JSON API" unknown_flags=error {
+    cmd schema display_order=0 args_override_self=#false help="Emit JSON Schema 2020-12" unknown_flags=error {
         flag "-k --kind" help="Schema document to emit" default=bundle {
             arg <KIND> {
                 choices bundle manifest invocation response active-state operation
             }
         }
     }
-    cmd call help="Read one invocation from stdin and emit one response"
+    cmd call display_order=1 args_override_self=#false help="Read one invocation from stdin and emit one response" unknown_flags=error
 }
-cmd __candidates hide=#true {
+cmd __candidates hide=#true display_order=16 args_override_self=#false unknown_flags=error {
     arg <KIND> {
         choices patch ref remote
     }

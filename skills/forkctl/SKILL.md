@@ -69,7 +69,7 @@ mise run fork patch create PATCH \
 For an existing patch, select it instead:
 
 ```sh
-forkctl patch select PATCH
+mise run fork patch select PATCH
 ```
 
 Then edit normally and use Git's index as the default explicit capture boundary:
@@ -98,13 +98,13 @@ Inspect or update declared intent with `patch show`, `patch list`, and `patch ed
 Use forkctl transitions, never raw `stg delete`, `stg pop`, or manual manifest edits:
 
 ```sh
-forkctl patch remove PATCH --reason 'Why this patch is permanently obsolete'
-forkctl publish
+mise run fork patch remove PATCH --reason 'Why this patch is permanently obsolete'
+mise run fork publish
 
-forkctl patch disable PATCH --reason 'Why this patch is temporarily excluded'
-forkctl publish
-forkctl patch enable PATCH
-forkctl publish
+mise run fork patch disable PATCH --reason 'Why this patch is temporarily excluded'
+mise run fork publish
+mise run fork patch enable PATCH
+mise run fork publish
 ```
 
 Each transition requires a clean checked stack, creates immutable recovery
@@ -117,9 +117,9 @@ replay, or re-enable. The bookkeeping patch can never be removed or disabled.
 ## Validate
 
 ```sh
-forkctl check                  # complete clean-repository audit
-forkctl check --staged         # index against active patch
-forkctl check --staged --patch PATCH
+mise run fork check                  # complete clean-repository audit
+mise run fork check --staged         # index against active patch
+mise run fork check --staged --patch PATCH
 ```
 
 A complete check validates repository state, branch/remotes, base evidence, StGit order, patch scopes and trailers, generated ledger/exports, reconstruction, required text, and any current operation evidence. It does not claim application-level semantic compatibility; run the repository's own tests too.
@@ -151,11 +151,11 @@ Do not delete, retarget, recreate, or substitute recovery tags. Do not clear ope
 Rebase and publication are deliberately separate.
 
 ```sh
-forkctl rebase --onto refs/heads/main --dry-run
-forkctl rebase --onto refs/heads/main
+mise run fork rebase --onto refs/heads/main --dry-run
+mise run fork rebase --onto refs/heads/main
 # review status and the generated range-diff report
-forkctl publish --dry-run
-forkctl publish
+mise run fork publish --dry-run
+mise run fork publish
 ```
 
 Rebase requires a clean declared branch, no active patch, no other operation, and a complete passing check. It creates immutable recovery evidence, captures the downstream lease, delegates replay to StGit, records dropped upstream-merged patches, regenerates evidence, and stops before publication.
@@ -175,15 +175,15 @@ Forkctl does not administer GitHub rulesets or bypass permissions.
 Pretty output is for operators. Automation uses JSON output or the local one-request API:
 
 ```sh
-forkctl status --format json
-forkctl api schema --kind bundle
+mise run fork status --format json
+mise run fork api schema --kind bundle
 printf '%s' '{"protocol_version":1,"mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
-  | forkctl api call
+  | mise run fork api call
 ```
 
 Keep stdout as exactly one JSON document and treat schema-derived command names, arguments, results, notices, error codes, and details as authoritative. Do not parse pretty tables or error prose.
 
-Use API `mode: "plan"` or CLI `--dry-run` for mutation planning; read-only commands reject plan mode.
+Use API `mode: "plan"` or CLI `--dry-run` / `--preview` for mutation planning; read-only commands reject plan mode. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
 
 ## Stop conditions
 

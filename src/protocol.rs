@@ -6,19 +6,6 @@ use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
-pub enum OutputFormat {
-    Pretty,
-    Json,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
-pub enum ColorMode {
-    Auto,
-    Always,
-    Never,
-}
-
 #[derive(Debug, Clone, Copy, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {

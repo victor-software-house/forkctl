@@ -195,7 +195,10 @@ fn yaml_manifest_preserves_disable_enable_and_remove_history() {
     fixture.forkctl_ok(&["publish"]);
     fixture.forkctl_ok(&["check"]);
     let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
-    assert!(manifest["disabled_patches"].as_array().unwrap().is_empty());
+    assert_eq!(
+        manifest["disabled_patches"].as_array().unwrap().as_slice(),
+        &[] as &[serde_json::Value]
+    );
     assert!(
         manifest["history"]
             .as_array()
@@ -604,7 +607,7 @@ fn json_status_is_one_clean_envelope() {
         &serde_json::json!({"command":"status","arguments":{}}),
     );
     assert!(output.status.success());
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, &[] as &[u8]);
     let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(response["status"], "success");
     assert_eq!(response["command"], "status");
@@ -637,7 +640,10 @@ fn rebase_publish_and_fresh_clone_hydrate_exact_recovery() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(!git_capture_dynamic(&clone, &["tag", "--list", recovery]).is_empty());
+    assert_ne!(
+        git_capture_dynamic(&clone, &["tag", "--list", recovery]),
+        ""
+    );
 }
 
 #[test]
@@ -792,12 +798,12 @@ fn publish_rejects_stale_lease_without_partial_refs() {
         git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
         remote_before
     );
-    assert!(
+    assert_eq!(
         git_capture_dynamic(
             &fixture.repo,
             &["ls-remote", "origin", &format!("refs/tags/{tag}")]
-        )
-        .is_empty()
+        ),
+        ""
     );
     assert_operation_present(&fixture);
 }
@@ -890,7 +896,10 @@ fn publish_repairs_branch_only_update_with_missing_recovery_evidence() {
         &fixture.repo,
         &["push", &lease, "origin", "HEAD:refs/heads/main"],
     );
-    assert!(git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", &tag_ref]).is_empty());
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", &tag_ref]),
+        ""
+    );
 
     let repair = fixture.forkctl_ok(&["--format", "json", "publish"]);
     let repair: serde_json::Value = serde_json::from_str(&repair).unwrap();
@@ -964,12 +973,12 @@ fn publish_preserves_refs_when_remote_policy_rejects_atomic_push() {
         git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
         branch_before
     );
-    assert!(
+    assert_eq!(
         git_capture_dynamic(
             &fixture.repo,
             &["ls-remote", "origin", &format!("refs/tags/{tag}")]
-        )
-        .is_empty()
+        ),
+        ""
     );
     assert_operation_present(&fixture);
 }
@@ -1004,12 +1013,12 @@ fn publish_has_no_fallback_when_remote_lacks_atomic_push() {
         git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
         branch_before
     );
-    assert!(
+    assert_eq!(
         git_capture_dynamic(
             &fixture.repo,
             &["ls-remote", "origin", &format!("refs/tags/{tag}")]
-        )
-        .is_empty()
+        ),
+        ""
     );
     assert_operation_present(&fixture);
 }
@@ -1067,11 +1076,12 @@ fn patch_work_publishes_under_an_exact_lease_with_recovery() {
     let bootstrap: serde_json::Value = serde_json::from_str(&bootstrap).unwrap();
     assert_eq!(bootstrap["result"]["fast_forward"], true);
     assert_eq!(bootstrap["result"]["already_published"], false);
-    assert!(
+    assert_eq!(
         bootstrap["result"]["recovery_tags"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        &[] as &[serde_json::Value]
     );
 
     let published_base = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
@@ -1763,6 +1773,7 @@ fn json_manifest_is_a_first_class_lifecycle_codec() {
         &serde_json::json!({"command":"status","arguments":{}}),
     );
     assert!(api.status.success());
+    assert_eq!(api.stderr, &[] as &[u8]);
     let response: serde_json::Value = serde_json::from_slice(&api.stdout).unwrap();
     assert_eq!(response["status"], "success");
     fixture.forkctl_ok(&["check"]);

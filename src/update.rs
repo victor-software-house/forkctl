@@ -22,7 +22,7 @@ struct RegistryPackage {
 }
 
 pub fn available_notice() -> Option<String> {
-    if !io::stderr().is_terminal()
+    if !io::stdout().is_terminal()
         || env::var_os("FORKCTL_NO_UPDATE_CHECK").is_some()
         || !check_is_due()
     {

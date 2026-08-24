@@ -2,30 +2,32 @@ mod app;
 mod cli;
 mod completion;
 mod error;
-mod help;
-mod layout;
 mod ledger;
 mod manifest;
 mod manifest_codec;
+mod presentation;
 mod process;
 mod protocol;
 mod report;
 mod state;
 mod update;
-mod view;
 
-use anyhow::{Context, Result};
-use app::App;
-use clap::{CommandFactory, Parser};
-use cli::{Cli, CliAction, CompletionShell};
-use protocol::{
-    ApiError, ApiErrorCode, ApiInvocation, ApiRequest, ApiResponse, CommandResult, ErrorDetails,
-    ExecutionMode, InstructionsResult, Outcome, OutputFormat, PROTOCOL_VERSION,
-};
 use std::env;
+use std::ffi::OsString;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
+
+use anyhow::{Context, Result};
+use app::App;
+use clap::CommandFactory;
+use cli::{Cli, CliAction, CompletionShell};
+use ctl_core::{App as Chassis, ColorMode, OutputFormat, View};
+use presentation::Report;
+use protocol::{
+    ApiError, ApiErrorCode, ApiInvocation, ApiRequest, ApiResponse, CommandResult, ErrorDetails,
+    ExecutionMode, InstructionsResult, Outcome, PROTOCOL_VERSION,
+};
 
 const DEFAULT_MANIFEST: &str = "patches/fork.yaml";
 const INSTRUCTIONS: &str = include_str!("instructions.md");
@@ -34,27 +36,53 @@ const INSTRUCTIONS: &str = include_str!("instructions.md");
 mod operator_docs;
 
 fn main() -> ExitCode {
-    clap_complete::CompleteEnv::with_factory(Cli::command).complete();
-    if let Some(bin) = ctl_core::spec_bin(std::env::args().skip(1), "fork") {
-        return emit_usage_spec(&bin);
+    Chassis::<Cli>::new("forkctl")
+        .mounted_as("fork")
+        .usage_spec(|command, bin| usage_spec(&command, bin))
+        .before_parse(complete_from_environment)
+        .view(select_view)
+        .run(execute_cli)
+}
+
+fn complete_from_environment(args: &[OsString]) -> Option<ExitCode> {
+    let current_dir = env::current_dir().ok();
+    match clap_complete::CompleteEnv::with_factory(Cli::command)
+        .try_complete(args.iter().cloned(), current_dir.as_deref())
+    {
+        Ok(true) => Some(ExitCode::SUCCESS),
+        Ok(false) => None,
+        Err(error) => {
+            let code = u8::try_from(error.exit_code()).map_or(ExitCode::FAILURE, ExitCode::from);
+            let _ = error.print();
+            Some(code)
+        }
     }
-    match help::try_emit::<Cli>() {
-        Ok(true) => return ExitCode::SUCCESS,
-        Ok(false) => {}
-        Err(_) => return ExitCode::FAILURE,
+}
+
+fn select_view(cli: &Cli) -> View {
+    match &cli.command {
+        Some(cli::Command::Api { .. }) => View::new(OutputFormat::Json, ColorMode::Never),
+        Some(cli::Command::Completion { .. } | cli::Command::Candidates { .. }) => {
+            View::new(OutputFormat::Pretty, ColorMode::Never)
+        }
+        _ => cli.output.view(),
     }
-    let cli = Cli::parse();
+}
+
+fn execute_cli(cli: Cli) -> Result<Report> {
     let manifest = cli.manifest.as_ref().map(|path| path.display().to_string());
-    let output = cli.output;
-    let color = cli.color;
-    let quiet = cli.quiet;
-    match cli.into_action() {
-        Ok(CliAction::ApiSchema(kind)) => emit_schema(kind),
-        Ok(CliAction::ApiCall) => run_api_call(),
-        Ok(CliAction::Completion(shell)) => emit_completion(shell),
-        Ok(CliAction::Candidates(kind)) => emit_candidates(kind),
+    let format = cli.output.format;
+    let quiet = cli.output.quiet;
+    let action = cli.into_action();
+    Ok(match action {
+        Ok(CliAction::ApiSchema(kind)) => Report::json(protocol::schema_document(kind)),
+        Ok(CliAction::ApiCall) => Report::response(run_api_call(), None),
+        Ok(CliAction::Completion(shell)) => Report::text(completion_text(shell)?),
+        Ok(CliAction::Candidates(kind)) => {
+            Report::text(completion::candidate_lines(kind).join("\n"))
+        }
         Ok(CliAction::Request { request, mode }) => {
-            if output == OutputFormat::Pretty {
+            if format == OutputFormat::Pretty {
                 process::set_stream_operator_output(true);
             }
             let command = request.command();
@@ -62,24 +90,20 @@ fn main() -> ExitCode {
                 |error| ApiResponse::error(command, mode, api_error(&error)),
                 |outcome| ApiResponse::success(command, mode, outcome),
             );
-            if emit_response(&response, output, color, quiet).is_err() {
-                return ExitCode::FAILURE;
-            }
-            if matches!(response, ApiResponse::Success { .. })
-                && output == OutputFormat::Pretty
-                && !quiet
-                && let Some(notice) = update::available_notice()
-            {
-                eprintln!("{notice}");
-            }
-            response_exit(&response)
+            let update_notice = matches!(response, ApiResponse::Success { .. })
+                .then(|| {
+                    (format == OutputFormat::Pretty && !quiet)
+                        .then(update::available_notice)
+                        .flatten()
+                })
+                .flatten();
+            Report::response(response, update_notice)
         }
-        Err(error) => {
-            let response = ApiResponse::error("cli", ExecutionMode::Execute, request_error(&error));
-            let _ = view::emit_pretty(&response, color, false);
-            ExitCode::from(2)
-        }
-    }
+        Err(error) => Report::response(
+            ApiResponse::error("cli", ExecutionMode::Execute, request_error(&error)),
+            None,
+        ),
+    })
 }
 
 fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> Result<Outcome> {
@@ -130,8 +154,8 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
     Ok(Outcome::new(result).with_optional_operation(operation_id))
 }
 
-fn run_api_call() -> ExitCode {
-    let response = match read_invocation() {
+fn run_api_call() -> ApiResponse {
+    match read_invocation() {
         Err(error) => ApiResponse::error("api.call", ExecutionMode::Execute, request_error(&error)),
         Ok(invocation) if invocation.protocol_version != PROTOCOL_VERSION => ApiResponse::error(
             invocation.request.command(),
@@ -163,34 +187,15 @@ fn run_api_call() -> ExitCode {
                 |outcome| ApiResponse::success(command, invocation.mode, outcome),
             )
         }
-    };
-    if view::emit_json(&response).is_ok() {
-        response_exit(&response)
-    } else {
-        ExitCode::FAILURE
     }
 }
 
-fn emit_schema(kind: protocol::SchemaKind) -> ExitCode {
-    if view::emit_json(&protocol::schema_document(kind)).is_ok() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }
+fn usage_spec(command: &clap::Command, bin: &str) -> String {
+    usage_document(command, bin).to_string()
 }
 
-fn emit_usage_spec(bin: &str) -> ExitCode {
-    if view::emit_text(&usage_spec(bin).to_string()).is_ok() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }
-}
-
-fn usage_spec(bin: &str) -> usage::Spec {
-    let mut command = Cli::command();
-    command.set_bin_name(bin);
-    let mut spec = usage::Spec::from(&command);
+fn usage_document(command: &clap::Command, bin: &str) -> usage::Spec {
+    let mut spec = usage::Spec::from(command);
     spec.name = bin.to_string();
     spec.bin = bin.to_string();
     let candidate_command = if bin == "forkctl" {
@@ -233,58 +238,46 @@ fn add_usage_completions(spec: &mut usage::Spec, candidate_command: &str) {
     }
 }
 
-fn emit_candidates(kind: completion::CandidateKind) -> ExitCode {
-    let output = completion::candidate_lines(kind).join("\n");
-    if output.is_empty() || view::emit_text(&output).is_ok() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }
-}
-
-fn emit_completion(shell: CompletionShell) -> ExitCode {
+fn completion_text(shell: CompletionShell) -> Result<String> {
     use clap_complete::env::{Bash, Elvish, EnvCompleter, Fish, Powershell, Zsh};
 
     let mut output = Vec::new();
-    let result = match shell {
+    match shell {
         CompletionShell::Bash => {
-            Bash.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+            Bash.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)?;
         }
         CompletionShell::Elvish => {
-            Elvish.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+            Elvish.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)?;
         }
         CompletionShell::Fish => {
-            Fish.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+            Fish.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)?;
         }
         CompletionShell::Nu => {
-            return match usage::complete::complete(&usage::complete::CompleteOptions {
+            return usage::complete::complete(&usage::complete::CompleteOptions {
                 usage_bin: "usage".to_string(),
                 shell: "nu".to_string(),
                 bin: "forkctl".to_string(),
                 cache_key: Some(env!("CARGO_PKG_VERSION").to_string()),
-                spec: Some(usage_spec("forkctl")),
+                spec: Some(usage_document(&Cli::command(), "forkctl")),
                 usage_cmd: None,
-                include_bash_completion_lib: false,
                 source_file: None,
-            }) {
-                Ok(output) if view::emit_text(&output).is_ok() => ExitCode::SUCCESS,
-                _ => ExitCode::FAILURE,
-            };
+            })
+            .context("generate Nu completion");
         }
         CompletionShell::Powershell => {
-            Powershell.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+            Powershell.write_registration(
+                "COMPLETE",
+                "forkctl",
+                "forkctl",
+                "forkctl",
+                &mut output,
+            )?;
         }
         CompletionShell::Zsh => {
-            Zsh.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)
+            Zsh.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)?;
         }
-    };
-    match result.and_then(|()| {
-        let output = String::from_utf8(output).map_err(std::io::Error::other)?;
-        view::emit_text(&output)
-    }) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::FAILURE,
     }
+    String::from_utf8(output).context("completion registration is UTF-8")
 }
 
 fn read_invocation() -> Result<ApiInvocation> {
@@ -321,28 +314,6 @@ fn api_error(error: &anyhow::Error) -> ApiError {
         details: ErrorDetails::None,
         retryable: false,
         suggested_command: None,
-    }
-}
-
-fn emit_response(
-    response: &ApiResponse,
-    output: OutputFormat,
-    color: protocol::ColorMode,
-    quiet: bool,
-) -> std::io::Result<()> {
-    match output {
-        OutputFormat::Pretty => view::emit_pretty(response, color, quiet),
-        OutputFormat::Json => view::emit_json(response),
-    }
-}
-
-fn response_exit(response: &ApiResponse) -> ExitCode {
-    match response {
-        ApiResponse::Success { .. } => ExitCode::SUCCESS,
-        ApiResponse::Error { error, .. } if matches!(error.code, ApiErrorCode::InvalidRequest) => {
-            ExitCode::from(2)
-        }
-        ApiResponse::Error { .. } => ExitCode::FAILURE,
     }
 }
 

@@ -54,7 +54,7 @@ edit path.
 5. Repeat edit/stage/check/refresh as needed.
 6. `mise run fork patch finish` runs the full check and clears active state.
 
-`patch refresh -a` explicitly stages all changed paths owned by the patch. Repeated `-p PATHSPEC` limits capture to explicit Git pathspecs. Use `-n` on mutations to inspect the effect plan.
+`patch refresh -a` explicitly stages all changed paths owned by the patch. Repeated `-p PATHSPEC` limits capture to explicit Git pathspecs. Use `-n` / `--preview` on mutations to inspect the effect plan.
 
 ## Declared checks
 
@@ -97,7 +97,8 @@ Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit h
 
 ## Protocol
 
-- `--format pretty|json` selects human or complete versioned output.
+- ctl-core owns help, pretty/JSON/colorless rendering, streams, terminal width, styling, and tables; the versioned forkctl response remains the one data model.
+- `--format pretty|json` selects human or complete versioned output. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
 - `api call` reads one typed invocation and emits one JSON response.
 - `api schema -k bundle|manifest|invocation|response|active-state|operation` emits JSON Schema 2020-12.
 - `--usage-spec=fork` emits the mounted mise grammar from the Clap tree.
