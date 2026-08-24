@@ -328,6 +328,11 @@ With a manifest, `init` idempotently reconstructs StGit metadata, skips history 
 
 The portable [`forkctl` Agent Skill](skills/forkctl/SKILL.md) teaches compatible coding agents to use the installed CLI safely: explicit patch intent, staged capture, checks, operation recovery, rebase review, exact-lease publication, and typed automation.
 
+Clap remains the command grammar. Templates under `.ctl/operator/` retain skill
+and instruction prose while ctl-core `Surface` renders their shared mounted
+invocation/no-`--` rule and visible command inventory. Tests byte-compare both
+committed documents.
+
 List or install it with the [Skills CLI](https://skills.sh/):
 
 ```sh
