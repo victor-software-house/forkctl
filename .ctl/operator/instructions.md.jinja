@@ -1,32 +1,12 @@
+{%- from "ctl/invocation.md.jinja" import mounted_invocation -%}
+{%- from "ctl/commands.md.jinja" import command_inventory -%}
 # forkctl agent instructions
 
 `forkctl` maintains one explicit audited StGit downstream patch stack.
 
-## Invocation
+{{ mounted_invocation(surface, ["status", "operation status"]) }}
 
-```sh
-mise run fork status
-mise run fork operation status
-```
-
-Never `mise run fork --`. The `--` in `#USAGE mount` is mise's
-completion bootstrap.
-
-## Commands
-
-| Command | Aliases | Purpose |
-|:--|:--|:--|
-| `init` | — | Bootstrap a new contract or hydrate a fresh clone |
-| `status` | — | Inspect repository, patch, worktree, check, and operation state |
-| `check` | — | Check the complete repository or the staged index |
-| `patch` | — | Create, inspect, select, edit, refresh, or finish patches |
-| `rebase` | — | Replay the declared stack onto an exact upstream target |
-| `contract` | — | Edit declarative repository contracts |
-| `publish` | — | Publish the managed branch using the repository default, or an explicit mode |
-| `operation` | — | Inspect, continue, or abort the current operation |
-| `instructions` | — | Print the generated operator and repository contract |
-| `completion` | — | Generate shell completion registration |
-| `api` | — | Use the versioned local JSON API |
+{{ command_inventory(surface) | trim }}
 
 Always use the consumer's mise-provisioned task. Never call a PATH-global
 `forkctl` or `stg` binary.

@@ -1,3 +1,5 @@
+{%- from "ctl/invocation.md.jinja" import mounted_invocation -%}
+{%- from "ctl/commands.md.jinja" import command_inventory -%}
 ---
 name: forkctl
 description: >-
@@ -15,31 +17,9 @@ compatibility: Requires forkctl plus supported git and stg executables; a reposi
 
 Treat forkctl as the policy owner for an explicit StGit downstream patch stack. Delegate repository and patch mechanics to `git`, `stg`, and forkctl; do not reimplement or bypass their state.
 
-## Invocation
+{{ mounted_invocation(surface, ["status", "check"]) }}
 
-```sh
-mise run fork status
-mise run fork check
-```
-
-Never `mise run fork --`. The `--` in `#USAGE mount` is mise's
-completion bootstrap.
-
-## Commands
-
-| Command | Aliases | Purpose |
-|:--|:--|:--|
-| `init` | — | Bootstrap a new contract or hydrate a fresh clone |
-| `status` | — | Inspect repository, patch, worktree, check, and operation state |
-| `check` | — | Check the complete repository or the staged index |
-| `patch` | — | Create, inspect, select, edit, refresh, or finish patches |
-| `rebase` | — | Replay the declared stack onto an exact upstream target |
-| `contract` | — | Edit declarative repository contracts |
-| `publish` | — | Publish the managed branch using the repository default, or an explicit mode |
-| `operation` | — | Inspect, continue, or abort the current operation |
-| `instructions` | — | Print the generated operator and repository contract |
-| `completion` | — | Generate shell completion registration |
-| `api` | — | Use the versioned local JSON API |
+{{ command_inventory(surface) | trim }}
 
 ## Establish the repository contract
 
