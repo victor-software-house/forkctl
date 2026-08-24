@@ -217,6 +217,19 @@ fn completion_registration_covers_every_supported_shell() {
     ] {
         let output = forkctl().args(["completion", shell]).output().unwrap();
         assert!(output.status.success(), "completion failed for {shell}");
+        assert_eq!(output.stderr, &[] as &[u8]);
+
+        let quiet = forkctl()
+            .args(["--quiet", "completion", shell])
+            .output()
+            .unwrap();
+        assert!(
+            quiet.status.success(),
+            "quiet completion failed for {shell}"
+        );
+        assert_eq!(quiet.stderr, &[] as &[u8]);
+        assert_eq!(quiet.stdout, output.stdout);
+
         let script = String::from_utf8(output.stdout).unwrap();
         assert!(
             script.contains(marker),
@@ -243,6 +256,17 @@ fn direct_completion_includes_live_patch_names() {
         "--scope",
         "src/**",
     ]);
+
+    let candidates = fixture.forkctl(&["__candidates", "patch"]);
+    assert!(candidates.status.success());
+    assert_eq!(candidates.stderr, &[] as &[u8]);
+    assert_eq!(candidates.stdout, b"fork-tooling\nlive-completion-patch\n");
+
+    let quiet_candidates = fixture.forkctl(&["--quiet", "__candidates", "patch"]);
+    assert!(quiet_candidates.status.success());
+    assert_eq!(quiet_candidates.stderr, &[] as &[u8]);
+    assert_eq!(quiet_candidates.stdout, candidates.stdout);
+
     let output = complete_in(&fixture.repo, &["forkctl", "patch", "show", "live"], 3);
     assert!(output.status.success());
     assert_eq!(
@@ -422,12 +446,14 @@ fn dynamic_candidates_fail_silently_outside_a_repository() {
             output.status.success(),
             "candidate lookup failed for {kind}"
         );
-        assert!(
-            output.stdout.is_empty(),
+        assert_eq!(
+            output.stdout,
+            &[] as &[u8],
             "candidate lookup printed for {kind}"
         );
-        assert!(
-            output.stderr.is_empty(),
+        assert_eq!(
+            output.stderr,
+            &[] as &[u8],
             "candidate lookup warned for {kind}"
         );
     }
