@@ -1,7 +1,7 @@
 use super::{App, recovery_id};
 use crate::error::DomainError;
 use crate::manifest::{PublishMode, RecoveryEvidence};
-use crate::process::{capture, run, run_operator};
+use crate::process::{capture, run, run_operator, succeeds};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishArgs, PublishResult};
 use anyhow::{Context, Result, ensure};
 
@@ -14,6 +14,7 @@ struct Publication {
     lease: String,
     branch_refspec: String,
     fast_forward: bool,
+    remote_append: bool,
     operation_recovery: Option<RecoveryEvidence>,
     prepared_recovery: Option<RecoveryEvidence>,
     overwritten_tip: Option<String>,
@@ -97,7 +98,7 @@ impl App {
     }
 
     fn publish_rewrite(&self, mode: ExecutionMode) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        let publication = self.preflight_publication(PublishMode::Rewrite)?;
         if publication.remote_sha == publication.head
             && (!publication.clears_operation
                 || self.operation_recovery_is_published(&publication)?)
@@ -111,7 +112,22 @@ impl App {
     }
 
     fn publish_append(&self, mode: ExecutionMode) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        if mode == ExecutionMode::Execute {
+            self.normalize_append_bridge_head()?;
+        }
+        let mut publication = self.preflight_publication(PublishMode::Append)?;
+        let remote_has_append = publication.remote_append;
+        let append_bridge = !publication.fast_forward;
+        if append_bridge {
+            publication.prepared_recovery = None;
+            publication.overwritten_tip = None;
+        }
+        if remote_has_append {
+            publication.head.clone_from(&publication.remote_sha);
+            publication.branch_refspec =
+                format!("{}:{}", publication.remote_sha, publication.downstream_ref);
+            publication.fast_forward = true;
+        }
         if publication.remote_sha == publication.head
             && (!publication.clears_operation
                 || self.operation_recovery_is_published(&publication)?)
@@ -121,7 +137,11 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(publication_plan(&publication)));
         }
-        if !publication.fast_forward {
+        if remote_has_append {
+            return self.execute_publication(&publication, PublishMode::Append);
+        }
+        let stack_tip = publication.head.clone();
+        if append_bridge {
             let short = &publication.remote_sha[..publication.remote_sha.len().min(12)];
             let message = format!("forkctl: keep published history {short}");
             run(
@@ -137,13 +157,32 @@ impl App {
                     &publication.remote_sha,
                 ],
             )?;
+            publication.head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+            publication.branch_refspec = format!("HEAD:{}", publication.downstream_ref);
+            publication.fast_forward = true;
         }
-        let publication = self.preflight_publication()?;
-        ensure!(
-            publication.fast_forward,
-            "append epoch did not produce a fast-forward"
-        );
-        self.execute_publication(&publication, PublishMode::Append)
+        let result = self.execute_publication(&publication, PublishMode::Append);
+        if !append_bridge {
+            return result;
+        }
+        let restored = run(&self.repo, "git", ["reset", "--soft", &stack_tip]);
+        match (result, restored) {
+            (Ok(result), Ok(())) => Ok(result),
+            (Ok(_), Err(restoration_error)) => Err(restoration_error),
+            (Err(publication_error), Ok(())) => Err(publication_error),
+            (Err(publication_error), Err(restoration_error)) => {
+                if let Some(publication) = publication_error.downcast_ref::<DomainError>() {
+                    return Err(DomainError::publication_restoration_failed(
+                        publication,
+                        &restoration_error,
+                    )
+                    .into());
+                }
+                Err(publication_error.context(format!(
+                    "append publication also failed to restore local stack {stack_tip}: {restoration_error:#}"
+                )))
+            }
+        }
     }
 
     fn proposal_branch(&self) -> Result<String> {
@@ -154,7 +193,7 @@ impl App {
     }
 
     fn publish_propose(&self, mode: ExecutionMode) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        let publication = self.preflight_publication(PublishMode::Propose)?;
         if publication.remote_sha == publication.head {
             return self.already_published(&publication, PublishMode::Propose, mode);
         }
@@ -246,7 +285,7 @@ impl App {
         proposal: Option<&str>,
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        let publication = self.preflight_publication(PublishMode::Rewrite)?;
         let proposal_branch = proposal
             .map(ToOwned::to_owned)
             .unwrap_or(self.proposal_branch()?);
@@ -291,7 +330,7 @@ impl App {
         self.publish_rewrite(mode)
     }
 
-    fn preflight_publication(&self) -> Result<Publication> {
+    fn preflight_publication(&self, publish_mode: PublishMode) -> Result<Publication> {
         self.require_clean()?;
         self.require_declared_branch()?;
         if let Some(active) = self.read_active()? {
@@ -322,20 +361,42 @@ impl App {
         let downstream_ref = self.downstream_ref()?;
         let remote_sha = self.downstream_sha()?;
         let fast_forward = remote_sha == head || self.is_ancestor(&remote_sha, &head)?;
-        if !fast_forward {
-            let expected = match &operation {
+        let expected_remote = if fast_forward {
+            None
+        } else {
+            Some(match &operation {
                 Some(operation) => operation.expected_remote_sha.clone(),
                 None => self.downstream_tracking_sha()?,
-            };
-            if expected != remote_sha {
-                return Err(DomainError::remote_advanced(
-                    self.manifest()?.downstream.remote.clone(),
-                    downstream_ref,
-                    expected,
-                    remote_sha,
-                )
-                .into());
+            })
+        };
+        let remote_append = if publish_mode == PublishMode::Append
+            && succeeds(
+                &self.repo,
+                "git",
+                ["cat-file", "-e", &format!("{remote_sha}^{{commit}}")],
+            )? {
+            match (self.append_bridge_parents(&remote_sha)?, &expected_remote) {
+                (Some((stack_tip, previous_tip)), Some(expected)) => {
+                    stack_tip == head
+                        && (previous_tip == *expected
+                            || (operation.is_none() && remote_sha == *expected))
+                }
+                _ => false,
             }
+        } else {
+            false
+        };
+        if let Some(expected) = expected_remote
+            && !remote_append
+            && expected != remote_sha
+        {
+            return Err(DomainError::remote_advanced(
+                self.manifest()?.downstream.remote.clone(),
+                downstream_ref,
+                expected,
+                remote_sha,
+            )
+            .into());
         }
         let (operation_recovery, prepared_recovery, overwritten_tip) = match &operation {
             Some(operation) => (
@@ -359,6 +420,7 @@ impl App {
             remote_sha,
             downstream_ref,
             fast_forward,
+            remote_append,
             operation_recovery,
             prepared_recovery,
             overwritten_tip,

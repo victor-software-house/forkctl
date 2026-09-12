@@ -512,6 +512,7 @@ impl App {
         patch: Patch,
         capture_source: CaptureSource,
         captured_paths: Vec<String>,
+        normalized_append_bridge: bool,
     ) -> Result<CommandResult> {
         let conflicts = capture(
             &self.repo,
@@ -529,7 +530,15 @@ impl App {
             .into());
         }
         if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
-            run(&self.repo, "stg", ["refresh", "--index"])?;
+            if normalized_append_bridge {
+                run(
+                    &self.repo,
+                    "stg",
+                    ["refresh", "--patch", &patch.name, "--index"],
+                )?;
+            } else {
+                run(&self.repo, "stg", ["refresh", "--index"])?;
+            }
         }
         let series = self.stg_series()?;
         let temporary = series

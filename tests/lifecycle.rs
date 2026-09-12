@@ -1153,6 +1153,25 @@ fn patch_work_rewrite_refuses_an_unfetched_remote_advance() {
 }
 
 #[test]
+fn patch_work_append_refuses_an_unfetched_remote_advance() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&["publish"]);
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    advance_downstream(&fixture.repo, "remote advanced\n");
+    let remote_before =
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]);
+
+    let publish = fixture.forkctl(&["--format", "json", "publish", "--append"]);
+    assert!(!publish.status.success());
+    let publish: serde_json::Value = serde_json::from_slice(&publish.stdout).unwrap();
+    assert_eq!(publish["error"]["code"], "remote_advanced");
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        remote_before
+    );
+}
+
+#[test]
 fn recovery_commands_survive_an_unreadable_tracked_manifest() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
@@ -1310,6 +1329,11 @@ fn capture(repo: &std::path::Path, program: &str, args: &[&str]) -> String {
 
 fn stg_capture(repo: &std::path::Path, args: [&str; 3]) -> String {
     capture(repo, "stg", &args)
+}
+
+fn stg_top_commit(repo: &std::path::Path) -> String {
+    let top = capture(repo, "stg", &["top"]);
+    capture(repo, "stg", &["id", &top])
 }
 
 fn stg_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
@@ -1809,6 +1833,17 @@ fn publish_append_keeps_the_previous_tip_as_an_ancestor() {
     let published: serde_json::Value = serde_json::from_str(&published).unwrap();
     assert_eq!(published["result"]["mode"], "append");
     assert_eq!(published["result"]["fast_forward"], true);
+    assert_eq!(
+        published["result"]["recovery_tags"]
+            .as_array()
+            .unwrap()
+            .as_slice(),
+        &[] as &[serde_json::Value]
+    );
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "HEAD"]),
+        stg_top_commit(&fixture.repo)
+    );
 
     let second = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
     assert_ne!(first, second);
@@ -1816,6 +1851,309 @@ fn publish_append_keeps_the_previous_tip_as_an_ancestor() {
         &fixture.repo,
         ["merge-base", "--is-ancestor", &first, &second],
     );
+    let repeated = fixture.forkctl_ok(&["--format", "json", "publish", "--append"]);
+    let repeated: serde_json::Value = serde_json::from_str(&repeated).unwrap();
+    assert_eq!(repeated["result"]["already_published"], true);
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
+        second
+    );
+}
+
+#[test]
+fn publish_append_fresh_clone_hydrates_declared_stack() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    fixture.forkctl_ok(&["publish"]);
+
+    fixture.forkctl_ok(&["patch", "select", "source-change"]);
+    fs::write(fixture.repo.join("source.txt"), "second\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["publish", "--append"]);
+
+    let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
+    let clone = fixture.repo.parent().unwrap().join("append-fresh-clone");
+    git_ok(
+        fixture.repo.parent().unwrap(),
+        ["clone", "--quiet", remote.as_str(), clone.to_str().unwrap()],
+    );
+    git_ok(&clone, ["config", "user.name", "Forkctl Test"]);
+    git_ok(&clone, ["config", "user.email", "forkctl@example.com"]);
+
+    let output = support::forkctl_command(&clone)
+        .args(["--manifest", "patches/fork.yaml", "init"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        stg_capture(&clone, ["series", "--all", "--no-prefix"])
+            .lines()
+            .collect::<Vec<_>>(),
+        ["source-change", "fork-tooling"]
+    );
+    assert_eq!(
+        git_capture(&clone, ["rev-parse", "HEAD"]),
+        stg_top_commit(&clone)
+    );
+}
+
+#[test]
+fn publish_append_allows_followup_patch_refresh() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    fixture.forkctl_ok(&["publish"]);
+
+    fixture.forkctl_ok(&["patch", "select", "source-change"]);
+    fs::write(fixture.repo.join("source.txt"), "second\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["publish", "--append"]);
+
+    fixture.forkctl_ok(&["patch", "select", "source-change"]);
+    fs::write(fixture.repo.join("source.txt"), "third\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn publish_append_restores_stack_after_remote_rejection() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    fixture.forkctl_ok(&["publish"]);
+
+    fixture.forkctl_ok(&["patch", "select", "source-change"]);
+    fs::write(fixture.repo.join("source.txt"), "second\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    let stack_tip = stg_top_commit(&fixture.repo);
+    let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
+    let hook = std::path::Path::new(&remote).join("hooks/pre-receive");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+    make_executable(&hook);
+    let remote_before = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    let publish = fixture.forkctl(&["--format", "json", "publish", "--append"]);
+    assert!(!publish.status.success());
+    let publish: serde_json::Value = serde_json::from_slice(&publish.stdout).unwrap();
+    assert_eq!(publish["error"]["code"], "publication_rejected");
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), stack_tip);
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "HEAD"]),
+        stg_top_commit(&fixture.repo)
+    );
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"])
+            .split_whitespace()
+            .next()
+            .unwrap(),
+        remote_before
+    );
+
+    let real_git = isolated_command(&fixture.repo, "sh")
+        .args(["-c", "command -v git"])
+        .output()
+        .unwrap();
+    assert!(real_git.status.success());
+    let real_git = String::from_utf8(real_git.stdout).unwrap();
+    let wrapper_dir = fixture.repo.parent().unwrap().join("failing-reset-bin");
+    fs::create_dir_all(&wrapper_dir).unwrap();
+    let wrapper = wrapper_dir.join("git");
+    fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = reset ] && [ \"$2\" = --soft ]; then\n  echo simulated-append-reset-failure >&2\n  exit 1\nfi\nexec \"{}\" \"$@\"\n",
+            real_git.trim()
+        ),
+    )
+    .unwrap();
+    make_executable(&wrapper);
+    let mut command = support::forkctl_command(&fixture.repo);
+    command
+        .args([
+            "--manifest",
+            "patches/fork.yaml",
+            "--format",
+            "json",
+            "publish",
+            "--append",
+        ])
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                wrapper_dir.display(),
+                std::env::var("PATH").unwrap()
+            ),
+        );
+    let failed_restore = command.output().unwrap();
+    assert!(!failed_restore.status.success());
+    let failed_restore = String::from_utf8(failed_restore.stdout).unwrap();
+    assert!(failed_restore.contains("publication_rejected"));
+    assert!(failed_restore.contains("simulated-append-reset-failure"));
+    assert!(failed_restore.contains("also failed to restore local stack"));
+}
+
+#[test]
+fn publish_append_retry_completes_an_already_pushed_operation() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    fixture.forkctl_ok(&["publish"]);
+    let previous_remote = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    let rebased = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    let rebased: serde_json::Value = serde_json::from_str(&rebased).unwrap();
+    let recovery_tag = rebased["result"]["recovery_tag"].as_str().unwrap();
+    let recovery_ref = format!("refs/tags/{recovery_tag}");
+    let stack_tip = stg_top_commit(&fixture.repo);
+    let short = &previous_remote[..previous_remote.len().min(12)];
+    git_ok_dynamic(
+        &fixture.repo,
+        &[
+            "merge",
+            "-s",
+            "ours",
+            "--no-ff",
+            "-m",
+            &format!("forkctl: keep published history {short}"),
+            &previous_remote,
+        ],
+    );
+    let bridge = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    git_ok_dynamic(
+        &fixture.repo,
+        &[
+            "push",
+            "--atomic",
+            &format!("--force-with-lease=refs/heads/main:{previous_remote}"),
+            "origin",
+            &format!("{recovery_ref}:{recovery_ref}"),
+            "HEAD:refs/heads/main",
+        ],
+    );
+    git_ok_dynamic(&fixture.repo, &["reset", "--soft", &stack_tip]);
+
+    let retry = fixture.forkctl_ok(&["--format", "json", "publish", "--append"]);
+    let retry: serde_json::Value = serde_json::from_str(&retry).unwrap();
+    assert_eq!(retry["result"]["already_published"], true);
+    assert_eq!(retry["result"]["head"], bridge);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"])
+            .split_whitespace()
+            .next()
+            .unwrap(),
+        bridge
+    );
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), stack_tip);
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+}
+
+#[test]
+fn publish_append_retry_rejects_a_bridge_with_the_wrong_previous_tip() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    fixture.forkctl_ok(&["publish"]);
+    let previous_remote = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    fixture.forkctl_ok(&["rebase", "--onto", "refs/heads/main"]);
+    let stack_tip = stg_top_commit(&fixture.repo);
+    let tree = git_capture(&fixture.repo, ["rev-parse", "HEAD^{tree}"]);
+    let unrelated_previous = git_capture_dynamic(
+        &fixture.repo,
+        &[
+            "commit-tree",
+            &tree,
+            "-p",
+            &previous_remote,
+            "-m",
+            "unrelated published history",
+        ],
+    );
+    let short = &previous_remote[..previous_remote.len().min(12)];
+    let malformed_bridge = git_capture_dynamic(
+        &fixture.repo,
+        &[
+            "commit-tree",
+            &tree,
+            "-p",
+            &stack_tip,
+            "-p",
+            &unrelated_previous,
+            "-m",
+            &format!("forkctl: keep published history {short}"),
+        ],
+    );
+    git_ok_dynamic(
+        &fixture.repo,
+        &[
+            "push",
+            &format!("--force-with-lease=refs/heads/main:{previous_remote}"),
+            "origin",
+            &format!("{malformed_bridge}:refs/heads/main"),
+        ],
+    );
+
+    let retry = fixture.forkctl(&["--format", "json", "publish", "--append"]);
+    assert!(!retry.status.success());
+    let retry: serde_json::Value = serde_json::from_slice(&retry.stdout).unwrap();
+    assert_eq!(retry["error"]["code"], "remote_advanced");
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), stack_tip);
+    assert_operation_present(&fixture);
+}
+
+#[test]
+fn publish_append_completes_ready_rebase_operation() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    fixture.forkctl_ok(&["publish"]);
+    let previous_remote = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    advance_upstream(&fixture.repo, "upstream v2\n");
+    fixture.forkctl_ok(&["rebase", "--onto", "refs/heads/main"]);
+    let published = fixture.forkctl_ok(&["--format", "json", "publish", "--append"]);
+    let published: serde_json::Value = serde_json::from_str(&published).unwrap();
+    assert_eq!(published["result"]["mode"], "append");
+    assert_eq!(published["result"]["fast_forward"], true);
+    assert_eq!(
+        published["result"]["recovery_tags"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "HEAD"]),
+        stg_top_commit(&fixture.repo)
+    );
+    let current_remote = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+    git_ok(
+        &fixture.repo,
+        [
+            "merge-base",
+            "--is-ancestor",
+            &previous_remote,
+            &current_remote,
+        ],
+    );
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+    fixture.forkctl_ok(&["check"]);
 }
 
 #[test]

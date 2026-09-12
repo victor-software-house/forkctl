@@ -35,6 +35,7 @@ impl App {
                 requires_confirmation: false,
             }));
         }
+        let normalized_append_bridge = self.normalize_append_bridge_head()?.is_some();
         let result = match operation.kind {
             OperationKind::Rebase => Some(Box::new(CommandResult::Rebase(Box::new(
                 self.continue_rebase(operation)?,
@@ -67,6 +68,7 @@ impl App {
                     patch,
                     capture,
                     captured_paths,
+                    normalized_append_bridge,
                 )?))
             }
             kind @ (OperationKind::PatchRemove
@@ -107,16 +109,19 @@ impl App {
             .read_operation()?
             .ok_or_else(|| DomainError::invalid_request("no forkctl operation is in progress"))?;
         self.load_operation_manifest()?;
+        let restored_tip = self
+            .append_bridge_stack_tip(&operation.old_tip)?
+            .unwrap_or_else(|| operation.old_tip.clone());
         let plan = MutationPlan {
             command: "operation.abort".into(),
             reads: vec![self.operation_path()?.display().to_string()],
             writes: vec![
-                format!("restore HEAD to {}", operation.old_tip),
+                format!("restore HEAD to {restored_tip}"),
                 "restore StGit operation state".into(),
                 "restore tracked manifest from recovered stack".into(),
             ],
             hooks: Vec::new(),
-            ref_updates: vec![format!("HEAD -> {}", operation.old_tip)],
+            ref_updates: vec![format!("HEAD -> {restored_tip}")],
             paths: self.dirty_paths()?,
             requires_confirmation: true,
         };
@@ -131,9 +136,12 @@ impl App {
         {
             return Err(DomainError::active_patch_exists(active.name().to_string()).into());
         }
+        if let Some(stack_tip) = self.normalize_append_bridge_head()? {
+            run(&self.repo, "git", ["reset", "--hard", &stack_tip])?;
+        }
         self.clear_restored_workspace_bootstrap()?;
-        self.restore_operation_stack(&operation)?;
-        self.verify_restored_operation_stack(&operation)?;
+        self.restore_operation_stack(&operation, &restored_tip)?;
+        self.verify_restored_operation_stack(&operation, &restored_tip)?;
         self.manifest = None;
         self.manifest_error = None;
         let rediscovered = App::discover(
@@ -154,12 +162,16 @@ impl App {
         self.complete_local_operation(&operation)?;
         Ok(CommandResult::OperationAbort(OperationAbortResult {
             operation_id: operation.id,
-            restored_tip: operation.old_tip,
+            restored_tip,
             check,
         }))
     }
 
-    fn restore_operation_stack(&self, operation: &crate::state::OperationState) -> Result<()> {
+    fn restore_operation_stack(
+        &self,
+        operation: &crate::state::OperationState,
+        restored_tip: &str,
+    ) -> Result<()> {
         if !capture(
             &self.repo,
             "git",
@@ -170,7 +182,7 @@ impl App {
             run(&self.repo, "stg", ["undo", "--hard"])?;
         }
         run(&self.repo, "stg", ["delete", "--all", "--conflicts=allow"])?;
-        run(&self.repo, "git", ["reset", "--hard", &operation.old_tip])?;
+        run(&self.repo, "git", ["reset", "--hard", restored_tip])?;
         run(
             &self.repo,
             "stg",
@@ -181,14 +193,12 @@ impl App {
     fn verify_restored_operation_stack(
         &self,
         operation: &crate::state::OperationState,
+        restored_tip: &str,
     ) -> Result<()> {
         let actual_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
-        if actual_tip != operation.old_tip {
+        if actual_tip != restored_tip {
             return Err(DomainError::operation_conflict(
-                format!(
-                    "abort restored HEAD to {actual_tip}, expected {}",
-                    operation.old_tip
-                ),
+                format!("abort restored HEAD to {actual_tip}, expected {restored_tip}"),
                 Some(operation),
             )
             .into());
