@@ -194,6 +194,19 @@ impl DomainError {
         )
     }
 
+    pub fn publication_restoration_failed(
+        publication: &Self,
+        restoration: impl std::fmt::Display,
+    ) -> Self {
+        Self::new(
+            ApiErrorCode::PublicationRejected,
+            format!(
+                "remote publication failed and also failed to restore local stack: {restoration}"
+            ),
+            publication.details.clone(),
+        )
+    }
+
     pub fn publication_ref_mismatch(
         remote: String,
         git_ref: String,

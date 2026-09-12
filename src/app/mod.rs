@@ -597,6 +597,12 @@ impl App {
     }
 
     pub(super) fn append_bridge_stack_tip(&self, revision: &str) -> Result<Option<String>> {
+        Ok(self
+            .append_bridge_parents(revision)?
+            .map(|(stack_tip, _)| stack_tip))
+    }
+
+    pub(super) fn append_bridge_parents(&self, revision: &str) -> Result<Option<(String, String)>> {
         let subject = capture(&self.repo, "git", ["show", "-s", "--format=%s", revision])?;
         if !subject.starts_with(APPEND_BRIDGE_MESSAGE_PREFIX) {
             return Ok(None);
@@ -624,7 +630,7 @@ impl App {
             "git",
             ["rev-parse", &format!("{stack_tip}^{{tree}}")],
         )?;
-        Ok((stack_tree == bridge_tree).then(|| stack_tip.clone()))
+        Ok((stack_tree == bridge_tree).then(|| (stack_tip.clone(), parents[1].clone())))
     }
 
     pub(super) fn normalize_append_bridge_head(&self) -> Result<Option<String>> {
