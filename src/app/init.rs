@@ -236,6 +236,10 @@ impl App {
                 ))
                 .into());
             }
+            let head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+            if let Some(stack_tip) = self.append_bridge_stack_tip(&head)? {
+                run(&self.repo, "git", ["reset", "--hard", &stack_tip])?;
+            }
             run(&self.repo, "stg", ["init"])?;
             let command = std::iter::once("uncommit".to_string())
                 .chain(expected.iter().rev().cloned())

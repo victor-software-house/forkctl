@@ -24,6 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
 
 const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
+const APPEND_BRIDGE_MESSAGE_PREFIX: &str = "forkctl: keep published history ";
 
 pub struct App {
     pub(super) repo: PathBuf,
@@ -595,6 +596,54 @@ impl App {
         self.clear_operation()
     }
 
+    pub(super) fn append_bridge_stack_tip(&self, revision: &str) -> Result<Option<String>> {
+        let subject = capture(&self.repo, "git", ["show", "-s", "--format=%s", revision])?;
+        if !subject.starts_with(APPEND_BRIDGE_MESSAGE_PREFIX) {
+            return Ok(None);
+        }
+        let parents = capture(
+            &self.repo,
+            "git",
+            ["rev-list", "--parents", "-n", "1", revision],
+        )?
+        .split_whitespace()
+        .skip(1)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+        if parents.len() != 2 {
+            return Ok(None);
+        }
+        let bridge_tree = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("{revision}^{{tree}}")],
+        )?;
+        let stack_tip = &parents[0];
+        let stack_tree = capture(
+            &self.repo,
+            "git",
+            ["rev-parse", &format!("{stack_tip}^{{tree}}")],
+        )?;
+        Ok((stack_tree == bridge_tree).then(|| stack_tip.clone()))
+    }
+
+    pub(super) fn normalize_append_bridge_head(&self) -> Result<Option<String>> {
+        let head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+        let Ok(top) = capture(&self.repo, "stg", ["top"]) else {
+            return Ok(None);
+        };
+        let Ok(stack_tip) = capture(&self.repo, "stg", ["id", &top]) else {
+            return Ok(None);
+        };
+        if head == stack_tip
+            || self.append_bridge_stack_tip(&head)?.as_deref() != Some(stack_tip.as_str())
+        {
+            return Ok(None);
+        }
+        run(&self.repo, "git", ["reset", "--soft", &stack_tip])?;
+        Ok(Some(stack_tip))
+    }
+
     pub(super) fn create_operation(
         &self,
         kind: OperationKind,
@@ -603,6 +652,7 @@ impl App {
         if let Some(operation) = self.read_operation()? {
             return Err(DomainError::operation_in_progress(&operation).into());
         }
+        self.normalize_append_bridge_head()?;
         let manifest = self.manifest()?;
         let expected_remote_sha = self.downstream_sha()?;
         let old_base = capture(&self.repo, "stg", ["id", "{base}"])?;

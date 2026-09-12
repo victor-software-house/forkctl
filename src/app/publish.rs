@@ -111,7 +111,17 @@ impl App {
     }
 
     fn publish_append(&self, mode: ExecutionMode) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        if mode == ExecutionMode::Execute {
+            self.normalize_append_bridge_head()?;
+        }
+        let mut publication = self.preflight_publication()?;
+        let remote_append_tip = self.append_bridge_stack_tip(&publication.remote_sha)?;
+        if (publication.remote_sha == publication.head
+            || remote_append_tip.as_deref() == Some(publication.head.as_str()))
+            && !publication.clears_operation
+        {
+            return self.already_published(&publication, PublishMode::Append, mode);
+        }
         if publication.remote_sha == publication.head
             && (!publication.clears_operation
                 || self.operation_recovery_is_published(&publication)?)
@@ -121,7 +131,9 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(publication_plan(&publication)));
         }
-        if !publication.fast_forward {
+        let stack_tip = publication.head.clone();
+        let append_bridge = !publication.fast_forward;
+        if append_bridge {
             let short = &publication.remote_sha[..publication.remote_sha.len().min(12)];
             let message = format!("forkctl: keep published history {short}");
             run(
@@ -137,13 +149,15 @@ impl App {
                     &publication.remote_sha,
                 ],
             )?;
+            publication.head = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
+            publication.branch_refspec = format!("HEAD:{}", publication.downstream_ref);
+            publication.fast_forward = true;
         }
-        let publication = self.preflight_publication()?;
-        ensure!(
-            publication.fast_forward,
-            "append epoch did not produce a fast-forward"
-        );
-        self.execute_publication(&publication, PublishMode::Append)
+        let result = self.execute_publication(&publication, PublishMode::Append);
+        if append_bridge && result.is_ok() {
+            run(&self.repo, "git", ["reset", "--soft", &stack_tip])?;
+        }
+        result
     }
 
     fn proposal_branch(&self) -> Result<String> {
