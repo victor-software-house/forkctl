@@ -198,13 +198,12 @@ impl DomainError {
         publication: &Self,
         restoration: impl std::fmt::Display,
     ) -> Self {
-        Self::new(
-            ApiErrorCode::PublicationRejected,
-            format!(
-                "remote publication failed and also failed to restore local stack: {restoration}"
-            ),
-            publication.details.clone(),
-        )
+        let mut combined = publication.clone();
+        combined.message = format!(
+            "{}; also failed to restore local stack: {restoration}",
+            publication.message
+        );
+        combined
     }
 
     pub fn publication_ref_mismatch(
@@ -294,3 +293,27 @@ impl std::fmt::Display for DomainError {
 }
 
 impl std::error::Error for DomainError {}
+
+#[cfg(test)]
+mod tests {
+    use super::DomainError;
+    use crate::protocol::ApiErrorCode;
+
+    #[test]
+    fn publication_restoration_failure_preserves_the_original_error_contract() {
+        let publication = DomainError::remote_advanced(
+            "origin".into(),
+            "refs/heads/main".into(),
+            "expected".into(),
+            "actual".into(),
+        );
+        let combined =
+            DomainError::publication_restoration_failed(&publication, "git reset --soft failed")
+                .to_api_error(Vec::new());
+
+        assert!(matches!(combined.code, ApiErrorCode::RemoteAdvanced));
+        assert!(combined.retryable);
+        assert!(combined.message.contains("advanced to actual"));
+        assert!(combined.message.contains("git reset --soft failed"));
+    }
+}
