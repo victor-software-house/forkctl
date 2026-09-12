@@ -28,6 +28,7 @@ impl App {
             .map(|patch| PatchSummary {
                 name: patch.name.clone(),
                 kind: patch.kind,
+                subject: patch.subject(&manifest.commit_messages),
                 state: if applied.contains(&patch.name) {
                     "applied".into()
                 } else if unapplied.contains(&patch.name) {
@@ -43,6 +44,7 @@ impl App {
             .chain(manifest.disabled_patches.iter().map(|record| PatchSummary {
                 name: record.patch.name.clone(),
                 kind: record.patch.kind,
+                subject: record.patch.subject(&manifest.commit_messages),
                 state: "disabled".into(),
                 commit: Some(record.commit.clone()),
                 active: false,

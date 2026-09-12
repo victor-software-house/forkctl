@@ -14,6 +14,9 @@ pub struct Manifest {
     pub base: Base,
     pub documents: Documents,
     pub bookkeeping_patch: String,
+    #[serde(default = "CommitMessagePolicy::legacy_default")]
+    #[schemars(required)]
+    pub commit_messages: CommitMessagePolicy,
     pub patches: Vec<Patch>,
     #[serde(default)]
     pub disabled_patches: Vec<DisabledPatch>,
@@ -129,6 +132,167 @@ pub enum PatchKind {
     Tooling,
 }
 
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommitConvention {
+    #[serde(rename = "type")]
+    pub commit_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommitMessagePolicy {
+    pub source: CommitConvention,
+    pub tooling: CommitConvention,
+    #[serde(skip)]
+    #[schemars(skip)]
+    declared: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CommitMessagePolicyWire {
+    source: CommitConvention,
+    tooling: CommitConvention,
+}
+
+impl<'de> Deserialize<'de> for CommitMessagePolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let policy = CommitMessagePolicyWire::deserialize(deserializer)?;
+        Ok(Self {
+            source: policy.source,
+            tooling: policy.tooling,
+            declared: true,
+        })
+    }
+}
+
+impl Default for CommitMessagePolicy {
+    fn default() -> Self {
+        Self::with_declared(true)
+    }
+}
+
+impl CommitMessagePolicy {
+    fn with_declared(declared: bool) -> Self {
+        Self {
+            source: CommitConvention {
+                commit_type: "feat".into(),
+                scope: None,
+            },
+            tooling: CommitConvention {
+                commit_type: "chore".into(),
+                scope: Some("tooling".into()),
+            },
+            declared,
+        }
+    }
+
+    fn legacy_default() -> Self {
+        Self::with_declared(false)
+    }
+
+    pub fn is_declared(&self) -> bool {
+        self.declared
+    }
+
+    pub fn mark_declared(&mut self) {
+        self.declared = true;
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        self.source.validate("source commit convention")?;
+        self.tooling.validate("tooling commit convention")
+    }
+
+    fn convention(&self, kind: PatchKind) -> &CommitConvention {
+        match kind {
+            PatchKind::Source => &self.source,
+            PatchKind::Tooling => &self.tooling,
+        }
+    }
+}
+
+impl CommitConvention {
+    fn validate(&self, label: &str) -> Result<()> {
+        ensure!(
+            valid_commit_token(&self.commit_type),
+            "invalid {label} type: {:?}",
+            self.commit_type
+        );
+        if let Some(scope) = &self.scope {
+            ensure!(
+                valid_commit_token(scope),
+                "invalid {label} scope: {scope:?}"
+            );
+        }
+        Ok(())
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let (commit_type, scope) = parse_conventional_prefix(value)?;
+        let convention = Self {
+            commit_type: commit_type.to_string(),
+            scope: scope.map(str::to_string),
+        };
+        convention
+            .validate("commit convention")
+            .map_err(|error| error.to_string())?;
+        Ok(convention)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatchCommitMessage {
+    #[serde(rename = "type")]
+    pub commit_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    pub description: String,
+}
+
+impl PatchCommitMessage {
+    fn validate(&self, patch: &str) -> Result<()> {
+        CommitConvention {
+            commit_type: self.commit_type.clone(),
+            scope: self.scope.clone(),
+        }
+        .validate(&format!("commit override for patch {patch}"))?;
+        ensure!(
+            valid_commit_description(&self.description),
+            "invalid commit description for patch {patch}: {:?}",
+            self.description
+        );
+        Ok(())
+    }
+
+    fn subject(&self) -> String {
+        conventional_subject(&self.commit_type, self.scope.as_deref(), &self.description)
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let (prefix, description) = value
+            .split_once(": ")
+            .ok_or_else(|| "commit subject must use `type(scope): description`".to_string())?;
+        let (commit_type, scope) = parse_conventional_prefix(prefix)?;
+        let message = Self {
+            commit_type: commit_type.to_string(),
+            scope: scope.map(str::to_string),
+            description: description.to_string(),
+        };
+        message
+            .validate("CLI override")
+            .map_err(|error| error.to_string())?;
+        Ok(message)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Patch {
@@ -137,6 +301,8 @@ pub struct Patch {
     pub purpose: String,
     pub upstream_status: String,
     pub drop_when: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<PatchCommitMessage>,
     pub scope: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<Check>,
@@ -261,6 +427,7 @@ impl Manifest {
 
     pub fn validate(&self, repo: &Path, manifest_path: &Path) -> Result<()> {
         self.validate_identity()?;
+        self.commit_messages.validate()?;
         self.validate_patches()?;
         self.validate_disabled_patches()?;
         self.validate_bookkeeping(repo, manifest_path)?;
@@ -669,6 +836,16 @@ impl Patch {
                 self.name
             );
         }
+        if let Some(commit) = &self.commit {
+            commit.validate(&self.name)?;
+        } else {
+            let description = normalized_patch_description(&self.name);
+            ensure!(
+                valid_commit_description(&description),
+                "patch {} cannot produce a valid default commit description",
+                self.name
+            );
+        }
         self.validate_checks()?;
         Ok(())
     }
@@ -723,10 +900,25 @@ impl Patch {
             .any(|pattern| scope_matches(pattern, path))
     }
 
-    pub fn message(&self) -> String {
+    pub fn message(&self, policy: &CommitMessagePolicy) -> String {
         format!(
             "{}\n\nDownstream-Reason: {}\nUpstream-Status: {}\nDrop-When: {}",
-            self.name, self.purpose, self.upstream_status, self.drop_when
+            self.subject(policy),
+            self.purpose,
+            self.upstream_status,
+            self.drop_when
+        )
+    }
+
+    pub fn subject(&self, policy: &CommitMessagePolicy) -> String {
+        if let Some(commit) = &self.commit {
+            return commit.subject();
+        }
+        let convention = policy.convention(self.kind);
+        conventional_subject(
+            &convention.commit_type,
+            convention.scope.as_deref(),
+            &normalized_patch_description(&self.name),
         )
     }
 }
@@ -802,6 +994,56 @@ fn build_glob(pattern: &str) -> Result<globset::Glob, globset::Error> {
     GlobBuilder::new(pattern).literal_separator(true).build()
 }
 
+fn normalized_patch_description(name: &str) -> String {
+    name.chars()
+        .map(|character| match character {
+            '-' | '_' => ' ',
+            other => other.to_ascii_lowercase(),
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn conventional_subject(commit_type: &str, scope: Option<&str>, description: &str) -> String {
+    match scope {
+        Some(scope) => format!("{commit_type}({scope}): {description}"),
+        None => format!("{commit_type}: {description}"),
+    }
+}
+
+fn valid_commit_token(value: &str) -> bool {
+    let mut bytes = value.bytes();
+    bytes.next().is_some_and(|byte| byte.is_ascii_lowercase())
+        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn valid_commit_description(value: &str) -> bool {
+    valid_metadata(value)
+        && value
+            .bytes()
+            .next()
+            .is_some_and(|byte| !byte.is_ascii_uppercase())
+        && !value.ends_with('.')
+}
+
+fn parse_conventional_prefix(value: &str) -> Result<(&str, Option<&str>), String> {
+    if let Some((commit_type, scoped)) = value.split_once('(') {
+        let scope = scoped
+            .strip_suffix(')')
+            .ok_or_else(|| "commit scope must end with `)`".to_string())?;
+        if scope.contains(['(', ')']) {
+            return Err("commit scope must not contain parentheses".into());
+        }
+        return Ok((commit_type, Some(scope)));
+    }
+    if value.contains(')') {
+        return Err("commit scope must start with `(`".into());
+    }
+    Ok((value, None))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -836,12 +1078,14 @@ mod tests {
                 exports: "patches/downstream".into(),
             },
             bookkeeping_patch: "fork-tooling".into(),
+            commit_messages: CommitMessagePolicy::default(),
             patches: vec![Patch {
                 name: "fork-tooling".into(),
                 kind: PatchKind::Tooling,
                 purpose: "Own downstream tooling.".into(),
                 upstream_status: "downstream-only".into(),
                 drop_when: "The fork is retired.".into(),
+                commit: None,
                 scope: vec![
                     "fork.yaml".into(),
                     "PATCHES.md".into(),
@@ -899,8 +1143,41 @@ mod tests {
             purpose: "Change source.".into(),
             upstream_status: "not-submitted".into(),
             drop_when: "Upstream changes.".into(),
+            commit: None,
             scope: vec!["src/**".into()],
             checks: Vec::new(),
         }
+    }
+
+    #[test]
+    fn commit_subjects_default_by_patch_kind() {
+        let policy = CommitMessagePolicy::default();
+        let source = source_patch();
+        let tooling = &manifest().patches[0];
+
+        assert_eq!(source.subject(&policy), "feat: source");
+        assert_eq!(tooling.subject(&policy), "chore(tooling): fork tooling");
+    }
+
+    #[test]
+    fn commit_subject_override_is_complete() {
+        let mut patch = source_patch();
+        patch.commit =
+            Some(PatchCommitMessage::parse("fix(remote): reject crossed sockets").unwrap());
+
+        assert_eq!(
+            patch.subject(&CommitMessagePolicy::default()),
+            "fix(remote): reject crossed sockets"
+        );
+    }
+
+    #[test]
+    fn commit_conventions_and_descriptions_are_validated() {
+        assert!(CommitConvention::parse("feat").is_ok());
+        assert!(CommitConvention::parse("chore(tooling)").is_ok());
+        assert!(CommitConvention::parse("Feat").is_err());
+        assert!(PatchCommitMessage::parse("fix: lowercase description").is_ok());
+        assert!(PatchCommitMessage::parse("fix: Uppercase description").is_err());
+        assert!(PatchCommitMessage::parse("fix: trailing period.").is_err());
     }
 }

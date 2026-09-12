@@ -58,7 +58,31 @@ mise run fork patch refresh
 mise run fork patch finish
 ```
 
-`patch create` records metadata-only active intent. `patch refresh` captures the index by default, targets the correct StGit patch, runs the consumer pre-commit hook, regenerates deterministic evidence, refreshes bookkeeping, and leaves the patch active for more edits. `patch finish` requires no remaining changes, runs the full check, and clears active state.
+`patch create` records metadata-only active intent. Source patches default to
+`feat: <normalized patch name>` and tooling patches default to
+`chore(tooling): <normalized patch name>`. Patch names remain immutable StGit
+identities. Use `--commit-subject 'fix(scope): description'` on create or edit
+when the kind default is wrong, and `patch edit --default-commit` to remove the
+override. `patch refresh` captures the index by default, targets the correct
+StGit patch, runs the consumer pre-commit hook, regenerates deterministic
+evidence, refreshes bookkeeping, and leaves the patch active for more edits.
+`patch finish` requires no remaining changes, runs the full check, and clears
+active state.
+
+### Migrate existing subjects
+
+```sh
+mise run fork contract migrate-commit-messages
+mise run fork publish
+```
+
+Migration is one recoverable local operation across the complete stack. Optional
+`--source TYPE[(SCOPE)]` and `--tooling TYPE[(SCOPE)]` values override tracked
+repository defaults; omitted values preserve them. Forkctl creates an annotated recovery tag, preserves every
+patch name, rewrites messages through StGit, regenerates the manifest, ledger,
+and exports, and runs the complete check. It never publishes automatically.
+Use `operation continue` after a hook failure or confirmed `operation abort` to
+restore the exact old stack.
 
 ### Remove or temporarily disable a patch
 
@@ -286,12 +310,22 @@ documents:
   ledger: PATCHES.md
   exports: patches/downstream
 bookkeeping_patch: fork-tooling
+commit_messages:
+  source:
+    type: feat
+  tooling:
+    type: chore
+    scope: tooling
 patches:
   - name: downstream-change
     kind: source
     purpose: Describe why this downstream change exists.
     upstream_status: not-submitted
     drop_when: Upstream provides the required behavior.
+    commit:
+      type: fix
+      scope: runtime
+      description: reject stale downstream state
     scope:
       - src/**
       - tests/**
@@ -317,6 +351,14 @@ The extension selects the codec: `.yaml`/`.yml` reads and rewrites canonical YAM
 YAML parsing rejects duplicate keys, merge keys, aliases/anchors, multiple documents, odd indentation, ambiguous booleans, excessive nesting, and manifests over 2 MiB. JSON remains available for generated consumers; YAML is the readable default. Git-private operation/active state, API stdin/stdout, pretty/JSON output selection, and JSON Schema remain JSON.
 
 Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` trailers. Source patches precede tooling patches. Every source export is generated deterministically as `<exports>/<order>-<name>.patch`; tooling patches have no export. The final tooling patch owns manifest, ledger, exports, and integration files.
+
+Every applied patch subject must match its effective Conventional Commit policy.
+Source patches default to `feat`; tooling patches default to `chore(tooling)`;
+a complete per-patch `commit` block overrides type, optional scope, and
+description. Missing policy data exists only as the bounded input to
+`contract migrate-commit-messages`; normal checks require an explicit policy.
+Historical recovery commits and tags remain immutable. A disabled patch adopts
+the current subject policy when re-enabled.
 
 ## Bootstrap and clone hydration
 

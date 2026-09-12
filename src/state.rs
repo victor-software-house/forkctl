@@ -27,6 +27,7 @@ pub enum OperationKind {
     PatchRemove,
     PatchDisable,
     PatchEnable,
+    CommitMessageMigration,
     Rebase,
 }
 
@@ -54,6 +55,9 @@ pub enum OperationIntent {
         patch: Patch,
         capture: CaptureSource,
         captured_paths: Vec<String>,
+    },
+    CommitMessageMigration {
+        policy: crate::manifest::CommitMessagePolicy,
     },
     Transition {
         patch: Patch,

@@ -115,6 +115,9 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         flag "-d --drop-when" help="Objective condition for removing this patch" required=#true help_heading="Patch metadata" {
             arg <DROP_WHEN>
         }
+        flag --commit-subject help="Complete Conventional Commit subject override, such as `fix(remote): reject crossed sockets`" help_heading="Commit message" {
+            arg <COMMIT_SUBJECT>
+        }
         flag "-s --scope" help="Persistent ownership glob; repeatable" required=#true var=#true help_heading=Ownership {
             arg <SCOPE>… var=#true
         }
@@ -150,6 +153,10 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         flag "-d --drop-when" help="Objective condition for removing this patch" help_heading="Patch metadata" {
             arg <DROP_WHEN>
         }
+        flag --commit-subject help="Replace the complete Conventional Commit subject override" help_heading="Commit message" {
+            arg <COMMIT_SUBJECT>
+        }
+        flag --default-commit help="Remove the patch override and use the repository kind default" help_heading="Commit message"
         flag "-s --set-scope" help="Replace complete ownership scope; repeatable" var=#true help_heading=Ownership {
             conflicts "--add-scope" "--remove-scope"
             arg <SET_SCOPE>… var=#true
@@ -172,6 +179,7 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         }
         flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         arg "[NAME]" help="Patch name; defaults to the active patch" required=#false
+        group commit_edit "--commit-subject" "--default-commit"
         complete name run="mise run --quiet fork -- __candidates patch" descriptions=#true
     }
     cmd refresh display_order=5 args_override_self=#false help="Capture staged, owned, or path-limited changes" unknown_flags=error {
@@ -238,6 +246,15 @@ cmd contract display_order=10 subcommand_required=#true arg_required_else_help=#
         }
         flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
         group contract_change "--clear" "--allow-base" "--required-text" "--publish-mode" required=#true multiple=#true
+    }
+    cmd migrate-commit-messages display_order=1 args_override_self=#false help="Atomically rewrite the local stack with configured Conventional Commit subjects" unknown_flags=error {
+        flag --source help="Override the Conventional type and optional scope for source patches" help_heading="Commit messages" {
+            arg <SOURCE>
+        }
+        flag --tooling help="Override the Conventional type and optional scope for tooling patches" help_heading="Commit messages" {
+            arg <TOOLING>
+        }
+        flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
     }
 }
 cmd publish display_order=11 args_override_self=#false help="Publish the managed branch using the repository default, or an explicit mode" unknown_flags=error {

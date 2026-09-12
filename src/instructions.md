@@ -63,14 +63,18 @@ edit path.
 
 ## Patch workflow
 
-1. `mise run fork patch create NAME -k source|tooling -p PURPOSE -u STATUS -d DROP_CONDITION -s SCOPE...` records explicit active intent.
+1. `mise run fork patch create NAME -k source|tooling -p PURPOSE -u STATUS -d DROP_CONDITION -s SCOPE...` records explicit active intent. Source patches default to `feat: <normalized name>`; tooling patches default to `chore(tooling): <normalized name>`. Use `--commit-subject 'fix(scope): description'` when the kind default is not semantically correct.
 2. Edit normally and stage with Git.
 3. `mise run fork check -s` validates the index against the active patch without mutation.
 4. `mise run fork patch refresh` captures staged files by default, refreshes the targeted StGit patch, regenerates evidence, and refreshes bookkeeping.
 5. Repeat edit/stage/check/refresh as needed.
 6. `mise run fork patch finish` runs the full check and clears active state.
 
-`patch refresh -a` explicitly stages all changed paths owned by the patch. Repeated `-p PATHSPEC` limits capture to explicit Git pathspecs. Use `-n` / `--preview` on mutations to inspect the effect plan.
+`patch refresh -a` explicitly stages all changed paths owned by the patch. Repeated `-p PATHSPEC` limits capture to explicit Git pathspecs. Use `-n` / `--preview` on mutations to inspect the effect plan. Patch names remain immutable StGit identities; commit subjects are a separate tracked contract. `patch edit --commit-subject ...` sets a complete override, and `patch edit --default-commit` returns to the repository kind default.
+
+## Commit-message migration
+
+`mise run fork contract migrate-commit-messages` atomically rewrites an existing local stack to the repository Conventional Commit policy. Optional `--source TYPE[(SCOPE)]` and `--tooling TYPE[(SCOPE)]` values override the tracked kind defaults; omitted values preserve them. The operation creates recovery evidence, regenerates the manifest, ledger, and exports, then stops at the ordinary publication gate. It never publishes automatically. Use `operation continue` after a hook failure or confirmed `operation abort` to restore the exact old stack.
 
 ## Declared checks
 

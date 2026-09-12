@@ -8,6 +8,34 @@ use crate::state::ActivePatchState;
 use anyhow::{Context, Result, ensure};
 use std::fs;
 
+#[derive(Clone, Copy)]
+enum RepositoryCheckMode {
+    Normal { allow_active: bool },
+    SubjectMigration,
+    Restored { allow_active: bool },
+}
+
+impl RepositoryCheckMode {
+    fn allow_active(self) -> bool {
+        match self {
+            Self::Normal { allow_active } | Self::Restored { allow_active } => allow_active,
+            Self::SubjectMigration => false,
+        }
+    }
+
+    fn checks_subjects(self) -> bool {
+        matches!(self, Self::Normal { .. })
+    }
+
+    fn checks_ledger(self) -> bool {
+        matches!(self, Self::Normal { .. })
+    }
+
+    fn checks_current_operation(self) -> bool {
+        !matches!(self, Self::Restored { .. })
+    }
+}
+
 impl App {
     pub fn check(&self, args: &CheckArgs) -> Result<CheckResult> {
         let result = match args.scope {
@@ -29,22 +57,28 @@ impl App {
     }
 
     pub(super) fn check_repository(&self, allow_active: bool) -> Result<CheckResult> {
-        self.check_repository_state(allow_active, true)
+        self.check_repository_state(RepositoryCheckMode::Normal { allow_active })
+    }
+
+    pub(super) fn check_repository_before_subject_migration(&self) -> Result<CheckResult> {
+        self.check_repository_state(RepositoryCheckMode::SubjectMigration)
     }
 
     pub(super) fn check_restored_repository(&self, allow_active: bool) -> Result<CheckResult> {
-        self.check_repository_state(allow_active, false)
+        self.check_repository_state(RepositoryCheckMode::Restored { allow_active })
     }
 
-    fn check_repository_state(
-        &self,
-        allow_active: bool,
-        check_current_operation: bool,
-    ) -> Result<CheckResult> {
+    fn check_repository_state(&self, mode: RepositoryCheckMode) -> Result<CheckResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
         let manifest = self.manifest()?;
-        if !allow_active && let Some(active) = self.read_active()? {
+        ensure!(
+            !mode.checks_subjects() || manifest.commit_messages.is_declared(),
+            "manifest has no explicit commit_messages policy; run `forkctl contract migrate-commit-messages`"
+        );
+        if !mode.allow_active()
+            && let Some(active) = self.read_active()?
+        {
             return Err(DomainError::active_patch_exists(active.name().to_string()).into());
         }
         self.check_remotes()?;
@@ -100,14 +134,12 @@ impl App {
             "pre-stack drift",
         )?;
         for patch in &manifest.patches {
-            let commit = self.patch_commit(&patch.name)?;
-            let paths = self.patch_paths(&commit)?;
-            ensure!(!paths.is_empty(), "patch {} is empty", patch.name);
-            Self::check_patch_paths(patch, &paths)?;
-            self.check_patch_commit(patch, &commit)?;
+            self.check_applied_patch(patch, &manifest.commit_messages, mode.checks_subjects())?;
         }
         self.check_required_text()?;
-        self.check_ledger()?;
+        if mode.checks_ledger() {
+            self.check_ledger()?;
+        }
         self.check_exports()?;
         let findings = self.run_declared_checks()?;
         if !findings.is_empty() {
@@ -119,7 +151,9 @@ impl App {
             reconstructed_tree == expected_tree,
             "exported patches reconstruct {reconstructed_tree}, expected {expected_tree}"
         );
-        if check_current_operation && let Some(operation) = self.read_operation()? {
+        if mode.checks_current_operation()
+            && let Some(operation) = self.read_operation()?
+        {
             self.check_operation(&operation)?;
         }
         Ok(CheckResult {
@@ -496,6 +530,28 @@ impl App {
         );
         Self::check_patch_paths(patch, &paths)?;
         self.check_patch_commit(patch, commit)
+    }
+
+    fn check_applied_patch(
+        &self,
+        patch: &Patch,
+        policy: &crate::manifest::CommitMessagePolicy,
+        check_subject: bool,
+    ) -> Result<()> {
+        let commit = self.patch_commit(&patch.name)?;
+        let paths = self.patch_paths(&commit)?;
+        ensure!(!paths.is_empty(), "patch {} is empty", patch.name);
+        Self::check_patch_paths(patch, &paths)?;
+        if check_subject {
+            let actual = capture(&self.repo, "git", ["log", "-1", "--format=%s", &commit])?;
+            let expected = patch.subject(policy);
+            ensure!(
+                actual == expected,
+                "patch {} subject is {actual:?}, expected {expected:?}; run `forkctl contract migrate-commit-messages`",
+                patch.name
+            );
+        }
+        self.check_patch_commit(patch, &commit)
     }
 
     pub(super) fn check_operation(&self, operation: &crate::state::OperationState) -> Result<()> {

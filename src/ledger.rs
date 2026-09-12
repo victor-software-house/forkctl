@@ -16,6 +16,7 @@ struct LedgerTemplate<'a> {
 struct PatchRow {
     name: String,
     kind: &'static str,
+    subject: String,
     purpose: String,
     upstream_status: String,
     drop_when: String,
@@ -79,6 +80,7 @@ pub fn render(manifest: &Manifest) -> Result<String> {
             .map(|patch| PatchRow {
                 name: escape(&patch.name),
                 kind: patch_kind(patch.kind),
+                subject: escape(&patch.subject(&manifest.commit_messages)),
                 purpose: escape(&patch.purpose),
                 upstream_status: escape(&patch.upstream_status),
                 drop_when: escape(&patch.drop_when),

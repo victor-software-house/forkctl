@@ -50,6 +50,20 @@ impl App {
                 };
                 Some(Box::new(self.continue_patch_edit(&operation, patch)?))
             }
+            OperationKind::CommitMessageMigration => {
+                let Some(OperationIntent::CommitMessageMigration { policy }) =
+                    operation.intent.clone()
+                else {
+                    return Err(DomainError::operation_conflict(
+                        "commit-message migration operation has no typed intent",
+                        Some(&operation),
+                    )
+                    .into());
+                };
+                Some(Box::new(CommandResult::CommitMessageMigration(
+                    self.continue_commit_message_migration(operation, policy)?,
+                )))
+            }
             OperationKind::PatchRefresh => {
                 let Some(OperationIntent::Refresh {
                     patch,
@@ -183,11 +197,16 @@ impl App {
         }
         run(&self.repo, "stg", ["delete", "--all", "--conflicts=allow"])?;
         run(&self.repo, "git", ["reset", "--hard", restored_tip])?;
-        run(
-            &self.repo,
-            "stg",
-            ["uncommit", "--to", &operation.old_base, "--exclusive"],
-        )
+        let command = std::iter::once("uncommit".to_string())
+            .chain(
+                operation
+                    .old_patches
+                    .iter()
+                    .rev()
+                    .map(|patch| patch.name.clone()),
+            )
+            .collect::<Vec<_>>();
+        run(&self.repo, "stg", command)
     }
 
     fn verify_restored_operation_stack(

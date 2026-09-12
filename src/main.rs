@@ -141,6 +141,9 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         ApiRequest::PatchDisable(args) => app.patch_disable(args, mode)?,
         ApiRequest::PatchEnable(args) => app.patch_enable(&args.patch, mode)?,
         ApiRequest::ContractEdit(args) => app.contract_edit(args, mode)?,
+        ApiRequest::ContractMigrateCommitMessages(args) => {
+            app.migrate_commit_messages(args, mode)?
+        }
         ApiRequest::Rebase(args) => app.rebase(&args.onto, mode)?,
         ApiRequest::Publish(args) => app.publish(&args, mode)?,
         ApiRequest::OperationStatus(_) => {

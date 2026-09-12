@@ -21,6 +21,12 @@ fn bootstrap_and_fresh_clone_hydration_are_idempotent() {
         manifest["contracts"]["required_text"][0]["contains"],
         "base"
     );
+    assert_eq!(manifest["commit_messages"]["source"]["type"], "feat");
+    assert_eq!(manifest["commit_messages"]["tooling"]["scope"], "tooling");
+    assert_eq!(
+        patch_subject(&fixture.repo, "fork-tooling"),
+        "chore(tooling): fork tooling"
+    );
 }
 
 #[test]
@@ -57,6 +63,76 @@ fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
     assert_eq!(
         series.lines().collect::<Vec<_>>(),
         ["source-change", "fork-tooling"]
+    );
+}
+
+#[test]
+fn patch_commit_subject_override_can_return_to_the_kind_default() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "source-fix",
+        "--kind",
+        "source",
+        "--purpose",
+        "Fix downstream source.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream provides equivalent behavior.",
+        "--commit-subject",
+        "fix(runtime): reject stale state",
+        "--scope",
+        "source.txt",
+    ]);
+    fs::write(fixture.repo.join("source.txt"), "fixed\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    assert_eq!(
+        patch_subject(&fixture.repo, "source-fix"),
+        "fix(runtime): reject stale state"
+    );
+
+    fixture.forkctl_ok(&["patch", "edit", "source-fix", "--default-commit"]);
+    assert_eq!(
+        patch_subject(&fixture.repo, "source-fix"),
+        "feat: source fix"
+    );
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn check_rejects_commit_subject_drift() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    rewrite_patch_subject(&fixture.repo, "source-change", "wrong subject");
+
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert!(
+        check["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("expected \"feat: source change\"")
+    );
+}
+
+#[test]
+fn check_rejects_a_missing_explicit_commit_message_policy() {
+    let fixture = Fixture::new();
+    remove_commit_message_policy(&fixture);
+
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert!(
+        check["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("manifest has no explicit commit_messages policy")
     );
 }
 
@@ -360,6 +436,58 @@ fn bookkeeping_patch_edit_remains_final_after_source_patches() {
             .iter()
             .any(|value| value == ".github/workflows/release.yml")
     );
+}
+
+#[test]
+fn patch_enable_continuation_adopts_the_current_commit_policy() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "optional-feature", "optional.txt", "enabled\n");
+    fixture.forkctl_ok(&[
+        "patch",
+        "disable",
+        "optional-feature",
+        "--reason",
+        "Not needed in this host",
+    ]);
+    fixture.forkctl_ok(&["publish"]);
+    fixture.forkctl_ok(&[
+        "contract",
+        "migrate-commit-messages",
+        "--source",
+        "fix(runtime)",
+    ]);
+    fixture.forkctl_ok(&["publish"]);
+
+    let sentinel = fixture.repo.join(".git/fail-current-policy-once");
+    fs::write(&sentinel, "fail\n").unwrap();
+    let hook = fixture.repo.join(".git/hooks/commit-msg");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nif test -f '{}' && grep -q '^fix(runtime):' \"$1\"; then rm '{}'; exit 1; fi\n",
+            sentinel.display(),
+            sentinel.display()
+        ),
+    )
+    .unwrap();
+    make_executable(&hook);
+
+    let enable = fixture.forkctl(&["patch", "enable", "optional-feature"]);
+    assert!(!enable.status.success());
+    assert_operation_present(&fixture);
+    fixture.forkctl_ok(&["operation", "continue"]);
+
+    assert_eq!(
+        patch_subject(&fixture.repo, "optional-feature"),
+        "fix(runtime): optional feature"
+    );
+    assert!(
+        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"])
+            .lines()
+            .any(|patch| patch == "optional-feature")
+    );
+    fixture.forkctl_ok(&["check"]);
 }
 
 #[test]
@@ -1227,6 +1355,230 @@ fn invalid_tracked_manifest_never_bootstraps_a_replacement() {
     assert_eq!(check["error"]["code"], "manifest_invalid");
 }
 
+#[test]
+fn commit_message_migration_rewrites_the_local_stack_without_publishing() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    make_subjects_legacy(&fixture);
+    let old_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    let remote_tip = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    assert!(String::from_utf8_lossy(&check.stdout).contains("migrate-commit-messages"));
+
+    let preview = fixture.forkctl_ok(&[
+        "--format",
+        "json",
+        "contract",
+        "migrate-commit-messages",
+        "--dry-run",
+    ]);
+    let preview: serde_json::Value = serde_json::from_str(&preview).unwrap();
+    assert_eq!(
+        preview["result"]["command"],
+        "contract.migrate_commit_messages"
+    );
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+
+    let migrated = fixture.forkctl_ok(&[
+        "--format",
+        "json",
+        "contract",
+        "migrate-commit-messages",
+        "--source",
+        "fix(runtime)",
+        "--tooling",
+        "chore(fork)",
+    ]);
+    let migrated: serde_json::Value = serde_json::from_str(&migrated).unwrap();
+    assert_eq!(migrated["result"]["old_tip"], old_tip);
+    assert_eq!(
+        migrated["result"]["rewritten_patches"],
+        serde_json::json!(["source-change", "fork-tooling"])
+    );
+    assert_eq!(
+        patch_subject(&fixture.repo, "source-change"),
+        "fix(runtime): source change"
+    );
+    assert_eq!(
+        patch_subject(&fixture.repo, "fork-tooling"),
+        "chore(fork): fork tooling"
+    );
+    assert_eq!(migrated["result"]["policy"]["source"]["type"], "fix");
+    assert_eq!(migrated["result"]["policy"]["tooling"]["scope"], "fork");
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
+        remote_tip
+    );
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["operation"]["phase"], "ready_to_publish");
+    fixture.forkctl_ok(&["check"]);
+
+    let recovery_tag = migrated["result"]["recovery_tag"].as_str().unwrap();
+    fixture.forkctl_ok(&["publish"]);
+    assert!(
+        !git_capture_dynamic(
+            &fixture.repo,
+            &["ls-remote", "origin", &format!("refs/tags/{recovery_tag}")],
+        )
+        .is_empty()
+    );
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+
+    let remigrated =
+        fixture.forkctl_ok(&["--format", "json", "contract", "migrate-commit-messages"]);
+    let remigrated: serde_json::Value = serde_json::from_str(&remigrated).unwrap();
+    assert_eq!(remigrated["result"]["policy"]["source"]["type"], "fix");
+    assert_eq!(remigrated["result"]["policy"]["source"]["scope"], "runtime");
+    assert_eq!(remigrated["result"]["policy"]["tooling"]["type"], "chore");
+    assert_eq!(remigrated["result"]["policy"]["tooling"]["scope"], "fork");
+    assert_eq!(
+        remigrated["result"]["rewritten_patches"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn commit_message_migration_continues_after_a_hook_failure() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    make_subjects_legacy(&fixture);
+    let sentinel = fixture.repo.join(".git/fail-commit-message-once");
+    fs::write(&sentinel, "fail\n").unwrap();
+    let hook = fixture.repo.join(".git/hooks/commit-msg");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nif test -f '{}'; then rm '{}'; exit 1; fi\n",
+            sentinel.display(),
+            sentinel.display()
+        ),
+    )
+    .unwrap();
+    make_executable(&hook);
+
+    let migration = fixture.forkctl(&["contract", "migrate-commit-messages"]);
+    assert!(!migration.status.success());
+    assert_operation_present(&fixture);
+
+    fixture.forkctl_ok(&["operation", "continue"]);
+    assert_eq!(
+        patch_subject(&fixture.repo, "source-change"),
+        "feat: source change"
+    );
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn commit_message_migration_abort_restores_the_exact_old_stack() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    make_subjects_legacy(&fixture);
+    let old_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    let old_source = patch_subject(&fixture.repo, "source-change");
+    let old_tooling = patch_subject(&fixture.repo, "fork-tooling");
+    let hook = fixture.repo.join(".git/hooks/commit-msg");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(
+        &hook,
+        "#!/bin/sh\nif grep -q '^chore(tooling):' \"$1\"; then exit 1; fi\n",
+    )
+    .unwrap();
+    make_executable(&hook);
+
+    let migration = fixture.forkctl(&["contract", "migrate-commit-messages"]);
+    assert!(!migration.status.success());
+    assert_eq!(
+        patch_subject(&fixture.repo, "source-change"),
+        "feat: source change"
+    );
+    assert_operation_present(&fixture);
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+    assert_eq!(patch_subject(&fixture.repo, "source-change"), old_source);
+    assert_eq!(patch_subject(&fixture.repo, "fork-tooling"), old_tooling);
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+}
+
+fn make_subjects_legacy(fixture: &Fixture) {
+    remove_commit_message_policy(fixture);
+
+    let export_path = fixture
+        .repo
+        .join("patches/downstream/0001-source-change.patch");
+    let export = fs::read_to_string(&export_path).unwrap();
+    let (_, body) = export.split_once('\n').unwrap();
+    fs::write(&export_path, format!("source-change\n{body}")).unwrap();
+    git_ok(
+        &fixture.repo,
+        [
+            "add",
+            "patches/fork.yaml",
+            "patches/downstream/0001-source-change.patch",
+        ],
+    );
+    stg_ok_dynamic(
+        &fixture.repo,
+        &["refresh", "--patch", "fork-tooling", "--index"],
+    );
+    rewrite_patch_subject(&fixture.repo, "source-change", "source-change");
+    rewrite_patch_subject(&fixture.repo, "fork-tooling", "fork-tooling");
+}
+
+fn remove_commit_message_policy(fixture: &Fixture) {
+    let manifest_path = fixture.repo.join("patches/fork.yaml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    let policy = "commit_messages:\n  source:\n    type: feat\n  tooling:\n    type: chore\n    scope: tooling\n";
+    assert!(manifest.contains(policy));
+    fs::write(&manifest_path, manifest.replace(policy, "")).unwrap();
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml"]);
+    stg_ok_dynamic(
+        &fixture.repo,
+        &["refresh", "--patch", "fork-tooling", "--index"],
+    );
+}
+
+fn rewrite_patch_subject(repo: &std::path::Path, patch: &str, subject: &str) {
+    let commit = capture(repo, "stg", &["id", patch]);
+    let message = capture(repo, "git", &["log", "-1", "--format=%B", &commit]);
+    let (_, body) = message.split_once('\n').unwrap();
+    let before = capture(repo, "stg", &["series", "--all", "--no-prefix"])
+        .lines()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let position = before
+        .iter()
+        .position(|candidate| candidate == patch)
+        .unwrap();
+    stg_ok_dynamic(
+        repo,
+        &["edit", patch, "--message", &format!("{subject}\n{body}")],
+    );
+    let after = capture(repo, "stg", &["series", "--all", "--no-prefix"])
+        .lines()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if after[position] != patch {
+        stg_ok_dynamic(repo, &["rename", &after[position], patch]);
+    }
+}
+
+fn patch_subject(repo: &std::path::Path, patch: &str) -> String {
+    let commit = capture(repo, "stg", &["id", patch]);
+    capture(repo, "git", &["log", "-1", "--format=%s", &commit])
+}
+
 fn assert_operation_present(fixture: &Fixture) {
     let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
@@ -1800,6 +2152,12 @@ fn json_manifest_is_a_first_class_lifecycle_codec() {
     assert_eq!(api.stderr, &[] as &[u8]);
     let response: serde_json::Value = serde_json::from_slice(&api.stdout).unwrap();
     assert_eq!(response["status"], "success");
+    fixture.forkctl_ok(&["check"]);
+
+    fixture.forkctl_ok(&["contract", "migrate-commit-messages"]);
+    let rewritten = fs::read(&path).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&rewritten).unwrap();
+    assert_eq!(value["commit_messages"]["source"]["type"], "feat");
     fixture.forkctl_ok(&["check"]);
 }
 

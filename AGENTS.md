@@ -17,6 +17,8 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 ## Product invariants
 
 - Patch intent is explicit; forkctl never routes changes by filename inference.
+- Patch names are immutable StGit identities. Git subjects are a separate tracked Conventional Commit contract: source defaults to `feat`, tooling defaults to `chore(tooling)`, and a patch may declare a complete override.
+- Existing slug-subject stacks migrate only through the recoverable atomic `contract migrate-commit-messages` operation; migration never publishes and no permanent legacy subject mode exists.
 - One clone has at most one active patch.
 - `check` is the sole validation command: full repository by default, staged index with `-s`.
 - `patch refresh` captures staged by default and owns StGit targeting plus all generated bookkeeping.
@@ -34,7 +36,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - An identical branch never clears a ready operation until every required remote recovery ref matches; missing evidence is repaired atomically and mismatched evidence fails closed.
 - Every rewrite publication requires exact evidence of the tip it overwrites: the reviewed rebase lease, or the fetched downstream tracking ref when no operation is in flight.
 - Forkctl does not install hooks, edit `core.hooksPath`, or administer provider branch policy.
-- No compatibility reader, alias, migration, or fallback exists for older forkctl contracts.
+- Outside an explicit bounded migration command, no compatibility reader, alias, or fallback exists for older forkctl contracts.
 
 ## CLI and integration
 

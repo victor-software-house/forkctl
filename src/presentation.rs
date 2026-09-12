@@ -167,6 +167,14 @@ fn append_mutation_result(document: Document, result: &CommandResult) -> Documen
                 )
                 .row("check", "passed"),
         ),
+        CommandResult::CommitMessageMigration(result) => document.fields(
+            Fields::new()
+                .row("old tip", result.old_tip.clone())
+                .row("new tip", result.new_tip.clone())
+                .row("recovery", result.recovery_tag.clone())
+                .row("rewritten", display_list(&result.rewritten_patches))
+                .row("check", "passed"),
+        ),
         CommandResult::Rebase(result) => document.fields(
             Fields::new()
                 .row("target", result.selected_target.clone())
@@ -410,12 +418,13 @@ fn append_patch_rows(document: Document, patches: &[crate::protocol::PatchSummar
         return document.paragraph(Text::new().muted("no patches"));
     }
     let table = patches.iter().fold(
-        Table::new(["state", "patch", "kind", "commit", "active"]).token_column(1),
+        Table::new(["state", "patch", "kind", "subject", "commit", "active"]).token_column(1),
         |table, patch| {
             table.row([
                 patch.state.clone(),
                 patch.name.clone(),
                 format!("{:?}", patch.kind).to_lowercase(),
+                patch.subject.clone(),
                 patch.commit.clone().unwrap_or_else(|| "draft".into()),
                 if patch.active {
                     "yes".into()
@@ -433,6 +442,7 @@ fn append_patch_show(document: Document, result: &PatchShowResult) -> Document {
         Fields::new()
             .row("patch", result.patch.name.clone())
             .row("kind", format!("{:?}", result.patch.kind).to_lowercase())
+            .row("subject", result.subject.clone())
             .row("purpose", result.patch.purpose.clone())
             .row("upstream status", result.patch.upstream_status.clone())
             .row("drop when", result.patch.drop_when.clone())

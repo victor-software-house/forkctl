@@ -310,6 +310,23 @@ impl App {
         capture(&self.repo, "stg", ["id", patch])
     }
 
+    pub(super) fn edit_patch_message(&self, patch: &str, message: &str) -> Result<()> {
+        let before = self.stg_series()?;
+        let position = before
+            .iter()
+            .position(|candidate| candidate == patch)
+            .with_context(|| format!("patch is not in StGit series: {patch}"))?;
+        run(&self.repo, "stg", ["edit", patch, "--message", message])?;
+        let after = self.stg_series()?;
+        let edited = after
+            .get(position)
+            .with_context(|| format!("edited patch disappeared from StGit series: {patch}"))?;
+        if edited != patch {
+            run(&self.repo, "stg", ["rename", edited, patch])?;
+        }
+        Ok(())
+    }
+
     pub(super) fn patch_paths(&self, commit: &str) -> Result<Vec<String>> {
         Ok(nonempty_lines(&capture(
             &self.repo,

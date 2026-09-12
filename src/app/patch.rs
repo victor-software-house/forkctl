@@ -3,10 +3,10 @@ use crate::error::DomainError;
 use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
 use crate::process::{capture, run};
 use crate::protocol::{
-    CaptureSource, CheckEdit, CommandResult, ExecutionMode, MutationPlan, PatchCreateArgs,
-    PatchCreateResult, PatchEditArgs, PatchEditResult, PatchFinishResult, PatchListResult,
-    PatchRefreshArgs, PatchRefreshResult, PatchSelectResult, PatchShowResult, PatchSummary,
-    PatchTarget, PatchTransitionArgs, PatchTransitionResult, ScopeEdit,
+    CaptureSource, CheckEdit, CommandResult, CommitMessageEdit, ExecutionMode, MutationPlan,
+    PatchCreateArgs, PatchCreateResult, PatchEditArgs, PatchEditResult, PatchFinishResult,
+    PatchListResult, PatchRefreshArgs, PatchRefreshResult, PatchSelectResult, PatchShowResult,
+    PatchSummary, PatchTarget, PatchTransitionArgs, PatchTransitionResult, ScopeEdit,
 };
 
 use crate::state::{ActivePatchState, OperationIntent, OperationKind, OperationState};
@@ -21,13 +21,14 @@ impl App {
         let active = self.read_active()?;
         let applied = series(self, "--applied");
         let unapplied = series(self, "--unapplied");
-        let patches = self
-            .manifest()?
+        let manifest = self.manifest()?;
+        let patches = manifest
             .patches
             .iter()
             .map(|patch| PatchSummary {
                 name: patch.name.clone(),
                 kind: patch.kind,
+                subject: patch.subject(&manifest.commit_messages),
                 state: if applied.contains(&patch.name) {
                     "applied".into()
                 } else if unapplied.contains(&patch.name) {
@@ -40,18 +41,14 @@ impl App {
                     .as_ref()
                     .is_some_and(|value| value.name() == patch.name),
             })
-            .chain(
-                self.manifest()?
-                    .disabled_patches
-                    .iter()
-                    .map(|record| PatchSummary {
-                        name: record.patch.name.clone(),
-                        kind: record.patch.kind,
-                        state: "disabled".into(),
-                        commit: Some(record.commit.clone()),
-                        active: false,
-                    }),
-            )
+            .chain(manifest.disabled_patches.iter().map(|record| PatchSummary {
+                name: record.patch.name.clone(),
+                kind: record.patch.kind,
+                subject: record.patch.subject(&manifest.commit_messages),
+                state: "disabled".into(),
+                commit: Some(record.commit.clone()),
+                active: false,
+            }))
             .collect();
         Ok(PatchListResult {
             patches,
@@ -69,6 +66,7 @@ impl App {
         {
             return Ok(PatchShowResult {
                 patch: record.patch.clone(),
+                subject: record.patch.subject(&self.manifest()?.commit_messages),
                 commit: Some(record.commit.clone()),
                 changed_paths: self.patch_paths(&record.commit)?,
                 export: None,
@@ -89,8 +87,10 @@ impl App {
             .iter()
             .position(|candidate| candidate.name == name)
             .and_then(|index| self.manifest().ok()?.export_path(index, &patch));
+        let subject = patch.subject(&self.manifest()?.commit_messages);
         Ok(PatchShowResult {
             patch,
+            subject,
             commit,
             changed_paths,
             export,
@@ -202,6 +202,12 @@ impl App {
         if let Some(value) = args.drop_when {
             patch.drop_when = value;
         }
+        if let Some(commit) = args.commit {
+            patch.commit = match commit {
+                CommitMessageEdit::Set { message } => Some(message),
+                CommitMessageEdit::Default => None,
+            };
+        }
         if let Some(scope) = args.scope {
             match scope {
                 ScopeEdit::Set { patterns } => patch.scope = patterns,
@@ -242,20 +248,12 @@ impl App {
             patch: patch.clone(),
         });
         self.write_operation(&operation)?;
+        let message = patch.message(&proposed.commit_messages);
         let mutation = if old_kind == patch.kind {
-            run(
-                &self.repo,
-                "stg",
-                ["edit", &name, "--message", &patch.message()],
-            )
+            self.edit_patch_message(&name, &message)
         } else {
-            self.reorder_series(&proposed).and_then(|()| {
-                run(
-                    &self.repo,
-                    "stg",
-                    ["edit", &name, "--message", &patch.message()],
-                )
-            })
+            self.reorder_series(&proposed)
+                .and_then(|()| self.edit_patch_message(&name, &message))
         };
         if let Err(error) = mutation {
             operation.phase = "conflict".into();
@@ -317,6 +315,7 @@ impl App {
             )
             .into());
         }
+        self.edit_patch_message(&patch.name, &patch.message(&proposed.commit_messages))?;
         let old_commit = operation
             .old_patches
             .iter()
@@ -477,7 +476,7 @@ impl App {
                         [
                             "new",
                             "--message",
-                            &patch.message(),
+                            &patch.message(&self.manifest()?.commit_messages),
                             "--refresh",
                             "--index",
                             &name,
@@ -554,7 +553,7 @@ impl App {
                     "--name",
                     &patch.name,
                     "--message",
-                    &patch.message(),
+                    &patch.message(&self.manifest()?.commit_messages),
                     &patch.name,
                     &temporary,
                 ],
@@ -899,6 +898,10 @@ impl App {
                 file.path().as_os_str().to_owned(),
             ],
         )?;
+        self.edit_patch_message(
+            &record.patch.name,
+            &record.patch.message(&self.manifest()?.commit_messages),
+        )?;
         run(&self.repo, "stg", ["push", "--all"])
     }
 
@@ -930,6 +933,8 @@ impl App {
             run(&self.repo, "stg", ["push", "--all"])?;
         }
         if kind == OperationKind::PatchEnable {
+            let message = patch.message(&self.manifest()?.commit_messages);
+            self.edit_patch_message(&patch.name, &message)?;
             let record = self
                 .manifest()?
                 .disabled_patches

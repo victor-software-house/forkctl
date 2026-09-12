@@ -4,10 +4,10 @@
 
 Base: `{{ target_selector }}` (`{{ base_sha }}`)
 
-| Order | Patch | Kind | Purpose | Upstream status | Drop condition |
-|--:|:--|:--|:--|:--|:--|
+| Order | Patch | Kind | Commit subject | Purpose | Upstream status | Drop condition |
+|--:|:--|:--|:--|:--|:--|:--|
 {% for patch in patches -%}
-| {{ loop.index }} | `{{ patch.name }}` | {{ patch.kind }} | {{ patch.purpose }} | {{ patch.upstream_status }} | {{ patch.drop_when }} |
+| {{ loop.index }} | `{{ patch.name }}` | {{ patch.kind }} | `{{ patch.subject }}` | {{ patch.purpose }} | {{ patch.upstream_status }} | {{ patch.drop_when }} |
 {% endfor %}
 ## Disabled
 

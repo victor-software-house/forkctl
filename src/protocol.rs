@@ -1,4 +1,7 @@
-use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchKind, RequiredText};
+use crate::manifest::{
+    BaseTarget, Check, CommitMessagePolicy, Contracts, Manifest, Patch, PatchCommitMessage,
+    PatchKind, RequiredText,
+};
 use crate::state::{ActivePatchState, OperationState};
 use clap::ValueEnum;
 use schemars::JsonSchema;
@@ -54,6 +57,8 @@ pub enum ApiRequest {
     PatchEnable(PatchName),
     #[serde(rename = "contract.edit")]
     ContractEdit(ContractEditArgs),
+    #[serde(rename = "contract.migrate_commit_messages")]
+    ContractMigrateCommitMessages(CommitMessageMigrationArgs),
     #[serde(rename = "rebase")]
     Rebase(RebaseArgs),
     #[serde(rename = "publish")]
@@ -85,6 +90,7 @@ impl ApiRequest {
             Self::PatchDisable(_) => "patch.disable",
             Self::PatchEnable(_) => "patch.enable",
             Self::ContractEdit(_) => "contract.edit",
+            Self::ContractMigrateCommitMessages(_) => "contract.migrate_commit_messages",
             Self::Rebase(_) => "rebase",
             Self::Publish(_) => "publish",
             Self::OperationStatus(_) => "operation.status",
@@ -203,6 +209,8 @@ pub struct PatchCreateArgs {
     pub purpose: String,
     pub upstream_status: String,
     pub drop_when: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<PatchCommitMessage>,
     pub scope: Vec<String>,
     #[serde(default)]
     pub checks: Vec<Check>,
@@ -216,6 +224,7 @@ impl From<PatchCreateArgs> for Patch {
             purpose: value.purpose,
             upstream_status: value.upstream_status,
             drop_when: value.drop_when,
+            commit: value.commit,
             scope: value.scope,
             checks: value.checks,
         }
@@ -248,9 +257,18 @@ pub struct PatchEditArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drop_when: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<CommitMessageEdit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<ScopeEdit>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checks: Option<CheckEdit>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CommitMessageEdit {
+    Set { message: PatchCommitMessage },
+    Default,
 }
 
 /// Replacement or additive edit of a patch's declared checks.
@@ -291,6 +309,15 @@ pub struct ContractEditArgs {
     pub required_text: Vec<RequiredText>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publish_mode: Option<crate::manifest::PublishMode>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommitMessageMigrationArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::manifest::CommitConvention>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tooling: Option<crate::manifest::CommitConvention>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
@@ -359,6 +386,7 @@ pub enum CommandResult {
     PatchDisable(PatchTransitionResult),
     PatchEnable(PatchTransitionResult),
     ContractEdit(ContractEditResult),
+    CommitMessageMigration(CommitMessageMigrationResult),
     Rebase(Box<RebaseResult>),
     Publish(PublishResult),
     OperationStatus(Box<OperationStatusResult>),
@@ -571,6 +599,7 @@ pub struct CheckSummary {
 pub struct PatchSummary {
     pub name: String,
     pub kind: PatchKind,
+    pub subject: String,
     pub state: String,
     pub commit: Option<String>,
     pub active: bool,
@@ -585,6 +614,7 @@ pub struct PatchListResult {
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 pub struct PatchShowResult {
     pub patch: Patch,
+    pub subject: String,
     pub commit: Option<String>,
     pub changed_paths: Vec<String>,
     pub export: Option<String>,
@@ -640,6 +670,18 @@ pub struct PatchTransitionResult {
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 pub struct ContractEditResult {
     pub contracts: Contracts,
+    pub generated_paths: Vec<String>,
+    pub check: CheckResult,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+pub struct CommitMessageMigrationResult {
+    pub policy: CommitMessagePolicy,
+    pub old_tip: String,
+    pub new_tip: String,
+    pub recovery_tag: String,
+    pub recovery_tag_object: String,
+    pub rewritten_patches: Vec<String>,
     pub generated_paths: Vec<String>,
     pub check: CheckResult,
 }

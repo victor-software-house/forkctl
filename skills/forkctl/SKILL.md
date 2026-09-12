@@ -73,7 +73,10 @@ The remaining examples use `mise run fork`. Never `stg` or a global `forkctl`.
 
 The operator chooses patch intent; forkctl never routes changes by filename.
 
-Create a metadata-only patch intent before editing:
+Create a metadata-only patch intent before editing. Source patches default to
+`feat: <normalized patch name>` and tooling patches default to
+`chore(tooling): <normalized patch name>`. Add
+`--commit-subject 'fix(scope): description'` when that kind default is wrong:
 
 ```sh
 mise run fork patch create PATCH \
@@ -110,7 +113,11 @@ Rules:
 - Never manually edit generated exports or the generated ledger. Change patch intent through forkctl and let refresh regenerate them.
 - Never stash operator work to satisfy a clean-state requirement.
 
-Inspect or update declared intent with `patch show`, `patch list`, and `patch edit`; consult command help for exact metadata and scope flags.
+Inspect or update declared intent with `patch show`, `patch list`, and `patch edit`; consult command help for exact metadata and scope flags. Patch names remain immutable StGit identities. `patch edit --commit-subject ...` sets a complete subject override; `patch edit --default-commit` returns to the repository kind default.
+
+## Migrate existing commit subjects
+
+Run `mise run fork contract migrate-commit-messages` to rewrite an existing local stack atomically. Optional `--source TYPE[(SCOPE)]` and `--tooling TYPE[(SCOPE)]` values override tracked repository defaults; omitted values preserve them. The command creates recovery evidence, regenerates tracked evidence, validates the result, and leaves publication to the normal exact-lease `publish` command. On failure, use `operation continue`; use confirmed `operation abort` to restore the exact previous stack. Never rewrite subjects with raw Git or StGit.
 
 ## Remove or disable a patch
 

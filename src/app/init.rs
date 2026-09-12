@@ -1,7 +1,8 @@
 use super::{App, resolve_target};
 use crate::error::DomainError;
 use crate::manifest::{
-    Base, Contracts, Documents, Downstream, Manifest, Patch, PatchKind, Upstream,
+    Base, CommitMessagePolicy, Contracts, Documents, Downstream, Manifest, Patch, PatchKind,
+    Upstream,
 };
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, MutationPlan};
@@ -83,6 +84,7 @@ impl App {
             purpose: "Own fork policy, generated evidence, and integration configuration.".into(),
             upstream_status: "inappropriate: downstream-only fork maintenance".into(),
             drop_when: "The downstream fork is retired.".into(),
+            commit: None,
             checks: Vec::new(),
             scope,
         };
@@ -106,6 +108,7 @@ impl App {
             },
             documents: Documents { ledger, exports },
             bookkeeping_patch: bookkeeping_patch.clone(),
+            commit_messages: CommitMessagePolicy::default(),
             patches: vec![patch.clone()],
             disabled_patches: Vec::new(),
             history: Vec::new(),
@@ -131,6 +134,7 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
+        let patch_message = patch.message(&manifest.commit_messages);
         self.manifest = Some(manifest);
         self.write_manifest()?;
         let ledger_path = self.write_ledger()?;
@@ -138,7 +142,7 @@ impl App {
         run(
             &self.repo,
             "stg",
-            ["new", "--message", &patch.message(), &bookkeeping_patch],
+            ["new", "--message", &patch_message, &bookkeeping_patch],
         )?;
         let mut add = vec![OsString::from("add"), OsString::from("--")];
         add.push(self.manifest_path.as_os_str().to_owned());

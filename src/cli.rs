@@ -1,9 +1,11 @@
-use crate::manifest::{Check, CheckStage, PatchKind, RequiredText};
+use crate::manifest::{
+    Check, CheckStage, CommitConvention, PatchCommitMessage, PatchKind, RequiredText,
+};
 use crate::protocol::{
-    ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ContractEditArgs, EmptyArgs,
-    ExecutionMode, InitArgs, OperationAbortArgs, PatchCreateArgs, PatchEditArgs, PatchName,
-    PatchRefreshArgs, PatchTarget, PatchTransitionArgs, PublishArgs, RebaseArgs, SchemaKind,
-    ScopeEdit,
+    ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, CommitMessageEdit,
+    CommitMessageMigrationArgs, ContractEditArgs, EmptyArgs, ExecutionMode, InitArgs,
+    OperationAbortArgs, PatchCreateArgs, PatchEditArgs, PatchName, PatchRefreshArgs, PatchTarget,
+    PatchTransitionArgs, PublishArgs, RebaseArgs, SchemaKind, ScopeEdit,
 };
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
@@ -203,6 +205,9 @@ pub struct PatchCreateCliArgs {
     /// Objective condition for removing this patch.
     #[arg(short = 'd', long, help_heading = "Patch metadata")]
     pub drop_when: String,
+    /// Complete Conventional Commit subject override, such as `fix(remote): reject crossed sockets`.
+    #[arg(long, help_heading = "Commit message", value_parser = PatchCommitMessage::parse)]
+    pub commit_subject: Option<PatchCommitMessage>,
     /// Persistent ownership glob; repeatable.
     #[arg(short = 's', long, required = true, help_heading = "Ownership")]
     pub scope: Vec<String>,
@@ -225,6 +230,11 @@ pub struct PatchCreateCliArgs {
         .args(["set_scope", "add_scope", "remove_scope"])
         .multiple(true)
 ))]
+#[command(group(
+    ArgGroup::new("commit_edit")
+        .args(["commit_subject", "default_commit"])
+        .multiple(false)
+))]
 pub struct PatchEditCliArgs {
     /// Patch name; defaults to the active patch.
     #[arg(add = crate::completion::patch_completer())]
@@ -241,6 +251,12 @@ pub struct PatchEditCliArgs {
     /// Objective condition for removing this patch.
     #[arg(short = 'd', long, help_heading = "Patch metadata")]
     pub drop_when: Option<String>,
+    /// Replace the complete Conventional Commit subject override.
+    #[arg(long, help_heading = "Commit message", value_parser = PatchCommitMessage::parse)]
+    pub commit_subject: Option<PatchCommitMessage>,
+    /// Remove the patch override and use the repository kind default.
+    #[arg(long, help_heading = "Commit message")]
+    pub default_commit: bool,
     /// Replace complete ownership scope; repeatable.
     #[arg(short = 's', long, help_heading = "Ownership", conflicts_with_all = ["add_scope", "remove_scope"])]
     pub set_scope: Vec<String>,
@@ -331,6 +347,20 @@ pub struct ContractEditCliArgs {
 pub enum ContractCommand {
     /// Append contracts or clear and replace the complete contract set.
     Edit(ContractEditCliArgs),
+    /// Atomically rewrite the local stack with configured Conventional Commit subjects.
+    MigrateCommitMessages(CommitMessageMigrationCliArgs),
+}
+
+#[derive(Args)]
+pub struct CommitMessageMigrationCliArgs {
+    /// Override the Conventional type and optional scope for source patches.
+    #[arg(long, value_parser = CommitConvention::parse, help_heading = "Commit messages")]
+    pub source: Option<CommitConvention>,
+    /// Override the Conventional type and optional scope for tooling patches.
+    #[arg(long, value_parser = CommitConvention::parse, help_heading = "Commit messages")]
+    pub tooling: Option<CommitConvention>,
+    #[command(flatten)]
+    pub execution: DryRunArgs,
 }
 
 #[derive(Args)]
@@ -462,6 +492,15 @@ impl Cli {
                     })),
                     mode: mode(args.execution.dry_run),
                 },
+                ContractCommand::MigrateCommitMessages(args) => CliAction::Request {
+                    request: Box::new(ApiRequest::ContractMigrateCommitMessages(
+                        CommitMessageMigrationArgs {
+                            source: args.source,
+                            tooling: args.tooling,
+                        },
+                    )),
+                    mode: mode(args.execution.dry_run),
+                },
             },
             Command::Publish(args) => {
                 let publish_mode = if args.rewrite {
@@ -508,6 +547,8 @@ fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
                 || args.purpose.is_some()
                 || args.upstream_status.is_some()
                 || args.drop_when.is_some()
+                || args.commit_subject.is_some()
+                || args.default_commit
                 || !args.set_scope.is_empty()
                 || !args.add_scope.is_empty()
                 || !args.remove_scope.is_empty()
@@ -521,6 +562,13 @@ fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
             None
         } else {
             Some(CheckEdit::Add { checks: declared })
+        };
+        let commit = if let Some(message) = args.commit_subject {
+            Some(CommitMessageEdit::Set { message })
+        } else if args.default_commit {
+            Some(CommitMessageEdit::Default)
+        } else {
+            None
         };
         let scope = if args.set_scope.is_empty() {
             (!args.add_scope.is_empty() || !args.remove_scope.is_empty()).then_some(
@@ -541,6 +589,7 @@ fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
                 purpose: args.purpose,
                 upstream_status: args.upstream_status,
                 drop_when: args.drop_when,
+                commit,
                 scope,
                 checks,
             })),
@@ -560,6 +609,7 @@ fn patch_action(command: PatchCommand) -> Result<CliAction> {
                 purpose: args.purpose,
                 upstream_status: args.upstream_status,
                 drop_when: args.drop_when,
+                commit: args.commit_subject,
                 scope: args.scope,
                 checks: declared_checks(args.checks, args.check_globs, args.check_stages)?,
             })),
