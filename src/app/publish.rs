@@ -97,7 +97,7 @@ impl App {
     }
 
     fn publish_rewrite(&self, mode: ExecutionMode) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        let publication = self.preflight_publication(PublishMode::Rewrite)?;
         if publication.remote_sha == publication.head
             && (!publication.clears_operation
                 || self.operation_recovery_is_published(&publication)?)
@@ -114,13 +114,19 @@ impl App {
         if mode == ExecutionMode::Execute {
             self.normalize_append_bridge_head()?;
         }
-        let mut publication = self.preflight_publication()?;
+        let mut publication = self.preflight_publication(PublishMode::Append)?;
         let remote_append_tip = self.append_bridge_stack_tip(&publication.remote_sha)?;
-        if (publication.remote_sha == publication.head
-            || remote_append_tip.as_deref() == Some(publication.head.as_str()))
-            && !publication.clears_operation
-        {
-            return self.already_published(&publication, PublishMode::Append, mode);
+        let remote_has_append = remote_append_tip.as_deref() == Some(publication.head.as_str());
+        let append_bridge = !publication.fast_forward;
+        if append_bridge {
+            publication.prepared_recovery = None;
+            publication.overwritten_tip = None;
+        }
+        if remote_has_append {
+            publication.head.clone_from(&publication.remote_sha);
+            publication.branch_refspec =
+                format!("{}:{}", publication.remote_sha, publication.downstream_ref);
+            publication.fast_forward = true;
         }
         if publication.remote_sha == publication.head
             && (!publication.clears_operation
@@ -131,8 +137,10 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(publication_plan(&publication)));
         }
+        if remote_has_append {
+            return self.execute_publication(&publication, PublishMode::Append);
+        }
         let stack_tip = publication.head.clone();
-        let append_bridge = !publication.fast_forward;
         if append_bridge {
             let short = &publication.remote_sha[..publication.remote_sha.len().min(12)];
             let message = format!("forkctl: keep published history {short}");
@@ -154,8 +162,11 @@ impl App {
             publication.fast_forward = true;
         }
         let result = self.execute_publication(&publication, PublishMode::Append);
-        if append_bridge && result.is_ok() {
-            run(&self.repo, "git", ["reset", "--soft", &stack_tip])?;
+        if append_bridge {
+            let restored = run(&self.repo, "git", ["reset", "--soft", &stack_tip]);
+            if result.is_ok() {
+                restored?;
+            }
         }
         result
     }
@@ -168,7 +179,7 @@ impl App {
     }
 
     fn publish_propose(&self, mode: ExecutionMode) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        let publication = self.preflight_publication(PublishMode::Propose)?;
         if publication.remote_sha == publication.head {
             return self.already_published(&publication, PublishMode::Propose, mode);
         }
@@ -260,7 +271,7 @@ impl App {
         proposal: Option<&str>,
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
-        let publication = self.preflight_publication()?;
+        let publication = self.preflight_publication(PublishMode::Rewrite)?;
         let proposal_branch = proposal
             .map(ToOwned::to_owned)
             .unwrap_or(self.proposal_branch()?);
@@ -305,7 +316,7 @@ impl App {
         self.publish_rewrite(mode)
     }
 
-    fn preflight_publication(&self) -> Result<Publication> {
+    fn preflight_publication(&self, publish_mode: PublishMode) -> Result<Publication> {
         self.require_clean()?;
         self.require_declared_branch()?;
         if let Some(active) = self.read_active()? {
@@ -336,7 +347,9 @@ impl App {
         let downstream_ref = self.downstream_ref()?;
         let remote_sha = self.downstream_sha()?;
         let fast_forward = remote_sha == head || self.is_ancestor(&remote_sha, &head)?;
-        if !fast_forward {
+        let remote_has_append = publish_mode == PublishMode::Append
+            && self.append_bridge_stack_tip(&remote_sha)?.as_deref() == Some(head.as_str());
+        if !fast_forward && !remote_has_append {
             let expected = match &operation {
                 Some(operation) => operation.expected_remote_sha.clone(),
                 None => self.downstream_tracking_sha()?,
