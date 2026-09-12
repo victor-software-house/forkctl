@@ -203,6 +203,7 @@ impl DomainError {
             "{}; also failed to restore local stack: {restoration}",
             publication.message
         );
+        combined.retryable = false;
         combined
     }
 
@@ -312,7 +313,7 @@ mod tests {
                 .to_api_error(Vec::new());
 
         assert!(matches!(combined.code, ApiErrorCode::RemoteAdvanced));
-        assert!(combined.retryable);
+        assert!(!combined.retryable);
         assert!(combined.message.contains("advanced to actual"));
         assert!(combined.message.contains("git reset --soft failed"));
     }
