@@ -790,8 +790,20 @@ impl App {
             .patches
             .retain(|candidate| candidate.name != patch.name);
         if disable {
-            manifest.disabled_patches.push(record);
-        } else {
+            if !manifest.disabled_patches.iter().any(|candidate| {
+                candidate.patch.name == record.patch.name && candidate.commit == record.commit
+            }) {
+                manifest.disabled_patches.push(record);
+            }
+        } else if !manifest.history.iter().any(|event| {
+            matches!(
+                event,
+                HistoryEvent::PatchRemoved { record: candidate }
+                    if candidate.patch.name == record.patch.name
+                        && candidate.commit == record.commit
+                        && candidate.recovery.tag == record.recovery.tag
+            )
+        }) {
             manifest.history.push(HistoryEvent::PatchRemoved { record });
         }
         self.finish_patch_transition(operation, patch.name, commit, disable)
@@ -951,12 +963,30 @@ impl App {
             manifest
                 .disabled_patches
                 .retain(|candidate| candidate.patch.name != patch.name);
-            let insertion = position.min(manifest.patches.len().saturating_sub(1));
-            manifest.patches.insert(insertion, patch.clone());
-            manifest.history.push(HistoryEvent::PatchEnabled {
-                record,
-                recovery: operation.recovery.clone(),
-            });
+            if !manifest
+                .patches
+                .iter()
+                .any(|candidate| candidate.name == patch.name)
+            {
+                let insertion = position.min(manifest.patches.len().saturating_sub(1));
+                manifest.patches.insert(insertion, patch.clone());
+            }
+            if !manifest.history.iter().any(|event| {
+                matches!(
+                    event,
+                    HistoryEvent::PatchEnabled {
+                        record: candidate,
+                        recovery,
+                    } if candidate.patch.name == record.patch.name
+                        && candidate.commit == record.commit
+                        && recovery.tag == operation.recovery.tag
+                )
+            }) {
+                manifest.history.push(HistoryEvent::PatchEnabled {
+                    record,
+                    recovery: operation.recovery.clone(),
+                });
+            }
             return self.finish_patch_transition(&mut operation, patch.name, commit, false);
         }
         self.finish_patch_deactivate(

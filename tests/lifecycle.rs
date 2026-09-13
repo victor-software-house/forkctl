@@ -439,6 +439,33 @@ fn bookkeeping_patch_edit_remains_final_after_source_patches() {
 }
 
 #[test]
+fn repeated_patch_remove_continuation_does_not_duplicate_history() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "obsolete", "obsolete.txt", "obsolete\n");
+    fixture.forkctl_ok(&[
+        "patch",
+        "remove",
+        "obsolete",
+        "--reason",
+        "Superseded by configurable behavior",
+    ]);
+
+    fixture.forkctl_ok(&["operation", "continue"]);
+
+    let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
+    let removed = manifest["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| {
+            event["kind"] == "patch_removed" && event["record"]["patch"]["name"] == "obsolete"
+        })
+        .count();
+    assert_eq!(removed, 1);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
 fn patch_enable_continuation_adopts_the_current_commit_policy() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "optional-feature", "optional.txt", "enabled\n");

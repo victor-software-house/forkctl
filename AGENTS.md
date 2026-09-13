@@ -54,7 +54,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 
 ## Versioning
 
-`[workspace.package].version` is the only forkctl release-version source. Root `mise.toml` is the only source for the minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. `mise run version:sync` regenerates `mise.lock` and every operational copy; `version:check` rejects drift. Continue patch releases; do not introduce a minor bump without explicit operator direction.
+`[workspace.package].version` is the only forkctl release-version source. Root `mise.toml` is the only source for the minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. `mise run version:sync` regenerates `mise.lock` and every operational copy; `version:check` rejects drift. Forkctl releases use patch version bumps only.
 
 ## Checks
 
