@@ -294,40 +294,40 @@ version = "1.97.1"
 backend = "core:rust"
 
 [[tools.usage]]
-version = "6.1.1"
+version = "6.11.1"
 backend = "aqua:jdx/usage"
 
 [tools.usage."platforms.linux-arm64"]
-checksum = "sha256:4f5c2f08acbbb6e1e675bbd98c58c4b698e88829d1d150e3f3fc688fa1e3db4f"
-url = "https://github.com/jdx/usage/releases/download/v6.1.1/usage-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/usage/releases/assets/526185438"
+checksum = "sha256:90622145566409da24d282190ad17cc786c85d498d751543824ab62931705018"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584024322"
 
 [tools.usage."platforms.linux-arm64-musl"]
-checksum = "sha256:9e2b57c5e423eb8eb38682567ef2d7722f83c13e9d398f50c1c4fb30888cb292"
-url = "https://github.com/jdx/usage/releases/download/v6.1.1/usage-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/usage/releases/assets/526184171"
+checksum = "sha256:b8903edb0accb76576a9a454900388d629dff9a35186e653c4e5b48e622e62c0"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584023288"
 
 [tools.usage."platforms.linux-x64"]
-checksum = "sha256:cb367c1b753819a9fa5de704d1dd0887609b99334e76124c6a5ac179a9f56319"
-url = "https://github.com/jdx/usage/releases/download/v6.1.1/usage-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/usage/releases/assets/526183094"
+checksum = "sha256:afa6cb0e76f88cc6392aeecf21bbcd869747d4eeb60ab84c98d6e6178edc359a"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584024165"
 
 [tools.usage."platforms.linux-x64-musl"]
-checksum = "sha256:1e8cde78b39d675b6bd4104c8c349ce2e5f00eb1bb164c3ff86756db62a6979f"
-url = "https://github.com/jdx/usage/releases/download/v6.1.1/usage-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/jdx/usage/releases/assets/526184443"
+checksum = "sha256:7b37d1d36b310857908e508802db6c6b670555cf25cd0b990f09ee40cb11247b"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584024113"
 
 [tools.usage."platforms.macos-arm64"]
-checksum = "sha256:0ec220c5083182667c9ba2c456b8e1297132b4d12ade966889ba3fd4e96d5aef"
-url = "https://github.com/jdx/usage/releases/download/v6.1.1/usage-universal-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/usage/releases/assets/526174096"
+checksum = "sha256:e3a20b948f2665862dcbaddfc50d62ac741654e3cdd815130a6fae00b3d088ff"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-universal-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584026303"
 
 [tools.usage."platforms.macos-x64"]
-checksum = "sha256:0ec220c5083182667c9ba2c456b8e1297132b4d12ade966889ba3fd4e96d5aef"
-url = "https://github.com/jdx/usage/releases/download/v6.1.1/usage-universal-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/usage/releases/assets/526174096"
+checksum = "sha256:e3a20b948f2665862dcbaddfc50d62ac741654e3cdd815130a6fae00b3d088ff"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-universal-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584026303"
 
 [tools.usage."platforms.windows-x64"]
-checksum = "sha256:61efe94b592007219f7925be05df93c6eaf0e147d93b2db32e5283dd2158f0c9"
-url = "https://github.com/jdx/usage/releases/download/v6.1.1/usage-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/jdx/usage/releases/assets/526177722"
+checksum = "sha256:783ce7539b1145f1860054352067e5da70bfac1ceeba3c9f3cb912477068f99d"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584027860"
