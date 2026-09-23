@@ -410,7 +410,7 @@ fn append_patch_rows(document: Document, patches: &[crate::protocol::PatchSummar
         return document.paragraph(Text::new().muted("no patches"));
     }
     let table = patches.iter().fold(
-        Table::new(["state", "patch", "kind", "commit", "active"]).token_column(1),
+        Table::new(["state", "patch", "kind", "commit", "active"]).id_column(1),
         |table, patch| {
             table.row([
                 patch.state.clone(),
