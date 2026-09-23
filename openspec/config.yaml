@@ -1,0 +1,29 @@
+schema: spec-driven
+
+context: |
+  forkctl is the Rust policy CLI for audited StGit downstream patch stacks.
+  It delegates repository and patch mechanics to git and stg, keeps a
+  versioned JSON protocol, and renders through ctl-core.
+  Contracts: AGENTS.md and the protocol in src/protocol.rs.
+  Writing style: plain English, short sentences, numbered lists, no em-dashes,
+  no emojis. This repository is public: no local paths, machine names, or
+  private repository names in any artifact.
+
+rules:
+  proposal:
+    - State the measured problem, with numbers where they exist.
+    - Name the protocol version the change affects, if any.
+  specs:
+    - Every requirement uses SHALL and has at least one WHEN/THEN scenario.
+    - Scenarios use concrete commands, flags, files, and environment values.
+  design:
+    - Each decision names the alternative considered and why it lost.
+    - Every automatic behaviour names its public override and its disable path.
+  tasks:
+    - Each task names the command or observation that proves it is done.
+    - Compile, format, lint, and test tasks run on the build host, not the authoring workstation.
+
+operations:
+  archive:
+    guidance:
+      - Update AGENTS.md and the operator skill where the change made them true or false.

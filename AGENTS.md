@@ -62,3 +62,10 @@ mise run build
 ```
 
 Every release must additionally be exercised through the immutable mise catalog and the published binary against disposable real Git/StGit remotes, including bootstrap, active patch capture, hooks, abort/continue, rebase history hydration, stale lease, protected-branch rejection, and successful atomic publication. Supply `CARGO_REGISTRY_TOKEN` before invoking the release task; it must fail before creating GitHub state when an unpublished version lacks auth and must resume only an exact-target draft.
+
+## Changes
+
+Plan a behaviour or contract change as an OpenSpec change in
+`openspec/changes/<name>/` before writing code. `openspec/config.yaml` holds
+this repository's context and rules, and `openspec validate <name>` checks the
+change.
