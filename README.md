@@ -14,7 +14,7 @@ Clap and the local JSON API execute the same typed handlers. Domain modules neve
 ## Consumer setup
 
 ```toml
-min_version = "2026.7.7"
+min_version = "2026.9.2"
 
 [settings]
 experimental = true
@@ -370,7 +370,7 @@ mise run test:isolated
 mise run build
 ```
 
-Pull requests and pushes to `main` run those gates on GitHub's free public-repository `ubuntu-latest` hosted runner. The same gates run on `macos-latest` when a GitHub release is published, or via `workflow_dispatch`. A published release also gets a static Linux x64 asset from `release-linux.yml`, built from the release tag. cargo-deny, cargo-machete, and nextest come from GitHub release tarballs; `mise-action` and `Swatinem/rust-cache` restore the toolchain and Cargo target. External actions are pinned to immutable commits; CI has read-only repository permissions.
+Pull requests and pushes to `main` run those gates on GitHub's free public-repository `ubuntu-latest` hosted runner. The same gates run on `macos-latest` when a GitHub release is published, or via `workflow_dispatch`. A published release also gets a static Linux x64 asset from `release-linux.yml`, built from the release tag. cargo-deny, cargo-machete, and nextest come from GitHub release tarballs; `mise-action` restores the toolchain, and `jdx/mr-boxington-action` restores the mr-boxington build cache. External actions are pinned to immutable commits; CI has read-only repository permissions.
 
 `mise run test` uses Rust's standard parallel harness. `test:isolated` runs the same suite with cargo-nextest, one test per process. Real Git/StGit lifecycle tests use a fresh `tempfile` sandbox with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment; they never read operator aliases, credential helpers, hooks, or global config. Mounted-task tests reuse only the caller's mise installation store for the repository's exact pinned tools. Containers are reserved for future scenarios that actually require another OS, daemon, network, or toolchain image.
 

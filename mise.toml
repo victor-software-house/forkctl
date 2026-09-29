@@ -1,4 +1,5 @@
-min_version = "2026.7.7"
+# mr_boxington on the rust entry needs mise 2026.9.2 or newer.
+min_version = "2026.9.2"
 
 [settings]
 lockfile = true
@@ -12,7 +13,8 @@ includes = [
 ]
 
 [tools]
-rust = "1.97.1"
+rust = { version = "1.97.1", components = "rustfmt,clippy", mr_boxington = true }
+mr-boxington = "1.17.0"
 "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
 "github:nextest-rs/nextest" = "cargo-nextest-0.9.143"
 "github:EmbarkStudios/cargo-deny" = "0.18.9"
@@ -36,26 +38,35 @@ run = "cargo fmt --all -- --check"
 [tasks."lint:fix"]
 description = "Apply machine-fixable Clippy suggestions"
 run = "cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets --all-features -- -D warnings"
+env.CARGO_TARGET_DIR = "target/lint"
 
 [tasks.lint]
 description = "Run Clippy with warnings denied"
 run = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+env.CARGO_TARGET_DIR = "target/lint"
 
 [tasks.test]
 description = "Parallel test suite via nextest"
 run = "cargo nextest run --workspace --all-features"
+env.CARGO_TARGET_DIR = "target/test"
 
 [tasks."test:doc"]
 description = "Doc-tests (nextest does not run these)"
 run = "cargo test --doc --workspace --all-features"
+env.CARGO_TARGET_DIR = "target/doc-test"
 
 [tasks."test:isolated"]
 description = "Same suite, one test per process"
 run = "cargo nextest run --workspace --all-features --test-threads=1"
+env.CARGO_TARGET_DIR = "target/test-isolated"
 
 [tasks.deny]
-description = "License, advisory, and source policy"
-run = "cargo-deny check"
+description = "License, ban, and source policy (offline)"
+run = "cargo-deny check licenses bans sources"
+
+[tasks."deny:advisories"]
+description = "RustSec advisories and yanked crates (network, CI only)"
+run = "cargo-deny check advisories"
 
 [tasks.deps]
 description = "Unused crate analysis"
@@ -72,18 +83,23 @@ run = "gitleaks git --redact --no-banner"
 [tasks."version:sync"]
 description = "Regenerate the lockfile and all version pins from mise.toml and Cargo.toml"
 run = ["mise lock", "cargo run --quiet --package forkctl-xtask"]
+env.CARGO_TARGET_DIR = "target/xtask"
 
 [tasks."version:check"]
 description = "Verify generated pins match mise.toml and Cargo.toml"
 run = "cargo run --quiet --package forkctl-xtask -- --check"
+env.CARGO_TARGET_DIR = "target/xtask"
 
 [tasks.verify]
-description = "CI-safe gate: format, clippy, nextest, deny, unused-deps, version pins"
+description = "Offline gate: format, clippy, nextest, deny, unused-deps, version pins"
+# mbx shares one store and compiler pool; separate target dirs keep Cargo's
+# directory lock from serializing the parallel tasks.
 depends = ["format", "lint", "test", "deny", "deps", "version:check"]
 
 [tasks.build]
 description = "Build the release binary"
 run = "cargo build --release"
+env.CARGO_TARGET_DIR = "target/build"
 
 [tool_alias]
 # Same backend under every mise version, so the lock does not change with the
