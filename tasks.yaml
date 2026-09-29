@@ -56,6 +56,19 @@ horizon:
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
 archive:
+  - id: FRK-010
+    title: Promote only pushed proposals
+    scope: publish
+    outcome: publish --promote never finds an unpushed proposal commit on the local proposal ref.
+    plan: openspec/changes/promote-only-pushed-proposals/proposal.md
+    notes:
+      - >2-
+        Found while fixing FRK-001: the local ref moved before the leased push.
+    completed: 2026-09-29T00:02:13
+    evidence:
+      - 1dd8a03ab20655b8a551050b22226595c0806c59
+    disposition: completed
+
   - id: FRK-007
     title: Remove production panic paths
     scope: backlog

@@ -229,10 +229,10 @@ impl App {
             ],
         )?;
         let local_ref = format!("refs/heads/{proposal_branch}");
-        run(&self.repo, "git", ["update-ref", &local_ref, &review])?;
         // Each proposal is a new commit on the downstream tip, so an update replaces the
         // previous proposal. The lease names the tip read here; an empty lease requires absence.
         let proposal_tip = self.remote_ref_sha_if_present(&remote, &local_ref)?;
+        let pushed_ref = format!("{review}:{local_ref}");
         run_operator(
             &self.repo,
             "git",
@@ -244,24 +244,28 @@ impl App {
                     proposal_tip.unwrap_or_default()
                 ),
                 &remote,
-                &format!("{local_ref}:{local_ref}"),
+                &pushed_ref,
             ],
         )?;
-        let text = proposal::render(self.manifest()?, &publication.head, &publication.remote_sha)?;
-        let proposal_url = self
-            .write_proposal_pr(
+        // The local proposal ref moves only after the remote accepted the proposal, so a
+        // rejected push never leaves an unreviewed commit where `--promote` looks first.
+        // Every step after the accepted push reports that the branch was pushed.
+        let after_push = || -> Result<String> {
+            run(&self.repo, "git", ["update-ref", &local_ref, &review])?;
+            let text =
+                proposal::render(self.manifest()?, &publication.head, &publication.remote_sha)?;
+            self.write_proposal_pr(
                 &github_repo,
                 open_pull_request,
                 &proposal_branch,
                 &branch,
                 &text,
             )
-            .map_err(|error| match error.downcast::<DomainError>() {
-                Ok(domain) => domain.after_proposal_push(&proposal_branch).into(),
-                Err(error) => {
-                    error.context(format!("proposal branch {proposal_branch} was pushed"))
-                }
-            })?;
+        };
+        let proposal_url = after_push().map_err(|error| match error.downcast::<DomainError>() {
+            Ok(domain) => domain.after_proposal_push(&proposal_branch).into(),
+            Err(error) => error.context(format!("proposal branch {proposal_branch} was pushed")),
+        })?;
         Ok(CommandResult::Publish(PublishResult {
             branch,
             head: review,
@@ -269,7 +273,7 @@ impl App {
             fast_forward: false,
             mode: PublishMode::Propose,
             recovery_tags: Vec::new(),
-            pushed_refs: vec![format!("{local_ref}:{local_ref}")],
+            pushed_refs: vec![pushed_ref],
             expected_lease: publication.remote_sha,
             proposal_branch: Some(proposal_branch),
             proposal_url: Some(proposal_url),
