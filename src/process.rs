@@ -1,5 +1,4 @@
-use crate::error::DomainError;
-use anyhow::{Context, Result};
+use crate::error::{AppError, AppResult, DomainError, InternalResultExt as _};
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -24,19 +23,19 @@ pub fn command(dir: &Path, program: &str) -> Command {
     command
 }
 
-pub fn capture<I, S>(dir: &Path, program: &str, args: I) -> Result<String>
+pub fn capture<I, S>(dir: &Path, program: &str, args: I) -> AppResult<String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let output = output(dir, program, args)?;
     Ok(String::from_utf8(output.stdout)
-        .with_context(|| format!("{program} output is not UTF-8"))?
+        .internal(format!("decode {program} output as UTF-8"))?
         .trim()
         .to_string())
 }
 
-pub fn output<I, S>(dir: &Path, program: &str, args: I) -> Result<Output>
+pub fn output<I, S>(dir: &Path, program: &str, args: I) -> AppResult<Output>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -45,7 +44,7 @@ where
     let output = command(dir, program)
         .args(&args)
         .output()
-        .with_context(|| format!("run {program}"))?;
+        .internal(format!("run {program}"))?;
     if output.status.success() {
         Ok(output)
     } else {
@@ -53,7 +52,7 @@ where
     }
 }
 
-pub fn succeeds<I, S>(dir: &Path, program: &str, args: I) -> Result<bool>
+pub fn succeeds<I, S>(dir: &Path, program: &str, args: I) -> AppResult<bool>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -61,12 +60,12 @@ where
     Ok(command(dir, program)
         .args(args)
         .output()
-        .with_context(|| format!("run {program}"))?
+        .internal(format!("run {program}"))?
         .status
         .success())
 }
 
-pub fn run<I, S>(dir: &Path, program: &str, args: I) -> Result<()>
+pub fn run<I, S>(dir: &Path, program: &str, args: I) -> AppResult<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -74,7 +73,7 @@ where
     output(dir, program, args).map(|_| ())
 }
 
-pub fn run_operator<I, S>(dir: &Path, program: &str, args: I) -> Result<()>
+pub fn run_operator<I, S>(dir: &Path, program: &str, args: I) -> AppResult<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -86,7 +85,7 @@ where
     }
 }
 
-fn streamed_output<I, S>(dir: &Path, program: &str, args: I) -> Result<Output>
+fn streamed_output<I, S>(dir: &Path, program: &str, args: I) -> AppResult<Output>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -97,20 +96,18 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .with_context(|| format!("run {program}"))?;
+        .internal(format!("run {program}"))?;
     let stdout_pipe = child
         .stdout
         .take()
-        .with_context(|| format!("{program} stdout"))?;
+        .ok_or_else(|| AppError::internal_message(format!("{program} stdout")))?;
     let stderr_pipe = child
         .stderr
         .take()
-        .with_context(|| format!("{program} stderr"))?;
+        .ok_or_else(|| AppError::internal_message(format!("{program} stderr")))?;
     let stdout_handle = thread::spawn(move || tee_stderr(stdout_pipe));
     let stderr_handle = thread::spawn(move || tee_stderr(stderr_pipe));
-    let status = child
-        .wait()
-        .with_context(|| format!("wait for {program}"))?;
+    let status = child.wait().internal(format!("wait for {program}"))?;
     let stdout = join_collected(stdout_handle);
     let stderr = join_collected(stderr_handle);
     let output = Output {

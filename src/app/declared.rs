@@ -1,9 +1,8 @@
 use super::App;
-use crate::error::DomainError;
+use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{Check, CheckStage, Patch, scope_matches};
 use crate::process::{capture, command, run};
 use crate::protocol::CheckFinding;
-use anyhow::{Context, Result};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -67,7 +66,7 @@ impl App {
 
     /// Materializes one observed tree in a disposable clone.
     fn tree_layer(&self, commit: &str) -> Result<CheckLayer> {
-        let directory = tempfile::tempdir().context("create check layer directory")?;
+        let directory = tempfile::tempdir().internal("create check layer directory")?;
         let root = directory.path().join("repo");
         run(
             &self.repo,
@@ -121,7 +120,7 @@ fn run_check(
     let output = command(root, "sh")
         .args([OsStr::new("-c"), OsStr::new(expanded.as_str())])
         .output()
-        .with_context(|| format!("run check {} of patch {}", check.name, patch.name))?;
+        .internal(format!("run check {} of patch {}", check.name, patch.name))?;
     if output.status.success() {
         return Ok(None);
     }

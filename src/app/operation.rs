@@ -1,4 +1,5 @@
 use super::App;
+use crate::error::AppResult as Result;
 use crate::error::DomainError;
 use crate::process::{capture, run};
 use crate::protocol::{
@@ -6,7 +7,6 @@ use crate::protocol::{
     OperationStatusResult,
 };
 use crate::state::{OperationIntent, OperationKind};
-use anyhow::Result;
 
 impl App {
     pub fn operation_status(&self) -> Result<OperationStatusResult> {
@@ -16,9 +16,7 @@ impl App {
     }
 
     pub fn operation_continue(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
-        let operation = self
-            .read_operation()?
-            .ok_or_else(|| DomainError::invalid_request("no forkctl operation is in progress"))?;
+        let operation = self.require_operation()?;
         self.load_operation_manifest()?;
         self.clear_restored_workspace_bootstrap()?;
         if mode == ExecutionMode::Plan {
@@ -105,9 +103,7 @@ impl App {
         confirmed: bool,
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
-        let operation = self
-            .read_operation()?
-            .ok_or_else(|| DomainError::invalid_request("no forkctl operation is in progress"))?;
+        let operation = self.require_operation()?;
         self.load_operation_manifest()?;
         let restored_tip = self
             .append_bridge_stack_tip(&operation.old_tip)?

@@ -131,6 +131,26 @@ fn complete_check_rejects_unexpected_tracked_patch_export() {
 }
 
 #[test]
+fn complete_check_reports_a_missing_ledger_as_check_failed() {
+    let fixture = Fixture::new();
+    git_ok(&fixture.repo, ["rm", "--quiet", "PATCHES.md"]);
+    let refresh = isolated_command(&fixture.repo, "stg")
+        .args(["refresh", "--patch", "fork-tooling", "--index"])
+        .output()
+        .unwrap();
+    assert!(
+        refresh.status.success(),
+        "{}",
+        String::from_utf8_lossy(&refresh.stderr)
+    );
+
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check["error"]["code"], "check_failed", "{check}");
+}
+
+#[test]
 fn yaml_manifest_preserves_disable_enable_and_remove_history() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "optional-feature", "optional.txt", "enabled\n");
