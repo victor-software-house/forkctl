@@ -27,6 +27,8 @@ case "$(uname -m)" in
   x86_64|amd64) arch=x64 ;;
   *) printf 'release: unsupported architecture\n' >&2; exit 1 ;;
 esac
+# release-linux.yml alone publishes the static linux_x64 asset.
+[ "${os}_${arch}" != linux_x64 ] || { printf 'release: linux_x64 is published by release-linux.yml\n' >&2; exit 1; }
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/forkctl-release.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
