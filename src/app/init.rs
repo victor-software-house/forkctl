@@ -53,9 +53,13 @@ impl App {
         let inventory = self.worktree_inventory()?;
         let (captured, untracked_outside): (Vec<String>, Vec<String>) =
             inventory.untracked.into_iter().partition(|path| {
-                scope
-                    .iter()
-                    .any(|pattern| crate::manifest::scope_matches(pattern, path))
+                // Bootstrap writes the manifest and ledger itself, so an existing untracked
+                // file at either path is not captured: it would be overwritten.
+                *path != manifest_relative
+                    && *path != ledger
+                    && scope
+                        .iter()
+                        .any(|pattern| crate::manifest::scope_matches(pattern, path))
             });
         let mut blocking = inventory.staged;
         blocking.extend(inventory.unstaged);

@@ -11,7 +11,8 @@ downstream branch.
 ### Requirement: Bootstrap captures untracked bookkeeping files
 
 Bootstrap `init` SHALL add every untracked file that matches the bookkeeping
-patch scope to the bookkeeping patch. It SHALL fail with `dirty_worktree`
+patch scope to the bookkeeping patch. The manifest and ledger paths are excluded,
+because bootstrap writes them; an untracked file at either path SHALL refuse. It SHALL fail with `dirty_worktree`
 before any mutation when a staged change, an unstaged change, or an untracked
 file outside that scope exists, and the error SHALL list only those paths.
 
@@ -30,3 +31,9 @@ file outside that scope exists, and the error SHALL list only those paths.
 - **THEN** `forkctl init ...` fails with `dirty_worktree` whose paths are
   exactly `["notes.txt"]`
 - **AND** no manifest file exists and the downstream remote is unchanged
+
+#### Scenario: Untracked ledger
+
+- **WHEN** the clone has an untracked `PATCHES.md` and the ledger is `PATCHES.md`
+- **THEN** `forkctl init ...` fails with `dirty_worktree` naming `PATCHES.md`
+- **AND** `PATCHES.md` keeps its content
