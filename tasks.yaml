@@ -5,42 +5,8 @@ prefix: FRK
 style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
-active: FRK-001
+active: FRK-003
 queue:
-  - id: FRK-001
-    title: Update an open proposal in place
-    scope: publish
-    outcome: A repeated publish --propose updates the open proposal branch and keeps its pull request and review history.
-    blocked_by: []
-    acceptance:
-      - A second publish --propose against an existing proposal branch succeeds without deleting the branch or closing its pull request.
-      - A proposal update never replaces a remote proposal tip that forkctl did not read first.
-      - publish --promote still refuses a proposal whose tree differs from HEAD.
-    notes:
-      - >2-
-        Observed on a private downstream fork: the second publish --propose failed with "! [rejected] forkctl/proposal/main (non-fast-forward)". The workaround was to close the pull request, delete the branch and propose again, which lost the review history.
-      - >2-
-        Cause: publish_propose in src/app/publish.rs builds each proposal as git commit-tree on the remote downstream tip and pushes it with a plain git push and no lease, so the new commit never descends from the existing proposal tip.
-      - >2-
-        Candidate designs: parent the new proposal commit on the current remote proposal tip, or push with --force-with-lease on the proposal ref. The OpenSpec change picks one.
-      - The operator chose the lease rewrite on 2026-09-28.
-    plan: openspec/changes/update-open-proposal/proposal.md
-
-  - id: FRK-002
-    title: Report proposal pull-request failures
-    scope: publish
-    outcome: After publish --propose the operator always knows whether a proposal pull request exists and where it is.
-    blocked_by: []
-    acceptance:
-      - A failed gh pr create appears in the publish result with its error.
-      - When a pull request for the proposal branch is already open, publish reports that pull request and creates no other.
-      - The proposal pull-request title and body describe the candidate and name the promote command.
-    notes:
-      - >2-
-        open_proposal_pr in src/app/publish.rs discards every gh failure: the caller applies .ok().flatten() and a non-zero exit returns Ok(None). A gh login without access to the repository produced a pushed branch, no pull request, and no notice.
-      - The title, body and --draft flag are fixed literals.
-    plan: openspec/changes/report-proposal-pull-request/proposal.md
-
   - id: FRK-003
     title: Publish a Linux release binary
     scope: release
@@ -127,4 +93,35 @@ horizon:
     open: StGit 2.6.1 ships .deb, .rpm, .msi and a source tarball, with no macOS binary, and no mise backend is known to install a prebuilt StGit on both Linux and macOS.
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
-archive: []
+archive:
+  - id: FRK-002
+    title: Report proposal pull-request failures
+    scope: publish
+    outcome: After publish --propose the operator always knows whether a proposal pull request exists and where it is.
+    notes:
+      - >2-
+        open_proposal_pr in src/app/publish.rs discards every gh failure: the caller applies .ok().flatten() and a non-zero exit returns Ok(None). A gh login without access to the repository produced a pushed branch, no pull request, and no notice.
+      - The title, body and --draft flag are fixed literals.
+    plan: openspec/changes/report-proposal-pull-request/proposal.md
+    completed: 2026-09-28T22:52:09
+    evidence:
+      - d6270acfb3d065d8f1d619dd5899217353b5c957
+    disposition: completed
+
+  - id: FRK-001
+    title: Update an open proposal in place
+    scope: publish
+    outcome: A repeated publish --propose updates the open proposal branch and keeps its pull request and review history.
+    notes:
+      - >2-
+        Observed on a private downstream fork: the second publish --propose failed with "! [rejected] forkctl/proposal/main (non-fast-forward)". The workaround was to close the pull request, delete the branch and propose again, which lost the review history.
+      - >2-
+        Cause: publish_propose in src/app/publish.rs builds each proposal as git commit-tree on the remote downstream tip and pushes it with a plain git push and no lease, so the new commit never descends from the existing proposal tip.
+      - >2-
+        Candidate designs: parent the new proposal commit on the current remote proposal tip, or push with --force-with-lease on the proposal ref. The OpenSpec change picks one.
+      - The operator chose the lease rewrite on 2026-09-28.
+    plan: openspec/changes/update-open-proposal/proposal.md
+    completed: 2026-09-28T22:52:09
+    evidence:
+      - d6270acfb3d065d8f1d619dd5899217353b5c957
+    disposition: completed
