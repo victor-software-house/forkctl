@@ -1,3 +1,16 @@
+// Production code reports failures as errors; tests may still panic.
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::expect_used,
+        clippy::panic,
+        clippy::todo,
+        clippy::unimplemented,
+        clippy::unreachable,
+        clippy::unwrap_used
+    )
+)]
+
 mod app;
 mod cli;
 mod completion;
@@ -76,7 +89,7 @@ fn execute_cli(cli: Cli) -> Result<Report> {
     let quiet = cli.output.quiet;
     let action = cli.into_action();
     Ok(match action {
-        Ok(CliAction::ApiSchema(kind)) => Report::json(protocol::schema_document(kind)),
+        Ok(CliAction::ApiSchema(kind)) => Report::json(protocol::schema_document(kind)?),
         Ok(CliAction::ApiCall) => Report::response(run_api_call(), None),
         Ok(CliAction::Completion(shell)) => Report::text(completion_text(shell)?),
         Ok(CliAction::Candidates(kind)) => {
@@ -115,12 +128,9 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         ))
         .into());
     }
+    // Instructions need no repository, so they return before discovery.
     if matches!(request, ApiRequest::Instructions(_)) {
-        return Ok(Outcome::new(CommandResult::Instructions(
-            InstructionsResult {
-                markdown: INSTRUCTIONS.to_string(),
-            },
-        )));
+        return Ok(Outcome::new(instructions()));
     }
     let manifest = manifest
         .map(PathBuf::from)
@@ -149,10 +159,16 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         }
         ApiRequest::OperationContinue(_) => app.operation_continue(mode)?,
         ApiRequest::OperationAbort(args) => app.operation_abort(args.confirmed, mode)?,
-        ApiRequest::Instructions(_) => unreachable!("instructions handled without repository"),
+        ApiRequest::Instructions(_) => instructions(),
     };
     let operation_id = app.read_operation()?.map(|operation| operation.id);
     Ok(Outcome::new(result).with_optional_operation(operation_id))
+}
+
+fn instructions() -> CommandResult {
+    CommandResult::Instructions(InstructionsResult {
+        markdown: INSTRUCTIONS.to_string(),
+    })
 }
 
 fn run_api_call() -> ApiResponse {

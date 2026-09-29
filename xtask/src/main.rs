@@ -1,3 +1,16 @@
+// Production code reports failures as errors; tests may still panic.
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::expect_used,
+        clippy::panic,
+        clippy::todo,
+        clippy::unimplemented,
+        clippy::unreachable,
+        clippy::unwrap_used
+    )
+)]
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};

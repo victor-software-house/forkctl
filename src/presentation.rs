@@ -4,8 +4,9 @@ use ctl_core::{
 use serde::{Serialize, Serializer};
 
 use crate::protocol::{
-    ApiError, ApiErrorCode, ApiResponse, CheckResult, CommandResult, ExecutionMode,
-    OperationStatusResult, PatchListResult, PatchShowResult, StatusResult,
+    ApiError, ApiErrorCode, ApiResponse, CheckResult, CommandResult, ContractEditResult,
+    ExecutionMode, MutationPlan, OperationStatusResult, PatchListResult, PatchRefreshResult,
+    PatchSelectResult, PatchShowResult, PatchTransitionResult, RebaseResult, StatusResult,
 };
 
 pub enum Report {
@@ -141,42 +142,27 @@ fn append_result(document: Document, result: &CommandResult) -> Document {
         CommandResult::PatchList(result) => append_patch_list(document, result),
         CommandResult::PatchShow(result) => append_patch_show(document, result),
         CommandResult::Instructions(result) => document.verbatim(result.markdown.clone()),
-        _ => append_mutation_result(document, result),
-    }
-}
-
-fn append_mutation_result(document: Document, result: &CommandResult) -> Document {
-    match result {
-        CommandResult::PatchCreate(_)
-        | CommandResult::PatchSelect(_)
-        | CommandResult::PatchEdit(_)
-        | CommandResult::PatchRefresh(_)
-        | CommandResult::PatchFinish(_)
-        | CommandResult::PatchRemove(_)
-        | CommandResult::PatchDisable(_)
-        | CommandResult::PatchEnable(_) => append_patch_mutation(document, result),
-        CommandResult::ContractEdit(result) => document.fields(
+        CommandResult::PatchCreate(result) => document
+            .fields(Fields::new().row("active patch", result.active_patch.name().to_string())),
+        CommandResult::PatchSelect(result) => document.fields(patch_select_fields(result)),
+        CommandResult::PatchEdit(result) => document.fields(
             Fields::new()
-                .row(
-                    "allowed base globs",
-                    result.contracts.allow_base.len().to_string(),
-                )
-                .row(
-                    "required text assertions",
-                    result.contracts.required_text.len().to_string(),
-                )
+                .row("patch", result.patch.name.clone())
+                .row("old commit", result.old_commit.clone())
+                .row("new commit", result.new_commit.clone())
+                .row("generated", display_list(&result.generated_paths)),
+        ),
+        CommandResult::PatchRefresh(result) => document.fields(patch_refresh_fields(result)),
+        CommandResult::PatchFinish(result) => document.fields(
+            Fields::new()
+                .row("patch", result.patch.clone())
                 .row("check", "passed"),
         ),
-        CommandResult::Rebase(result) => document.fields(
-            Fields::new()
-                .row("target", result.selected_target.clone())
-                .row("old tip", result.old_tip.clone())
-                .row("new tip", result.new_tip.clone())
-                .row("recovery", result.recovery_tag.clone())
-                .row("report", result.report_path.clone())
-                .row("dropped", display_list(&result.dropped_patches))
-                .row("paths changed", display_list(&result.path_changed_patches)),
-        ),
+        CommandResult::PatchRemove(result)
+        | CommandResult::PatchDisable(result)
+        | CommandResult::PatchEnable(result) => document.fields(patch_transition_fields(result)),
+        CommandResult::ContractEdit(result) => document.fields(contract_edit_fields(result)),
+        CommandResult::Rebase(result) => document.fields(rebase_fields(result)),
         CommandResult::Publish(result) => append_publish(document, result),
         CommandResult::OperationStatus(result) => append_operation(document, result),
         CommandResult::OperationContinue(result) => document.fields(
@@ -193,77 +179,83 @@ fn append_mutation_result(document: Document, result: &CommandResult) -> Documen
                 .row("operation", result.operation_id.clone())
                 .row("restored tip", result.restored_tip.clone()),
         ),
-        CommandResult::Plan(result) => document.fields(
-            Fields::new()
-                .row("command", result.command.clone())
-                .row("reads", display_list(&result.reads))
-                .row("writes", display_list(&result.writes))
-                .row("hooks", display_list(&result.hooks))
-                .row("ref updates", display_list(&result.ref_updates))
-                .row("paths", display_list(&result.paths))
-                .row(
-                    "confirmation",
-                    if result.requires_confirmation {
-                        "required"
-                    } else {
-                        "not required"
-                    },
-                ),
-        ),
-        _ => unreachable!("read-only results handled before mutation results"),
+        CommandResult::Plan(result) => document.fields(plan_fields(result)),
     }
 }
 
-fn append_patch_mutation(document: Document, result: &CommandResult) -> Document {
-    match result {
-        CommandResult::PatchCreate(result) => document
-            .fields(Fields::new().row("active patch", result.active_patch.name().to_string())),
-        CommandResult::PatchSelect(result) => document.fields(
-            Fields::new()
-                .row(
-                    "previous",
-                    result
-                        .previous
-                        .as_ref()
-                        .map_or_else(|| "none".into(), |value| value.name().to_string()),
-                )
-                .row("active patch", result.active_patch.name().to_string()),
-        ),
-        CommandResult::PatchEdit(result) => document.fields(
-            Fields::new()
-                .row("patch", result.patch.name.clone())
-                .row("old commit", result.old_commit.clone())
-                .row("new commit", result.new_commit.clone())
-                .row("generated", display_list(&result.generated_paths)),
-        ),
-        CommandResult::PatchRefresh(result) => document.fields(
-            Fields::new()
-                .row("patch", result.patch.clone())
-                .row("captured", display_list(&result.captured_paths))
-                .row(
-                    "old commit",
-                    result.old_commit.clone().unwrap_or_else(|| "draft".into()),
-                )
-                .row("new commit", result.new_commit.clone())
-                .row("generated", display_list(&result.generated_paths)),
-        ),
-        CommandResult::PatchFinish(result) => document.fields(
-            Fields::new()
-                .row("patch", result.patch.clone())
-                .row("check", "passed"),
-        ),
-        CommandResult::PatchRemove(result)
-        | CommandResult::PatchDisable(result)
-        | CommandResult::PatchEnable(result) => document.fields(
-            Fields::new()
-                .row("patch", result.patch.clone())
-                .row("former commit", result.commit.clone())
-                .row("new tip", result.new_tip.clone())
-                .row("recovery", result.recovery_tag.clone())
-                .row("check", "passed"),
-        ),
-        _ => unreachable!("non-patch result passed to patch presenter"),
-    }
+fn patch_select_fields(result: &PatchSelectResult) -> Fields {
+    Fields::new()
+        .row(
+            "previous",
+            result
+                .previous
+                .as_ref()
+                .map_or_else(|| "none".into(), |value| value.name().to_string()),
+        )
+        .row("active patch", result.active_patch.name().to_string())
+}
+
+fn patch_refresh_fields(result: &PatchRefreshResult) -> Fields {
+    Fields::new()
+        .row("patch", result.patch.clone())
+        .row("captured", display_list(&result.captured_paths))
+        .row(
+            "old commit",
+            result.old_commit.clone().unwrap_or_else(|| "draft".into()),
+        )
+        .row("new commit", result.new_commit.clone())
+        .row("generated", display_list(&result.generated_paths))
+}
+
+fn patch_transition_fields(result: &PatchTransitionResult) -> Fields {
+    Fields::new()
+        .row("patch", result.patch.clone())
+        .row("former commit", result.commit.clone())
+        .row("new tip", result.new_tip.clone())
+        .row("recovery", result.recovery_tag.clone())
+        .row("check", "passed")
+}
+
+fn contract_edit_fields(result: &ContractEditResult) -> Fields {
+    Fields::new()
+        .row(
+            "allowed base globs",
+            result.contracts.allow_base.len().to_string(),
+        )
+        .row(
+            "required text assertions",
+            result.contracts.required_text.len().to_string(),
+        )
+        .row("check", "passed")
+}
+
+fn rebase_fields(result: &RebaseResult) -> Fields {
+    Fields::new()
+        .row("target", result.selected_target.clone())
+        .row("old tip", result.old_tip.clone())
+        .row("new tip", result.new_tip.clone())
+        .row("recovery", result.recovery_tag.clone())
+        .row("report", result.report_path.clone())
+        .row("dropped", display_list(&result.dropped_patches))
+        .row("paths changed", display_list(&result.path_changed_patches))
+}
+
+fn plan_fields(result: &MutationPlan) -> Fields {
+    Fields::new()
+        .row("command", result.command.clone())
+        .row("reads", display_list(&result.reads))
+        .row("writes", display_list(&result.writes))
+        .row("hooks", display_list(&result.hooks))
+        .row("ref updates", display_list(&result.ref_updates))
+        .row("paths", display_list(&result.paths))
+        .row(
+            "confirmation",
+            if result.requires_confirmation {
+                "required"
+            } else {
+                "not required"
+            },
+        )
 }
 
 fn append_publish(document: Document, result: &crate::protocol::PublishResult) -> Document {

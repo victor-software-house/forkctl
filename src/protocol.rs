@@ -742,9 +742,9 @@ impl ApiResponse {
     }
 }
 
-pub fn schema_document(kind: SchemaKind) -> serde_json::Value {
+pub fn schema_document(kind: SchemaKind) -> serde_json::Result<serde_json::Value> {
     match kind {
-        SchemaKind::Bundle => serde_json::json!({
+        SchemaKind::Bundle => Ok(serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "forkctl_protocol_version": PROTOCOL_VERSION,
             "schemas": {
@@ -754,18 +754,12 @@ pub fn schema_document(kind: SchemaKind) -> serde_json::Value {
                 "active_state": schemars::schema_for!(ActivePatchState),
                 "operation": schemars::schema_for!(OperationState),
             }
-        }),
-        SchemaKind::Manifest => serde_json::to_value(schemars::schema_for!(Manifest)).unwrap(),
-        SchemaKind::Invocation => {
-            serde_json::to_value(schemars::schema_for!(ApiInvocation)).unwrap()
-        }
-        SchemaKind::Response => serde_json::to_value(schemars::schema_for!(ApiResponse)).unwrap(),
-        SchemaKind::ActiveState => {
-            serde_json::to_value(schemars::schema_for!(ActivePatchState)).unwrap()
-        }
-        SchemaKind::Operation => {
-            serde_json::to_value(schemars::schema_for!(OperationState)).unwrap()
-        }
+        })),
+        SchemaKind::Manifest => serde_json::to_value(schemars::schema_for!(Manifest)),
+        SchemaKind::Invocation => serde_json::to_value(schemars::schema_for!(ApiInvocation)),
+        SchemaKind::Response => serde_json::to_value(schemars::schema_for!(ApiResponse)),
+        SchemaKind::ActiveState => serde_json::to_value(schemars::schema_for!(ActivePatchState)),
+        SchemaKind::Operation => serde_json::to_value(schemars::schema_for!(OperationState)),
     }
 }
 

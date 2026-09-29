@@ -32,6 +32,8 @@ Use current stable pinned releases. Add a crate only when it removes more duplic
 
 Malformed manifests, dirty clean-only operations, scope drift, patch drift, history drift, operation drift, stale leases, and remote policy failures are typed errors. Never print success after a failed prerequisite.
 
+Production code never panics. Both binaries deny `unwrap`, `expect`, `panic!`, `unreachable!`, `todo!`, and `unimplemented!` outside tests; express an invariant with an exhaustive match or a typed error instead.
+
 Failing closed must never disable recovery. When an operation journal exists, operation-scoped commands resolve declared state from the Git-private snapshot rather than refusing to run because tracked files are mid-conflict.
 
 ### 3.2 Atomic state

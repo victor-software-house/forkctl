@@ -183,12 +183,12 @@ impl App {
             return Err(DomainError::operation_in_progress(&operation).into());
         }
         let (name, mut patch) = self.resolve_patch(args.patch.as_deref())?;
-        if self.manifest()?.patch(&name).is_none() {
+        let Some(old_kind) = self.manifest()?.patch(&name).map(|patch| patch.kind) else {
             return Err(DomainError::invalid_request(
                 "draft metadata is edited by recreating the draft",
             )
             .into());
-        }
+        };
         let old_commit = self.patch_commit(&name)?;
         if let Some(kind) = args.kind {
             patch.kind = kind;
@@ -222,7 +222,6 @@ impl App {
         patch
             .validate()
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
-        let old_kind = self.manifest()?.patch(&name).expect("patch exists").kind;
         let proposed = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let plan = MutationPlan {
             command: "patch.edit".into(),
