@@ -19,6 +19,7 @@ const FORKCTL_TOOL_MARKER: &str = "\"github:victor-software-house/forkctl\" = \"
 const FORKCTL_REF_MARKER: &str = "forkctl.git//tasks/fork?ref=v";
 const MIN_MISE_MARKER: &str = "min_version = \"";
 const RUST_TOOL_MARKER: &str = "rust = \"";
+const RUST_ENTRY_MARKER: &str = "rust = { version = \"";
 const STGIT_TOOL_MARKER: &str = "\"cargo:stgit\" = { version = \"";
 const NEXTEST_TOOL_MARKER: &str = "\"github:nextest-rs/nextest\" = \"";
 const LEFTHOOK_TOOL_MARKER: &str = "lefthook = \"";
@@ -90,7 +91,7 @@ fn read_tool_versions(path: &Path) -> Result<ToolVersions, String> {
         fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
     Ok(ToolVersions {
         minimum_mise: read_value(&contents, MIN_MISE_MARKER)?,
-        rust: read_value(&contents, RUST_TOOL_MARKER)?,
+        rust: read_value(&contents, RUST_ENTRY_MARKER)?,
         stgit: read_value(&contents, STGIT_TOOL_MARKER)?,
         nextest: read_value(&contents, NEXTEST_TOOL_MARKER)?,
         lefthook: read_value(&contents, LEFTHOOK_TOOL_MARKER)?,
