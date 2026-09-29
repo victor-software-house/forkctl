@@ -35,20 +35,6 @@ queue:
       - >2-
         The three form one stack: 24 is based on 23, and 23 on 22. All were opened 2026-08-06 and have not been rebased since the ctl-core 0.6 adoption.
 
-  - id: FRK-007
-    title: Remove production panic paths
-    scope: backlog
-    outcome: Production code reports failures as errors instead of panicking.
-    blocked_by:
-      - FRK-006
-    acceptance:
-      - No unwrap, expect, panic!, or unreachable! call remains outside test code.
-      - Clippy denies those calls outside tests.
-    links:
-      - https://github.com/victor-software-house/forkctl/pull/24
-    notes:
-      - At 0.0.27 about ten such calls remain, in protocol.rs, presentation.rs, update.rs, manifest.rs and app/patch.rs. Pull request 24 targets them.
-
   - id: FRK-008
     title: Decide the mark-candidates archive pull request
     scope: backlog
@@ -70,6 +56,20 @@ horizon:
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
 archive:
+  - id: FRK-007
+    title: Remove production panic paths
+    scope: backlog
+    outcome: Production code reports failures as errors instead of panicking.
+    links:
+      - https://github.com/victor-software-house/forkctl/pull/24
+    notes:
+      - At 0.0.27 about ten such calls remain, in protocol.rs, presentation.rs, update.rs, manifest.rs and app/patch.rs. Pull request 24 targets them.
+      - Implemented on the stack without the AppError refactor of pull request 23; whether to rework or close 23 and 24 stays with FRK-006.
+    completed: 2026-09-28T23:47:58
+    evidence:
+      - cfb0ad5c685e6f51c99ea585569ae2c4adfe5770
+    disposition: completed
+
   - id: FRK-005
     title: Bootstrap before the downstream branch exists
     scope: init
