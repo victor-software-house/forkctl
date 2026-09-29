@@ -219,6 +219,8 @@ fn snapshot(repo: &Path) -> RepoSnapshot {
     snapshot_files(repo, repo, Some(".git"), &mut worktree);
     let mut git_metadata = Vec::new();
     snapshot_files(&git_dir, &git_dir, Some("objects"), &mut git_metadata);
+    // git status may rewrite the index to refresh stat data; index_tree covers its content.
+    git_metadata.retain(|(path, _)| path != "index");
     RepoSnapshot {
         head: capture_ok_bytes(repo, "git", &["rev-parse", "HEAD"]),
         index_tree: capture_ok_bytes(repo, "git", &["write-tree"]),
