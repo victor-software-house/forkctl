@@ -20,33 +20,6 @@ queue:
       - Releases up to 0.0.27 ship only forkctl_<version>_macos_arm64.tar.gz. qctl already publishes a linux_x64 tarball and can serve as the model.
       - release-linux.yml attaches a static musl Linux x64 asset to each published release. The row closes when a published release shows the asset and the mounted fork task runs on ubuntu-latest.
 
-  - id: FRK-006
-    title: Decide the hardening pull-request stack
-    scope: backlog
-    outcome: Pull requests 22, 23 and 24 are each merged after a rebase, reworked, or closed.
-    blocked_by: []
-    acceptance:
-      - None of pull requests 22, 23 or 24 is open.
-    links:
-      - https://github.com/victor-software-house/forkctl/pull/22
-      - https://github.com/victor-software-house/forkctl/pull/23
-      - https://github.com/victor-software-house/forkctl/pull/24
-    notes:
-      - >2-
-        The three form one stack: 24 is based on 23, and 23 on 22. All were opened 2026-08-06 and have not been rebased since the ctl-core 0.6 adoption.
-
-  - id: FRK-008
-    title: Decide the mark-candidates archive pull request
-    scope: backlog
-    outcome: Pull request 33 is merged after a rebase, reworked, or closed.
-    blocked_by: []
-    acceptance:
-      - Pull request 33 is not open.
-    links:
-      - https://github.com/victor-software-house/forkctl/pull/33
-    notes:
-      - Opened 2026-08-22 and untouched since.
-
   - id: FRK-011
     title: Build and publish every release asset on GitHub-hosted runners
     scope: release
@@ -86,6 +59,35 @@ horizon:
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
 archive:
+  - id: FRK-008
+    title: Decide the mark-candidates archive pull request
+    scope: backlog
+    outcome: Pull request 33 is merged after a rebase, reworked, or closed.
+    links:
+      - https://github.com/victor-software-house/forkctl/pull/33
+    notes:
+      - Opened 2026-08-22 and untouched since.
+    completed: 2026-09-29T02:12:24
+    evidence:
+      - Pull request 33 closed without merging on 2026-09-29; the shipped mark assets stay as they are.
+    disposition: dropped
+
+  - id: FRK-006
+    title: Decide the hardening pull-request stack
+    scope: backlog
+    outcome: Pull requests 22, 23 and 24 are each merged after a rebase, reworked, or closed.
+    links:
+      - https://github.com/victor-software-house/forkctl/pull/22
+      - https://github.com/victor-software-house/forkctl/pull/23
+      - https://github.com/victor-software-house/forkctl/pull/24
+    notes:
+      - >2-
+        The three form one stack: 24 is based on 23, and 23 on 22. All were opened 2026-08-06 and have not been rebased since the ctl-core 0.6 adoption.
+    completed: 2026-09-29T02:09:26
+    evidence:
+      - 51c101c6e5f2dad7ac495b14da3f0228d31c0ddd
+    disposition: completed
+
   - id: FRK-010
     title: Promote only pushed proposals
     scope: publish
