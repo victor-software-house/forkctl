@@ -18,6 +18,7 @@ queue:
     notes:
       - The operator chose a Linux release so that a downstream fork can run its daily rebase proposal on a Linux CI runner.
       - Releases up to 0.0.27 ship only forkctl_<version>_macos_arm64.tar.gz. qctl already publishes a linux_x64 tarball and can serve as the model.
+      - release-linux.yml attaches a static musl Linux x64 asset to each published release. The row closes when a published release shows the asset and the mounted fork task runs on ubuntu-latest.
 
   - id: FRK-004
     title: Bootstrap with the file that mounts the fork task
