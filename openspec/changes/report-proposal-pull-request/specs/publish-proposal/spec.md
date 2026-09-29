@@ -11,8 +11,10 @@ for the current stack and keeps that branch current across repeated proposals.
 
 Every `gh` call made by `publish --propose` SHALL pass `--repo` with the host,
 owner, and name parsed from the configured URL of the downstream remote. When
-that URL is not an `https://`, `ssh://`, or scp-style URL with an owner and a
-repository name, `publish --propose` SHALL fail before it pushes.
+that URL is not an `https://`, `http://`, `ssh://`, or scp-style URL with an
+owner and a repository name, `publish --propose` SHALL fail before it pushes.
+The host SHALL carry no port, and the error SHALL carry no user information
+from the URL.
 
 #### Scenario: Fork clone with an upstream remote
 
@@ -26,6 +28,14 @@ repository name, `publish --propose` SHALL fail before it pushes.
 - **WHEN** the downstream remote URL is a local path such as `/srv/git/fork.git`
 - **THEN** `forkctl publish --propose` fails with `invalid_request`
 - **AND** the remote has no `refs/heads/forkctl/proposal/main`
+
+#### Scenario: Remote URL with a token
+
+- **WHEN** the downstream remote URL is
+  `https://user:token@gitlab.example.com/group/sub/repo.git`
+- **THEN** `forkctl publish --propose` fails with `invalid_request`
+- **AND** the error message contains `https://gitlab.example.com/group/sub/repo.git`
+  and not `token`
 
 ### Requirement: Pull-request access is checked before the push
 
@@ -65,9 +75,11 @@ the error SHALL be retryable and suggest `forkctl publish --propose`.
 
 ### Requirement: An open proposal pull request is reused
 
-When a pull request from the proposal branch into the downstream branch is
-open, `publish --propose` SHALL update its title and body, create no other
-pull request, and report its URL as `proposal_url`.
+When a pull request from the proposal branch of the downstream repository into
+the downstream branch is open, `publish --propose` SHALL update its title and
+body. A pull request from a branch of the same name in another repository SHALL
+not be reused. Forkctl SHALL create no other pull request and SHALL report the
+reused pull request's URL as `proposal_url`.
 
 #### Scenario: Second proposal with an open pull request
 
@@ -76,6 +88,12 @@ pull request, and report its URL as `proposal_url`.
 - **THEN** forkctl runs `gh pr edit` on that pull request and never
   `gh pr create`
 - **AND** `result.proposal_url` is that pull request's URL
+
+#### Scenario: Same branch name in another repository
+
+- **WHEN** the only open pull request with head `forkctl/proposal/main` comes from
+  another repository
+- **THEN** `forkctl publish --propose` runs `gh pr create` for its own branch
 
 ### Requirement: The pull request describes the candidate
 

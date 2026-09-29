@@ -284,7 +284,8 @@ impl App {
         )?;
         proposal::github_repo(&url).ok_or_else(|| {
             DomainError::invalid_request(format!(
-                "downstream remote {remote} URL {url} names no GitHub repository; publish --propose opens its pull request there"
+                "downstream remote {remote} URL {} names no GitHub repository; publish --propose opens its pull request there",
+                proposal::redact_userinfo(&url)
             ))
             .into()
         })
@@ -315,10 +316,11 @@ impl App {
             branch,
             "--state",
             "open",
+            // `--head` matches a branch name in any fork; reuse only this repository's branch.
             "--json",
-            "url",
+            "url,isCrossRepository",
             "--jq",
-            ".[0].url // empty",
+            "map(select(.isCrossRepository | not)) | .[0].url // empty",
         ])?;
         Ok((!url.is_empty()).then_some(url))
     }

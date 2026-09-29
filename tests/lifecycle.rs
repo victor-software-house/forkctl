@@ -2315,6 +2315,10 @@ fn publish_propose_updates_the_open_proposal_then_promotes() {
     let calls = stub.calls();
     assert_eq!(calls.len(), 2, "{calls:?}");
     assert!(calls[0].starts_with("pr\nlist\n"), "{calls:?}");
+    assert!(
+        calls[0].contains("map(select(.isCrossRepository | not))"),
+        "{calls:?}"
+    );
     let create = &calls[1];
     assert!(create.starts_with("pr\ncreate\n"), "{create}");
     assert!(create.contains("\n--draft\n"), "{create}");
@@ -2494,6 +2498,28 @@ fn publish_propose_refuses_a_remote_that_names_no_github_repository() {
     let output = json_output(&output);
     assert_eq!(output["error"]["code"], "invalid_request", "{output}");
     assert_eq!(remote_proposal_tip(&fixture), None);
+
+    let token_url = "https://user:token@gitlab.example.com/group/sub/repo.git";
+    let bare = fixture.repo.parent().unwrap().join("downstream.git");
+    git_ok_dynamic(
+        &fixture.repo,
+        &[
+            "config",
+            &format!("url.{}.insteadOf", bare.display()),
+            token_url,
+        ],
+    );
+    git_ok_dynamic(&fixture.repo, &["remote", "set-url", "origin", token_url]);
+    let output = fixture.forkctl(&["--format", "json", "publish", "--propose"]);
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["code"], "invalid_request", "{output}");
+    let message = output["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("https://gitlab.example.com/group/sub/repo.git"),
+        "{message}"
+    );
+    assert!(!output.to_string().contains("token"), "{output}");
 }
 
 #[test]

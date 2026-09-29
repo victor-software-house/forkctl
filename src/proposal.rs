@@ -68,14 +68,11 @@ pub fn github_repo(url: &str) -> Option<String> {
         let host = authority
             .rsplit_once('@')
             .map_or(authority, |(_, host)| host);
-        let host = if scheme == "ssh" {
-            host.split_once(':').map_or(host, |(host, _)| host)
-        } else if matches!(scheme, "https" | "http") {
-            host
-        } else {
+        if !matches!(scheme, "ssh" | "https" | "http") {
             return None;
-        };
-        (host, path)
+        }
+        // `gh` knows a host by name, never by port.
+        (host.split_once(':').map_or(host, |(host, _)| host), path)
     } else {
         let (authority, path) = url.split_once(':')?;
         if authority.contains('/') {
@@ -93,13 +90,64 @@ pub fn github_repo(url: &str) -> Option<String> {
         .then(|| format!("{host}/{owner}/{repo}"))
 }
 
+/// The URL without the user information of a `scheme://` authority, which can carry a token.
+pub fn redact_userinfo(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return url.to_string();
+    };
+    let (authority, path) = rest
+        .split_once('/')
+        .map_or((rest, None), |(authority, path)| (authority, Some(path)));
+    let Some((_, host)) = authority.rsplit_once('@') else {
+        return url.to_string();
+    };
+    match path {
+        Some(path) => format!("{scheme}://{host}/{path}"),
+        None => format!("{scheme}://{host}"),
+    }
+}
+
 fn escape_inline(value: &str) -> String {
     value.replace('\\', "\\\\").replace('`', "\\`")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::github_repo;
+    use super::{github_repo, redact_userinfo};
+
+    #[test]
+    fn strips_ports_for_every_scheme() {
+        for url in [
+            "https://ghe.example.com:8443/example/downstream.git",
+            "http://ghe.example.com:8080/example/downstream",
+            "ssh://git@ghe.example.com:2222/example/downstream.git",
+        ] {
+            assert_eq!(
+                github_repo(url).as_deref(),
+                Some("ghe.example.com/example/downstream"),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn redacts_user_information_only() {
+        assert_eq!(
+            redact_userinfo("https://user:token@gitlab.example.com/group/sub/repo.git"),
+            "https://gitlab.example.com/group/sub/repo.git"
+        );
+        assert_eq!(
+            redact_userinfo("https://token@example.com"),
+            "https://example.com"
+        );
+        for url in [
+            "https://github.com/example/downstream.git",
+            "git@github.com:example/downstream.git",
+            "/srv/git/fork.git",
+        ] {
+            assert_eq!(redact_userinfo(url), url);
+        }
+    }
 
     #[test]
     fn parses_github_remote_forms() {
