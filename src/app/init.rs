@@ -1,4 +1,4 @@
-use super::{App, resolve_target};
+use super::{App, fetch_upstream, resolve_target, upstream_tracking_ref};
 use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{
     Base, Contracts, Documents, Downstream, Manifest, Patch, PatchKind, Upstream,
@@ -117,7 +117,7 @@ impl App {
             checks: Vec::new(),
             scope,
         };
-        let manifest = Manifest {
+        let mut manifest = Manifest {
             schema: 1,
             downstream: Downstream {
                 remote: downstream_remote,
@@ -148,6 +148,22 @@ impl App {
         manifest
             .validate(&self.repo, &self.manifest_path)
             .internal("validate bootstrapped manifest")?;
+        // A release tag may sit off the upstream branch. Canonical is where the base meets that
+        // branch, as rebase records it, and the tag's own commits are drift that allow_base must
+        // cover. Both are settled before anything is pushed or written.
+        fetch_upstream(&self.repo, &manifest.upstream, true)?;
+        let upstream_tracking = upstream_tracking_ref(&manifest.upstream)?;
+        manifest.base.canonical = capture(
+            &self.repo,
+            "git",
+            ["merge-base", &target.commit, &upstream_tracking],
+        )?;
+        self.check_allowed_diff(
+            &manifest.base.canonical,
+            &target.commit,
+            &manifest.contracts.allow_base,
+            "pre-stack drift",
+        )?;
         let downstream_tracking = format!(
             "{}/{}",
             manifest.downstream.remote, manifest.downstream.branch

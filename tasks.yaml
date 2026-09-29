@@ -20,6 +20,18 @@ queue:
       - Releases up to 0.0.27 ship only forkctl_<version>_macos_arm64.tar.gz. qctl already publishes a linux_x64 tarball and can serve as the model.
       - release-linux.yml attaches a static musl Linux x64 asset to each published release. The row closes when a published release shows the asset and the mounted fork task runs on ubuntu-latest.
 
+  - id: FRK-014
+    title: Bootstrap on a release tag outside the upstream branch
+    scope: init
+    outcome: init bootstraps a downstream on an upstream release tag that no upstream branch contains, and rebase moves it to the next such tag.
+    blocked_by: []
+    acceptance:
+      - A lifecycle test bootstraps on an off-branch tag, refuses unallowed drift before any mutation, and rebases onto the next off-branch tag.
+    plan: openspec/changes/init-off-branch-tag-base/proposal.md
+    notes:
+      - >2-
+        Reported from a private downstream whose upstream tags each release on a version-bump commit off main: init recorded the tag commit as canonical, then every check failed with a merge-base mismatch.
+
   - id: FRK-011
     title: Build and publish every release asset on GitHub-hosted runners
     scope: release

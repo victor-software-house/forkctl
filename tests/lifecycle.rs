@@ -2580,6 +2580,81 @@ fn publish_propose_dry_run_makes_no_gh_calls() {
 }
 
 #[test]
+fn bootstrap_and_rebase_accept_an_off_branch_release_tag() {
+    let fixture = Fixture::fresh_upstream_clone();
+    let upstream_work = fixture.repo.parent().unwrap().join("upstream-work");
+    let branch_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    let first_release = tag_off_branch_release(&upstream_work, "v1.0.0");
+    git_ok(
+        &fixture.repo,
+        ["fetch", "--quiet", "upstream", "tag", "v1.0.0"],
+    );
+    git_ok(&fixture.repo, ["reset", "--quiet", "--hard", "v1.0.0"]);
+    // A clone that never fetched the upstream branch still bootstraps.
+    git_ok(
+        &fixture.repo,
+        ["update-ref", "-d", "refs/remotes/upstream/main"],
+    );
+    let args = fixture.bootstrap_args();
+    let base = args.iter().position(|arg| arg == "--base").unwrap() + 1;
+    let mut args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    args[base] = "refs/tags/v1.0.0";
+
+    // The release commit is drift below the stack, and nothing is written until it is allowed.
+    let refused = fixture.forkctl(&[&["--format", "json"], args.as_slice()].concat());
+    assert!(!refused.status.success());
+    let refused = json_output(&refused);
+    assert_eq!(refused["error"]["code"], "check_failed", "{refused}");
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("pre-stack drift is outside scope: VERSION"),
+        "{refused}"
+    );
+    assert!(!fixture.repo.join("patches/fork.yaml").exists());
+    assert!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]).is_empty()
+    );
+
+    args.extend(["--allow-base", "VERSION"]);
+    fixture.forkctl_ok(&args);
+    let check = fixture.forkctl_ok(&["--format", "json", "check"]);
+    let check: serde_json::Value = serde_json::from_str(&check).unwrap();
+    assert_eq!(check["result"]["canonical_base"], branch_tip, "{check}");
+    assert_eq!(check["result"]["stack_base"], first_release, "{check}");
+
+    git_ok(&upstream_work, ["checkout", "--quiet", "main"]);
+    fs::write(upstream_work.join("upstream.txt"), "upstream\n").unwrap();
+    git_ok(&upstream_work, ["add", "upstream.txt"]);
+    git_ok(&upstream_work, ["commit", "--quiet", "-m", "upstream work"]);
+    git_ok(&upstream_work, ["push", "--quiet", "origin", "main"]);
+    let next_branch_tip = git_capture(&upstream_work, ["rev-parse", "HEAD"]);
+    let next_release = tag_off_branch_release(&upstream_work, "v1.1.0");
+
+    fixture.forkctl_ok(&["rebase", "--onto", "refs/tags/v1.1.0"]);
+    let check = fixture.forkctl_ok(&["--format", "json", "check"]);
+    let check: serde_json::Value = serde_json::from_str(&check).unwrap();
+    assert_eq!(
+        check["result"]["canonical_base"], next_branch_tip,
+        "{check}"
+    );
+    assert_eq!(check["result"]["stack_base"], next_release, "{check}");
+}
+
+/// Commits a version bump on a detached head above upstream main and pushes only its tag,
+/// the way a release tag sits off the branch it was cut from.
+fn tag_off_branch_release(upstream_work: &std::path::Path, tag: &str) -> String {
+    git_ok(upstream_work, ["checkout", "--quiet", "--detach", "main"]);
+    fs::write(upstream_work.join("VERSION"), format!("{tag}\n")).unwrap();
+    git_ok(upstream_work, ["add", "VERSION"]);
+    git_ok(upstream_work, ["commit", "--quiet", "-m", "release"]);
+    git_ok(upstream_work, ["tag", "--annotate", tag, "-m", tag]);
+    git_ok(upstream_work, ["push", "--quiet", "origin", tag]);
+    git_capture(upstream_work, ["rev-parse", "HEAD"])
+}
+
+#[test]
 fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
     let fixture = Fixture::fresh_upstream_clone();
     let base = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
