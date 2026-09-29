@@ -177,13 +177,16 @@ impl App {
     }
 
     pub(super) fn worktree_inventory(&self) -> Result<WorktreeInventory> {
-        let output = capture(
+        // Not `capture`: trimming would eat the leading space of an unstaged-only first entry.
+        let status = output(
             &self.repo,
             "git",
             ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
         )?;
+        let status =
+            String::from_utf8(status.stdout).internal("decode git status output as UTF-8")?;
         let mut inventory = WorktreeInventory::default();
-        let mut fields = output.split('\0').filter(|entry| !entry.is_empty());
+        let mut fields = status.split('\0').filter(|entry| !entry.is_empty());
         while let Some(entry) = fields.next() {
             if entry.len() < 4 {
                 continue;

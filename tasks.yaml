@@ -59,6 +59,17 @@ horizon:
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
 archive:
+  - id: FRK-013
+    title: Read worktree status without trimming
+    scope: check
+    outcome: The worktree inventory keeps the first status entry intact, so an unstaged-only change is reported under its full path and classified as unstaged.
+    notes:
+      - capture trims its output, and a porcelain -z entry for an unstaged-only change starts with a space, so the first entry lost its first character and its X column.
+    completed: 2026-09-29T09:57:52
+    evidence:
+      - 0ddb2621b409570769cd3e41d2d7791539453c61
+    disposition: completed
+
   - id: FRK-008
     title: Decide the mark-candidates archive pull request
     scope: backlog
