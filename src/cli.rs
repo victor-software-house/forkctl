@@ -351,7 +351,7 @@ pub struct PublishCliArgs {
     /// Keep the previous tip as an ancestor and fast-forward.
     #[arg(long, group = "publish_mode", help_heading = "Mode")]
     pub append: bool,
-    /// Push a net-tree proposal branch and open a PR when `gh` is available.
+    /// Push a leased net-tree proposal branch and open or update its draft PR with `gh`.
     #[arg(long, group = "publish_mode", help_heading = "Mode")]
     pub propose: bool,
     /// Promote an exact proposal to the downstream branch.

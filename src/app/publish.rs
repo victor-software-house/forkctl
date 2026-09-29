@@ -2,6 +2,7 @@ use super::{App, recovery_id};
 use crate::error::DomainError;
 use crate::manifest::{PublishMode, RecoveryEvidence};
 use crate::process::{capture, run, run_operator, succeeds};
+use crate::proposal::{self, ProposalText};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishArgs, PublishResult};
 use anyhow::{Context, Result, ensure};
 
@@ -209,6 +210,11 @@ impl App {
                 requires_confirmation: false,
             }));
         }
+        let remote = self.manifest()?.downstream.remote.clone();
+        let branch = self.manifest()?.downstream.branch.clone();
+        // Every pull-request failure that needs no push is caught here, before the push.
+        let github_repo = self.downstream_github_repo(&remote)?;
+        let open_pull_request = self.open_proposal_pr(&github_repo, &proposal_branch, &branch)?;
         let tree = capture(&self.repo, "git", ["rev-parse", "HEAD^{tree}"])?;
         let review = capture(
             &self.repo,
@@ -224,20 +230,40 @@ impl App {
         )?;
         let local_ref = format!("refs/heads/{proposal_branch}");
         run(&self.repo, "git", ["update-ref", &local_ref, &review])?;
-        let remote = self.manifest()?.downstream.remote.clone();
+        // Each proposal is a new commit on the downstream tip, so an update replaces the
+        // previous proposal. The lease names the tip read here; an empty lease requires absence.
+        let proposal_tip = self.remote_ref_sha_if_present(&remote, &local_ref)?;
         run_operator(
             &self.repo,
             "git",
             [
                 "push",
                 "--progress",
+                &format!(
+                    "--force-with-lease={local_ref}:{}",
+                    proposal_tip.unwrap_or_default()
+                ),
                 &remote,
                 &format!("{local_ref}:{local_ref}"),
             ],
         )?;
-        let proposal_url = self.open_proposal_pr(&proposal_branch).ok().flatten();
+        let text = proposal::render(self.manifest()?, &publication.head, &publication.remote_sha)?;
+        let proposal_url = self
+            .write_proposal_pr(
+                &github_repo,
+                open_pull_request,
+                &proposal_branch,
+                &branch,
+                &text,
+            )
+            .map_err(|error| match error.downcast::<DomainError>() {
+                Ok(domain) => domain.after_proposal_push(&proposal_branch).into(),
+                Err(error) => {
+                    error.context(format!("proposal branch {proposal_branch} was pushed"))
+                }
+            })?;
         Ok(CommandResult::Publish(PublishResult {
-            branch: self.manifest()?.downstream.branch.clone(),
+            branch,
             head: review,
             already_published: false,
             fast_forward: false,
@@ -246,38 +272,110 @@ impl App {
             pushed_refs: vec![format!("{local_ref}:{local_ref}")],
             expected_lease: publication.remote_sha,
             proposal_branch: Some(proposal_branch),
-            proposal_url,
+            proposal_url: Some(proposal_url),
         }))
     }
 
-    fn open_proposal_pr(&self, proposal_branch: &str) -> Result<Option<String>> {
-        let base = self.manifest()?.downstream.branch.clone();
-        let output = std::process::Command::new("gh")
-            .args([
-                "pr",
-                "create",
-                "--draft",
-                "--base",
-                &base,
-                "--head",
-                proposal_branch,
-                "--title",
-                "forkctl: proposal of net tree",
-                "--body",
-                "Exact candidate is the current stack tip. Promote with `mise run fork publish --promote`.",
-            ])
-            .current_dir(&self.repo)
-            .output()?;
-        if !output.status.success() {
-            return Ok(None);
-        }
-        let url = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .find(|line| line.starts_with("http"))
-            .unwrap_or("")
-            .trim()
-            .to_string();
+    fn downstream_github_repo(&self, remote: &str) -> Result<String> {
+        let url = capture(
+            &self.repo,
+            "git",
+            ["config", "--get", &format!("remote.{remote}.url")],
+        )?;
+        proposal::github_repo(&url).ok_or_else(|| {
+            DomainError::invalid_request(format!(
+                "downstream remote {remote} URL {url} names no GitHub repository; publish --propose opens its pull request there"
+            ))
+            .into()
+        })
+    }
+
+    fn remote_ref_sha_if_present(&self, remote: &str, git_ref: &str) -> Result<Option<String>> {
+        let output = capture(&self.repo, "git", ["ls-remote", remote, git_ref])?;
+        Ok(output.lines().find_map(|line| {
+            let (sha, name) = line.split_once(char::is_whitespace)?;
+            (name.trim() == git_ref).then(|| sha.to_string())
+        }))
+    }
+
+    fn open_proposal_pr(
+        &self,
+        github_repo: &str,
+        proposal_branch: &str,
+        branch: &str,
+    ) -> Result<Option<String>> {
+        let url = self.gh(&[
+            "pr",
+            "list",
+            "--repo",
+            github_repo,
+            "--head",
+            proposal_branch,
+            "--base",
+            branch,
+            "--state",
+            "open",
+            "--json",
+            "url",
+            "--jq",
+            ".[0].url // empty",
+        ])?;
         Ok((!url.is_empty()).then_some(url))
+    }
+
+    fn write_proposal_pr(
+        &self,
+        github_repo: &str,
+        open_pull_request: Option<String>,
+        proposal_branch: &str,
+        branch: &str,
+        text: &ProposalText,
+    ) -> Result<String> {
+        if let Some(url) = open_pull_request {
+            self.gh(&[
+                "pr",
+                "edit",
+                &url,
+                "--repo",
+                github_repo,
+                "--title",
+                &text.title,
+                "--body",
+                &text.body,
+            ])?;
+            return Ok(url);
+        }
+        let output = self.gh(&[
+            "pr",
+            "create",
+            "--repo",
+            github_repo,
+            "--draft",
+            "--base",
+            branch,
+            "--head",
+            proposal_branch,
+            "--title",
+            &text.title,
+            "--body",
+            &text.body,
+        ])?;
+        output
+            .lines()
+            .map(str::trim)
+            .rfind(|line| line.starts_with("http"))
+            .map(ToOwned::to_owned)
+            .context("gh pr create printed no pull request URL")
+    }
+
+    fn gh(&self, args: &[&str]) -> Result<String> {
+        match capture(&self.repo, "gh", args) {
+            Err(error) if error.downcast_ref::<DomainError>().is_none() => Err(
+                DomainError::program_unavailable("gh", args, &self.repo, &format!("{error:#}"))
+                    .into(),
+            ),
+            result => result,
+        }
     }
 
     fn publish_promote(

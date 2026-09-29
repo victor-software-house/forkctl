@@ -7,6 +7,7 @@ mod manifest;
 mod manifest_codec;
 mod presentation;
 mod process;
+mod proposal;
 mod protocol;
 mod report;
 mod state;

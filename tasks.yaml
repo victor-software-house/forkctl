@@ -5,7 +5,7 @@ prefix: FRK
 style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
-active: null
+active: FRK-001
 queue:
   - id: FRK-001
     title: Update an open proposal in place
@@ -23,6 +23,8 @@ queue:
         Cause: publish_propose in src/app/publish.rs builds each proposal as git commit-tree on the remote downstream tip and pushes it with a plain git push and no lease, so the new commit never descends from the existing proposal tip.
       - >2-
         Candidate designs: parent the new proposal commit on the current remote proposal tip, or push with --force-with-lease on the proposal ref. The OpenSpec change picks one.
+      - The operator chose the lease rewrite on 2026-09-28.
+    plan: openspec/changes/update-open-proposal/proposal.md
 
   - id: FRK-002
     title: Report proposal pull-request failures
@@ -37,6 +39,7 @@ queue:
       - >2-
         open_proposal_pr in src/app/publish.rs discards every gh failure: the caller applies .ok().flatten() and a non-zero exit returns Ok(None). A gh login without access to the repository produced a pushed branch, no pull request, and no notice.
       - The title, body and --draft flag are fixed literals.
+    plan: openspec/changes/report-proposal-pull-request/proposal.md
 
   - id: FRK-003
     title: Publish a Linux release binary
