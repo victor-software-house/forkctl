@@ -204,7 +204,7 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(MutationPlan {
                 command: "publish".into(),
-                reads: vec![publication.head.clone(), publication.remote_sha.clone()],
+                reads: vec![publication.head.clone(), publication.remote_sha],
                 writes: Vec::new(),
                 hooks: vec!["git push of proposal branch".into()],
                 ref_updates: vec![format!("HEAD^{{tree}} -> refs/heads/{proposal_branch}")],

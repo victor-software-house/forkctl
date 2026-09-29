@@ -944,7 +944,7 @@ impl App {
     }
 
     fn finish_patch_transition(
-        &mut self,
+        &self,
         operation: &mut OperationState,
         patch: String,
         commit: String,
