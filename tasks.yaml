@@ -30,6 +30,7 @@ queue:
       - init still refuses changes unrelated to mounting the fork task.
     notes:
       - bootstrap calls require_clean, which counts untracked files, so the mise.toml that provides mise run fork had to be hidden during bootstrap.
+    plan: openspec/changes/capture-bootstrap-configuration/proposal.md
 
   - id: FRK-005
     title: Bootstrap before the downstream branch exists
@@ -44,6 +45,7 @@ queue:
       - >2-
         Two symptoms, one check: init failed with "branch tracks upstream/main, expected origin/main", and patch refresh failed with "no upstream configured for branch main". Both come from require_declared_branch in src/app/mod.rs.
       - The workaround pushed the plain upstream base to the downstream remote first, with Actions disabled so nothing ran, then set tracking by hand.
+    plan: openspec/changes/bootstrap-downstream-tracking/proposal.md
 
   - id: FRK-006
     title: Decide the hardening pull-request stack

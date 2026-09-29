@@ -116,6 +116,7 @@ impl App {
             ))
             .into());
         }
+        // A branch with no upstream is reported like a wrong one, with the command that fixes it.
         let tracking = capture(
             &self.repo,
             "git",
@@ -125,16 +126,16 @@ impl App {
                 "--symbolic-full-name",
                 "@{upstream}",
             ],
-        )?;
+        )
+        .ok();
         let expected = format!(
             "{}/{}",
             manifest.downstream.remote, manifest.downstream.branch
         );
-        if tracking != expected {
-            return Err(DomainError::invalid_request(format!(
-                "branch tracks {tracking}, expected {expected}"
-            ))
-            .into());
+        if tracking.as_deref() != Some(expected.as_str()) {
+            return Err(
+                DomainError::wrong_tracking(&actual, tracking.as_deref(), &expected).into(),
+            );
         }
         Ok(())
     }
@@ -493,6 +494,19 @@ impl App {
             "unexpected remote ref output: {line}"
         );
         Ok(sha.to_string())
+    }
+
+    /// The SHA of `git_ref` on `remote`, or `None` when the remote has no such ref.
+    pub(super) fn remote_ref_sha_if_present(
+        &self,
+        remote: &str,
+        git_ref: &str,
+    ) -> Result<Option<String>> {
+        let output = capture(&self.repo, "git", ["ls-remote", remote, git_ref])?;
+        Ok(output.lines().find_map(|line| {
+            let (sha, name) = line.split_once(char::is_whitespace)?;
+            (name.trim() == git_ref).then(|| sha.to_string())
+        }))
     }
 
     pub(super) fn downstream_sha(&self) -> Result<String> {

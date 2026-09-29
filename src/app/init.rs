@@ -3,7 +3,7 @@ use crate::error::DomainError;
 use crate::manifest::{
     Base, Contracts, Documents, Downstream, Manifest, Patch, PatchKind, Upstream,
 };
-use crate::process::{capture, run};
+use crate::process::{capture, run, run_operator};
 use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, MutationPlan};
 use anyhow::Result;
 use std::ffi::OsString;
@@ -24,7 +24,6 @@ impl App {
     }
 
     fn bootstrap(&mut self, args: InitArgs, mode: ExecutionMode) -> Result<CommandResult> {
-        self.require_clean()?;
         let upstream_remote = required(args.upstream_remote, "--upstream-remote")?;
         let upstream_url = required(args.upstream_url, "--upstream-url")?;
         let upstream_ref = required(args.upstream_ref, "--upstream-ref")?;
@@ -34,6 +33,38 @@ impl App {
         let ledger = required(args.ledger, "--ledger")?;
         let exports = required(args.exports, "--exports")?;
         let bookkeeping_patch = required(args.bookkeeping_patch, "--bookkeeping-patch")?;
+        let manifest_relative = self
+            .manifest_path
+            .strip_prefix(&self.repo)?
+            .to_string_lossy()
+            .into_owned();
+        let mut scope = vec![
+            manifest_relative.clone(),
+            ledger.clone(),
+            format!("{}/**", exports.trim_end_matches('/')),
+        ];
+        for path in args.bookkeeping_scope {
+            if !scope.contains(&path) {
+                scope.push(path);
+            }
+        }
+        // Untracked files inside the bookkeeping scope, such as the mise configuration that
+        // mounts the fork task, join the bookkeeping patch. Every other change still refuses.
+        let inventory = self.worktree_inventory()?;
+        let (captured, untracked_outside): (Vec<String>, Vec<String>) =
+            inventory.untracked.into_iter().partition(|path| {
+                scope
+                    .iter()
+                    .any(|pattern| crate::manifest::scope_matches(pattern, path))
+            });
+        let mut blocking = inventory.staged;
+        blocking.extend(inventory.unstaged);
+        blocking.extend(untracked_outside);
+        if !blocking.is_empty() {
+            blocking.sort();
+            blocking.dedup();
+            return Err(DomainError::dirty_worktree(blocking).into());
+        }
         if self.current_branch()? != downstream_branch {
             return Err(DomainError::invalid_request(format!(
                 "current branch must equal downstream branch {downstream_branch}"
@@ -62,21 +93,10 @@ impl App {
             ))
             .into());
         }
-        let manifest_relative = self
-            .manifest_path
-            .strip_prefix(&self.repo)?
-            .to_string_lossy()
-            .into_owned();
-        let mut scope = vec![
-            manifest_relative.clone(),
-            ledger.clone(),
-            format!("{}/**", exports.trim_end_matches('/')),
-        ];
-        for path in args.bookkeeping_scope {
-            if !scope.contains(&path) {
-                scope.push(path);
-            }
-        }
+        let downstream_ref = format!("refs/heads/{downstream_branch}");
+        let create_downstream = self
+            .remote_ref_sha_if_present(&downstream_remote, &downstream_ref)?
+            .is_none();
         let patch = Patch {
             name: bookkeeping_patch.clone(),
             kind: PatchKind::Tooling,
@@ -115,22 +135,77 @@ impl App {
             },
         };
         manifest.validate(&self.repo, &self.manifest_path)?;
+        let downstream_tracking = format!(
+            "{}/{}",
+            manifest.downstream.remote, manifest.downstream.branch
+        );
+        let mut writes = vec![
+            manifest_relative,
+            manifest.documents.ledger.clone(),
+            bookkeeping_patch.clone(),
+            format!(
+                "branch.{}.merge tracking {downstream_tracking}",
+                manifest.downstream.branch
+            ),
+        ];
+        writes.extend(captured.iter().cloned());
+        let mut hooks = vec!["commit-msg and pre-commit via StGit".to_string()];
+        let mut ref_updates = Vec::new();
+        if create_downstream {
+            hooks.push("git push creating the downstream branch".into());
+            ref_updates.push(format!(
+                "{} -> {} {downstream_ref} (create)",
+                target.commit, manifest.downstream.remote
+            ));
+        }
         let plan = MutationPlan {
             command: "init".into(),
             reads: vec![head, target.selector.clone()],
-            writes: vec![
-                manifest_relative,
-                manifest.documents.ledger.clone(),
-                bookkeeping_patch.clone(),
-            ],
-            hooks: vec!["commit-msg and pre-commit via StGit".into()],
-            ref_updates: Vec::new(),
+            writes,
+            hooks,
+            ref_updates,
             paths: patch.scope.clone(),
             requires_confirmation: false,
         };
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
+        // The downstream branch starts at the exact base, so the first publish is a plain
+        // fast-forward. The empty lease requires that the branch still does not exist.
+        if create_downstream {
+            run_operator(
+                &self.repo,
+                "git",
+                [
+                    "push",
+                    "--progress",
+                    &format!("--force-with-lease={downstream_ref}:"),
+                    &manifest.downstream.remote,
+                    &format!("{}:{downstream_ref}", target.commit),
+                ],
+            )?;
+        }
+        let tracking_ref = format!("refs/remotes/{downstream_tracking}");
+        run(
+            &self.repo,
+            "git",
+            [
+                "fetch",
+                "--quiet",
+                "--no-tags",
+                &manifest.downstream.remote,
+                &format!("+{downstream_ref}:{tracking_ref}"),
+            ],
+        )?;
+        run(
+            &self.repo,
+            "git",
+            [
+                "branch",
+                &format!("--set-upstream-to={downstream_tracking}"),
+                &manifest.downstream.branch,
+            ],
+        )?;
         self.manifest = Some(manifest);
         self.write_manifest()?;
         let ledger_path = self.write_ledger()?;
@@ -143,6 +218,7 @@ impl App {
         let mut add = vec![OsString::from("add"), OsString::from("--")];
         add.push(self.manifest_path.as_os_str().to_owned());
         add.push(ledger_path.as_os_str().to_owned());
+        add.extend(captured.iter().map(OsString::from));
         run(&self.repo, "git", add)?;
         run(&self.repo, "stg", ["refresh", "--index"])?;
         let check = self.check_repository(false)?;

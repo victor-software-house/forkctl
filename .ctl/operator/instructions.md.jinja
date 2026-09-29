@@ -69,7 +69,7 @@ Checks run during `check` after structural validation, so they gate `patch refre
 
 ## Stack lifecycle
 
-- `mise run fork init` hydrates a fresh clone with StGit metadata and exact historical recovery refs. Without a manifest it requires explicit bootstrap arguments and a branch exactly at its selected base.
+- `mise run fork init` hydrates a fresh clone with StGit metadata and exact historical recovery refs. Without a manifest it requires explicit bootstrap arguments and a branch exactly at its selected base. Bootstrap adds untracked files inside the bookkeeping scope, such as the `mise.toml` that mounts this task, to the bookkeeping patch and refuses every other change. It creates a missing downstream branch at the base under an absent lease and sets the branch to track the downstream remote. Install hooks that call forkctl after bootstrap.
 - `mise run fork status` is read-only and remains usable during conflicts.
 - `mise run fork check` is the complete clean-repository audit.
 - `mise run fork rebase -o REF` records exact recovery/lease evidence and delegates replay to StGit; it never publishes.

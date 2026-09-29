@@ -320,7 +320,7 @@ Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and 
 
 ## Bootstrap and clone hydration
 
-Without a manifest, `init` requires explicit repository/base/document/bookkeeping arguments and `HEAD` exactly at the resolved base. Repeatable `--allow-base GLOB` and `--required-text PATH=TEXT` options initialize declarative contracts without manual manifest edits. It creates the initial bookkeeping patch and never imports legacy commits.
+Without a manifest, `init` requires explicit repository/base/document/bookkeeping arguments and `HEAD` exactly at the resolved base. Repeatable `--allow-base GLOB` and `--required-text PATH=TEXT` options initialize declarative contracts without manual manifest edits. It creates the initial bookkeeping patch and never imports legacy commits. Untracked files inside the bookkeeping scope, such as the `mise.toml` that mounts the fork task, join that patch; any other change refuses. A missing downstream branch is created at the base under an absent lease, and the branch is set to track the downstream remote, so the first `patch refresh` and `publish` need no manual step.
 
 With a manifest, `init` idempotently reconstructs StGit metadata, skips history recovery tags already present locally at the recorded object, fetches only the exact missing recovery refs named by history, and reports an actionable error naming any recovery tag the downstream remote no longer serves before running the full check.
 
