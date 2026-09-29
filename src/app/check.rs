@@ -1,5 +1,5 @@
 use super::App;
-use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
+use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::ledger;
 use crate::manifest::{HistoryEvent, Patch};
 use crate::process::{capture, run};
@@ -17,7 +17,7 @@ macro_rules! ensure_check {
 
 impl App {
     pub fn check(&self, args: &CheckArgs) -> Result<CheckResult> {
-        match args.scope {
+        let result = match args.scope {
             CheckScope::Repository => {
                 if args.patch.is_some() {
                     return Err(DomainError::invalid_request("--patch requires --staged").into());
@@ -25,7 +25,12 @@ impl App {
                 self.check_repository(false)
             }
             CheckScope::Staged => self.check_staged(args.patch.as_deref()),
-        }
+        };
+        // A check that cannot read what it inspects is a failed check, not an internal crash.
+        result.map_err(|error| match error {
+            AppError::Domain { .. } => error,
+            AppError::Internal(internal) => DomainError::check_failed(internal.to_string()).into(),
+        })
     }
 
     pub(super) fn check_repository(&self, allow_active: bool) -> Result<CheckResult> {
