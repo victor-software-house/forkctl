@@ -52,8 +52,8 @@ None.
 4. Creating the downstream branch runs the consumer's `pre-push` hooks and any
    downstream CI on push, once, for the unmodified upstream base.
 
-[ledger]: ../../../tasks.yaml
-[init]: ../../../src/app/init.rs
-[mod]: ../../../src/app/mod.rs
-[error]: ../../../src/error.rs
-[instructions-template]: ../../../.ctl/operator/instructions.md.jinja
+[ledger]: ../../../../tasks.yaml
+[init]: ../../../../src/app/init.rs
+[mod]: ../../../../src/app/mod.rs
+[error]: ../../../../src/error.rs
+[instructions-template]: ../../../../.ctl/operator/instructions.md.jinja

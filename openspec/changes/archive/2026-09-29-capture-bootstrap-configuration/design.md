@@ -26,4 +26,4 @@ Bootstrap called `require_clean` first, which counts every untracked file. See
 1. [A broad `--bookkeeping-path` glob captures more than intended.] → The
    dry-run plan lists every captured file under `writes`.
 
-[agents]: ../../../AGENTS.md
+[agents]: ../../../../AGENTS.md
