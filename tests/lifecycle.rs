@@ -2403,6 +2403,11 @@ fn publish_propose_lease_keeps_a_concurrent_proposal_update() {
     assert!(!raced.status.success());
     let other_writer = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
     assert_eq!(remote_proposal_tip(&fixture), Some(other_writer));
+    // The rejected proposal never reached the local proposal ref that `--promote` reads first.
+    assert!(
+        git_capture_dynamic(&fixture.repo, &["for-each-ref", PROPOSAL_REF]).is_empty(),
+        "a rejected proposal left a local proposal ref"
+    );
 }
 
 #[test]

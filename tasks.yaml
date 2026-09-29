@@ -46,6 +46,18 @@ queue:
       - https://github.com/victor-software-house/forkctl/pull/33
     notes:
       - Opened 2026-08-22 and untouched since.
+
+  - id: FRK-010
+    title: Promote only pushed proposals
+    scope: publish
+    outcome: publish --promote never finds an unpushed proposal commit on the local proposal ref.
+    blocked_by: []
+    acceptance:
+      - After a rejected proposal push the local proposal ref is unchanged.
+    plan: openspec/changes/promote-only-pushed-proposals/proposal.md
+    notes:
+      - >2-
+        Found while fixing FRK-001: the local ref moved before the leased push.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
