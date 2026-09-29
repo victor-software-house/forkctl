@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Build and publish this machine's native forkctl asset"
-#MISE depends=["verify"]
+#MISE depends=["verify", "deny:advisories"]
 #MISE confirm={message="Publish this machine's forkctl asset?",default="no"}
 set -eu
 
