@@ -2332,25 +2332,7 @@ fn publish_propose_updates_the_open_proposal_then_promotes() {
     assert_eq!(review_tree, head_tree);
     assert_eq!(remote_proposal_tip(&fixture).as_deref(), Some(review));
 
-    let calls = stub.calls();
-    assert_eq!(calls.len(), 2, "{calls:?}");
-    assert!(calls[0].starts_with("pr\nlist\n"), "{calls:?}");
-    assert!(
-        calls[0].contains("map(select(.isCrossRepository | not))"),
-        "{calls:?}"
-    );
-    let create = &calls[1];
-    assert!(create.starts_with("pr\ncreate\n"), "{create}");
-    assert!(create.contains("\n--draft\n"), "{create}");
-    assert!(create.contains("\nforkctl: propose main at "), "{create}");
-    assert!(create.contains("`source-change` (source)"), "{create}");
-    assert!(
-        create.contains("mise run fork publish --promote"),
-        "{create}"
-    );
-    for call in &calls {
-        assert!(call.contains(&format!("--repo\n{GITHUB_REPO}\n")), "{call}");
-    }
+    assert_first_proposal_calls(&stub.calls());
 
     change_source_patch(&fixture, "proposed again\n");
     let updated = stub.forkctl(&fixture, &["--format", "json", "publish", "--propose"]);
@@ -2387,6 +2369,27 @@ fn publish_propose_updates_the_open_proposal_then_promotes() {
         git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
         git_capture(&fixture.repo, ["rev-parse", "HEAD"])
     );
+}
+
+fn assert_first_proposal_calls(calls: &[String]) {
+    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert!(calls[0].starts_with("pr\nlist\n"), "{calls:?}");
+    assert!(
+        calls[0].contains("map(select(.isCrossRepository | not))"),
+        "{calls:?}"
+    );
+    let create = &calls[1];
+    assert!(create.starts_with("pr\ncreate\n"), "{create}");
+    assert!(create.contains("\n--draft\n"), "{create}");
+    assert!(create.contains("\nforkctl: propose main at "), "{create}");
+    assert!(create.contains("`source-change` (source)"), "{create}");
+    assert!(
+        create.contains("mise run fork publish --promote"),
+        "{create}"
+    );
+    for call in calls {
+        assert!(call.contains(&format!("--repo\n{GITHUB_REPO}\n")), "{call}");
+    }
 }
 
 #[test]
