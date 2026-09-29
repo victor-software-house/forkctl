@@ -243,7 +243,7 @@ cmd contract display_order=10 subcommand_required=#true arg_required_else_help=#
 cmd publish display_order=11 args_override_self=#false help="Publish the managed branch using the repository default, or an explicit mode" unknown_flags=error {
     flag --rewrite help="Exact-lease rewrite. Overrides the repository default" help_heading=Mode
     flag --append help="Keep the previous tip as an ancestor and fast-forward" help_heading=Mode
-    flag --propose help="Push a net-tree proposal branch and open a PR when `gh` is available" help_heading=Mode
+    flag --propose help="Push a leased net-tree proposal branch and open or update its draft PR with `gh`" help_heading=Mode
     flag --promote help="Promote an exact proposal to the downstream branch" help_heading=Mode
     flag --proposal help="Proposal branch, tag, or URL used by --promote" help_heading=Mode {
         arg <PROPOSAL>

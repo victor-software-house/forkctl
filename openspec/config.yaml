@@ -8,6 +8,9 @@ context: |
   Writing style: plain English, short sentences, numbered lists, no em-dashes,
   no emojis. This repository is public: no local paths, machine names, or
   private repository names in any artifact.
+  Every reference to a pull request, commit, run, file, or tool is a
+  reference-style link, defined once at the end of the file. Same-repository
+  files use relative targets; other code links pin a commit.
 
 rules:
   proposal:

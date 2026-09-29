@@ -255,6 +255,30 @@ impl DomainError {
         )
     }
 
+    pub fn program_unavailable(program: &str, args: &[&str], cwd: &Path, cause: &str) -> Self {
+        Self::new(
+            ApiErrorCode::SubprocessFailed,
+            format!("{program} could not run: {cause}"),
+            ErrorDetails::Subprocess {
+                program: program.to_string(),
+                args: args.iter().map(ToString::to_string).collect(),
+                cwd: cwd.display().to_string(),
+                exit_code: None,
+                stderr: cause.to_string(),
+            },
+        )
+    }
+
+    /// Marks a failure that happened after the proposal branch was pushed. Rerunning the
+    /// proposal is safe, so the error is retryable.
+    pub fn after_proposal_push(mut self, proposal_branch: &str) -> Self {
+        self.message = format!(
+            "proposal branch {proposal_branch} was pushed, but its pull request was not updated: {}",
+            self.message
+        );
+        self.retryable().suggest("forkctl publish --propose")
+    }
+
     fn new(code: ApiErrorCode, message: impl Into<String>, details: ErrorDetails) -> Self {
         Self {
             code,

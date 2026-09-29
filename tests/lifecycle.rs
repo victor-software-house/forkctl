@@ -2156,26 +2156,151 @@ fn publish_append_completes_ready_rebase_operation() {
     fixture.forkctl_ok(&["check"]);
 }
 
-#[test]
-fn publish_propose_then_promote_moves_the_lease() {
-    let fixture = Fixture::new();
-    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
-    fixture.forkctl_ok(&["publish"]);
-    let first = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+const GITHUB_URL: &str = "https://github.com/example/downstream.git";
+const GITHUB_REPO: &str = "github.com/example/downstream";
+const PROPOSAL_REF: &str = "refs/heads/forkctl/proposal/main";
+const PROPOSAL_URL: &str = "https://github.com/example/downstream/pull/1";
 
+/// A recording `gh` on `PATH`. `pr list` prints the open pull request, `pr create` opens one,
+/// and a `fail-<verb>` file makes that verb exit non-zero with a GitHub-style error.
+const GH_STUB: &str = r#"#!/bin/sh
+dir='@DIR@'
+{ for arg in "$@"; do printf '%s\n' "$arg"; done; printf '%s\n' '--end--'; } >> "$dir/calls"
+verb="$1-$2"
+if [ -e "$dir/fail-$verb" ]; then
+  echo "HTTP 404: Not Found" >&2
+  exit 1
+fi
+case "$verb" in
+  pr-list) if [ -e "$dir/open" ]; then cat "$dir/open"; fi ;;
+  pr-create) printf '%s\n' '@URL@' > "$dir/open"; printf '%s\n' '@URL@' ;;
+  pr-edit) printf '%s\n' "$3" ;;
+  *) echo "unexpected gh $*" >&2; exit 2 ;;
+esac
+"#;
+
+struct GhStub {
+    dir: std::path::PathBuf,
+}
+
+impl GhStub {
+    /// Points `origin` at a GitHub URL that git rewrites to the fixture remote.
+    fn install(fixture: &Fixture) -> Self {
+        let root = fixture.repo.parent().unwrap();
+        let bare = root.join("downstream.git");
+        git_ok_dynamic(
+            &fixture.repo,
+            &[
+                "config",
+                &format!("url.{}.insteadOf", bare.display()),
+                GITHUB_URL,
+            ],
+        );
+        git_ok_dynamic(&fixture.repo, &["remote", "set-url", "origin", GITHUB_URL]);
+        let dir = root.join("gh-stub");
+        fs::create_dir_all(&dir).unwrap();
+        let gh = dir.join("gh");
+        fs::write(
+            &gh,
+            GH_STUB
+                .replace("@DIR@", &dir.display().to_string())
+                .replace("@URL@", PROPOSAL_URL),
+        )
+        .unwrap();
+        make_executable(&gh);
+        Self { dir }
+    }
+
+    fn fail(&self, verb: &str) {
+        fs::write(self.dir.join(format!("fail-{verb}")), "").unwrap();
+    }
+
+    /// Each invocation, its arguments joined by newlines.
+    fn calls(&self) -> Vec<String> {
+        fs::read_to_string(self.dir.join("calls"))
+            .unwrap_or_default()
+            .split("--end--\n")
+            .filter(|call| !call.is_empty())
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn forkctl(&self, fixture: &Fixture, args: &[&str]) -> std::process::Output {
+        self.forkctl_with_path(fixture, args, &self.dir)
+    }
+
+    fn forkctl_with_path(
+        &self,
+        fixture: &Fixture,
+        args: &[&str],
+        first: &std::path::Path,
+    ) -> std::process::Output {
+        let mut path =
+            std::env::split_paths(&std::env::var_os("PATH").unwrap()).collect::<Vec<_>>();
+        path.insert(0, self.dir.clone());
+        path.insert(0, first.to_path_buf());
+        support::forkctl_command(&fixture.repo)
+            .args(["--manifest", "patches/fork.yaml"])
+            .args(args)
+            .env("PATH", std::env::join_paths(path).unwrap())
+            .output()
+            .unwrap()
+    }
+}
+
+fn json_output(output: &std::process::Output) -> serde_json::Value {
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "{error}\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })
+}
+
+fn remote_proposal_tip(fixture: &Fixture) -> Option<String> {
+    git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", PROPOSAL_REF])
+        .split_whitespace()
+        .next()
+        .map(str::to_string)
+}
+
+fn change_source_patch(fixture: &Fixture, contents: &str) {
     fixture.forkctl_ok(&["patch", "select", "source-change"]);
-    fs::write(fixture.repo.join("source.txt"), "proposed\n").unwrap();
+    fs::write(fixture.repo.join("source.txt"), contents).unwrap();
     git_ok(&fixture.repo, ["add", "source.txt"]);
     fixture.forkctl_ok(&["patch", "refresh", "--rewrite-below"]);
     fixture.forkctl_ok(&["patch", "finish"]);
+}
 
-    let proposed = fixture.forkctl_ok(&["--format", "json", "publish", "--propose"]);
-    let proposed: serde_json::Value = serde_json::from_str(&proposed).unwrap();
+/// A published stack with one pending change to `source-change` and a stubbed GitHub origin.
+fn proposal_fixture() -> (Fixture, GhStub) {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    fixture.forkctl_ok(&["publish"]);
+    change_source_patch(&fixture, "proposed\n");
+    let stub = GhStub::install(&fixture);
+    (fixture, stub)
+}
+
+#[test]
+fn publish_propose_updates_the_open_proposal_then_promotes() {
+    let (fixture, stub) = proposal_fixture();
+    let first = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+
+    let proposed = stub.forkctl(&fixture, &["--format", "json", "publish", "--propose"]);
+    assert!(
+        proposed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&proposed.stdout)
+    );
+    let proposed = json_output(&proposed);
     assert_eq!(proposed["result"]["mode"], "propose");
     assert_eq!(
         proposed["result"]["proposal_branch"],
         "forkctl/proposal/main"
     );
+    assert_eq!(proposed["result"]["proposal_url"], PROPOSAL_URL);
     assert_eq!(
         git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
         first
@@ -2185,6 +2310,55 @@ fn publish_propose_then_promote_moves_the_lease() {
         git_capture_dynamic(&fixture.repo, &["rev-parse", &format!("{review}^{{tree}}")]);
     let head_tree = git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD^{tree}"]);
     assert_eq!(review_tree, head_tree);
+    assert_eq!(remote_proposal_tip(&fixture).as_deref(), Some(review));
+
+    let calls = stub.calls();
+    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert!(calls[0].starts_with("pr\nlist\n"), "{calls:?}");
+    assert!(
+        calls[0].contains("map(select(.isCrossRepository | not))"),
+        "{calls:?}"
+    );
+    let create = &calls[1];
+    assert!(create.starts_with("pr\ncreate\n"), "{create}");
+    assert!(create.contains("\n--draft\n"), "{create}");
+    assert!(create.contains("\nforkctl: propose main at "), "{create}");
+    assert!(create.contains("`source-change` (source)"), "{create}");
+    assert!(
+        create.contains("mise run fork publish --promote"),
+        "{create}"
+    );
+    for call in &calls {
+        assert!(call.contains(&format!("--repo\n{GITHUB_REPO}\n")), "{call}");
+    }
+
+    change_source_patch(&fixture, "proposed again\n");
+    let updated = stub.forkctl(&fixture, &["--format", "json", "publish", "--propose"]);
+    assert!(
+        updated.status.success(),
+        "second proposal failed: {}",
+        String::from_utf8_lossy(&updated.stdout)
+    );
+    let updated = json_output(&updated);
+    assert_eq!(updated["result"]["proposal_url"], PROPOSAL_URL);
+    let update = updated["result"]["head"].as_str().unwrap();
+    assert_ne!(update, review);
+    assert_eq!(remote_proposal_tip(&fixture).as_deref(), Some(update));
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["rev-parse", &format!("{update}^")]),
+        first
+    );
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["rev-parse", &format!("{update}^{{tree}}")]),
+        git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD^{tree}"])
+    );
+    let calls = stub.calls();
+    assert_eq!(calls.len(), 4, "{calls:?}");
+    assert!(calls[2].starts_with("pr\nlist\n"), "{calls:?}");
+    assert!(
+        calls[3].starts_with(&format!("pr\nedit\n{PROPOSAL_URL}\n")),
+        "{calls:?}"
+    );
 
     let promoted = fixture.forkctl_ok(&["--format", "json", "publish", "--promote"]);
     let promoted: serde_json::Value = serde_json::from_str(&promoted).unwrap();
@@ -2193,4 +2367,171 @@ fn publish_propose_then_promote_moves_the_lease() {
         git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
         git_capture(&fixture.repo, ["rev-parse", "HEAD"])
     );
+}
+
+#[test]
+fn publish_propose_lease_keeps_a_concurrent_proposal_update() {
+    let (fixture, stub) = proposal_fixture();
+    let real_git = isolated_command(&fixture.repo, "sh")
+        .args(["-c", "command -v git"])
+        .output()
+        .unwrap();
+    assert!(real_git.status.success());
+    let real_git = String::from_utf8(real_git.stdout).unwrap();
+    let root = fixture.repo.parent().unwrap();
+    let bare = root.join("downstream.git");
+    let wrapper_dir = root.join("racing-push-bin");
+    fs::create_dir_all(&wrapper_dir).unwrap();
+    let wrapper = wrapper_dir.join("git");
+    // Another writer moves the proposal branch after forkctl read it and before its push.
+    fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nreal=\"{}\"\nif [ \"$1\" = push ]; then\n  case \"$*\" in\n    *forkctl/proposal*) \"$real\" --git-dir=\"{}\" update-ref {PROPOSAL_REF} refs/heads/main ;;\n  esac\nfi\nexec \"$real\" \"$@\"\n",
+            real_git.trim(),
+            bare.display()
+        ),
+    )
+    .unwrap();
+    make_executable(&wrapper);
+
+    let raced = stub.forkctl_with_path(
+        &fixture,
+        &["--format", "json", "publish", "--propose"],
+        &wrapper_dir,
+    );
+    assert!(!raced.status.success());
+    let other_writer = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
+    assert_eq!(remote_proposal_tip(&fixture), Some(other_writer));
+}
+
+#[test]
+fn publish_propose_fails_before_the_push_when_gh_cannot_read_the_repository() {
+    let (fixture, stub) = proposal_fixture();
+    stub.fail("pr-list");
+
+    let output = stub.forkctl(&fixture, &["--format", "json", "publish", "--propose"]);
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["code"], "subprocess_failed");
+    assert!(
+        output["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("HTTP 404: Not Found"),
+        "{output}"
+    );
+    assert_eq!(remote_proposal_tip(&fixture), None);
+}
+
+#[test]
+fn publish_propose_fails_before_the_push_when_gh_is_missing() {
+    let (fixture, _stub) = proposal_fixture();
+    let tools = fixture.repo.parent().unwrap().join("no-gh-bin");
+    fs::create_dir_all(&tools).unwrap();
+    for program in ["git", "stg"] {
+        let found = isolated_command(&fixture.repo, "sh")
+            .args(["-c", &format!("command -v {program}")])
+            .output()
+            .unwrap();
+        assert!(found.status.success());
+        std::os::unix::fs::symlink(
+            String::from_utf8(found.stdout).unwrap().trim(),
+            tools.join(program),
+        )
+        .unwrap();
+    }
+
+    let output = support::forkctl_command(&fixture.repo)
+        .args([
+            "--manifest",
+            "patches/fork.yaml",
+            "--format",
+            "json",
+            "publish",
+            "--propose",
+        ])
+        .env("PATH", &tools)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["code"], "subprocess_failed", "{output}");
+    assert!(
+        output["error"]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("gh could not run"),
+        "{output}"
+    );
+    assert_eq!(remote_proposal_tip(&fixture), None);
+}
+
+#[test]
+fn publish_propose_reports_a_failed_create_after_the_push() {
+    let (fixture, stub) = proposal_fixture();
+    stub.fail("pr-create");
+
+    let output = stub.forkctl(&fixture, &["--format", "json", "publish", "--propose"]);
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["code"], "subprocess_failed");
+    assert_eq!(output["error"]["retryable"], true);
+    let message = output["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("proposal branch forkctl/proposal/main was pushed"),
+        "{message}"
+    );
+    assert!(message.contains("HTTP 404: Not Found"), "{message}");
+    assert!(remote_proposal_tip(&fixture).is_some());
+}
+
+#[test]
+fn publish_propose_refuses_a_remote_that_names_no_github_repository() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    fixture.forkctl_ok(&["publish"]);
+    change_source_patch(&fixture, "proposed\n");
+
+    let output = fixture.forkctl(&["--format", "json", "publish", "--propose"]);
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["code"], "invalid_request", "{output}");
+    assert_eq!(remote_proposal_tip(&fixture), None);
+
+    let token_url = "https://user:token@gitlab.example.com/group/sub/repo.git";
+    let bare = fixture.repo.parent().unwrap().join("downstream.git");
+    git_ok_dynamic(
+        &fixture.repo,
+        &[
+            "config",
+            &format!("url.{}.insteadOf", bare.display()),
+            token_url,
+        ],
+    );
+    git_ok_dynamic(&fixture.repo, &["remote", "set-url", "origin", token_url]);
+    let output = fixture.forkctl(&["--format", "json", "publish", "--propose"]);
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["code"], "invalid_request", "{output}");
+    let message = output["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("https://gitlab.example.com/group/sub/repo.git"),
+        "{message}"
+    );
+    assert!(!output.to_string().contains("token"), "{output}");
+}
+
+#[test]
+fn publish_propose_dry_run_makes_no_gh_calls() {
+    let (fixture, stub) = proposal_fixture();
+
+    let output = stub.forkctl(&fixture, &["publish", "--propose", "-n"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(stub.calls().is_empty(), "{:?}", stub.calls());
+    assert_eq!(remote_proposal_tip(&fixture), None);
 }

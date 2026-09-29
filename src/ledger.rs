@@ -160,7 +160,7 @@ fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
         .collect()
 }
 
-fn patch_kind(kind: PatchKind) -> &'static str {
+pub fn patch_kind(kind: PatchKind) -> &'static str {
     match kind {
         PatchKind::Source => "source",
         PatchKind::Tooling => "tooling",
