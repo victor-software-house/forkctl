@@ -51,12 +51,15 @@ impl App {
         // Untracked files inside the bookkeeping scope, such as the mise configuration that
         // mounts the fork task, join the bookkeeping patch. Every other change still refuses.
         let inventory = self.worktree_inventory()?;
+        let exports_prefix = format!("{}/", exports.trim_end_matches('/'));
         let (captured, untracked_outside): (Vec<String>, Vec<String>) =
             inventory.untracked.into_iter().partition(|path| {
-                // Bootstrap writes the manifest and ledger itself, so an existing untracked
-                // file at either path is not captured: it would be overwritten.
+                // Bootstrap writes the manifest, the ledger, and the exports itself, so an
+                // existing untracked file at any of those paths is not captured: it would be
+                // overwritten, or fail the export check after mutation.
                 *path != manifest_relative
                     && *path != ledger
+                    && !path.starts_with(&exports_prefix)
                     && scope
                         .iter()
                         .any(|pattern| crate::manifest::scope_matches(pattern, path))

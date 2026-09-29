@@ -11,8 +11,9 @@ downstream branch.
 ### Requirement: Bootstrap captures untracked bookkeeping files
 
 Bootstrap `init` SHALL add every untracked file that matches the bookkeeping
-patch scope to the bookkeeping patch. The manifest and ledger paths are excluded,
-because bootstrap writes them; an untracked file at either path SHALL refuse. It SHALL fail with `dirty_worktree`
+patch scope to the bookkeeping patch. The manifest path, the ledger path, and
+everything under the exports directory are excluded, because bootstrap writes
+them; an untracked file at any of those paths SHALL refuse. It SHALL fail with `dirty_worktree`
 before any mutation when a staged change, an unstaged change, or an untracked
 file outside that scope exists, and the error SHALL list only those paths.
 

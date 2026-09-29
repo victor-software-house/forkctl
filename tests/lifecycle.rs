@@ -2561,6 +2561,13 @@ fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
     // The ledger is inside the bookkeeping scope, but bootstrap writes it, so an existing
     // untracked ledger refuses rather than being overwritten.
     fs::write(fixture.repo.join("PATCHES.md"), "operator notes\n").unwrap();
+    // A stray export from an earlier attempt is generated territory too.
+    fs::create_dir_all(fixture.repo.join("patches/downstream")).unwrap();
+    fs::write(
+        fixture.repo.join("patches/downstream/0001-stray.patch"),
+        "stale\n",
+    )
+    .unwrap();
     let args = fixture.bootstrap_args();
     let args = args.iter().map(String::as_str).collect::<Vec<_>>();
 
@@ -2570,7 +2577,11 @@ fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
     assert_eq!(refused["error"]["code"], "dirty_worktree", "{refused}");
     assert_eq!(
         refused["error"]["details"]["paths"],
-        serde_json::json!(["PATCHES.md", "notes.txt"])
+        serde_json::json!([
+            "PATCHES.md",
+            "notes.txt",
+            "patches/downstream/0001-stray.patch"
+        ])
     );
     assert_eq!(
         fs::read_to_string(fixture.repo.join("PATCHES.md")).unwrap(),
@@ -2582,6 +2593,7 @@ fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
     );
     fs::remove_file(fixture.repo.join("notes.txt")).unwrap();
     fs::remove_file(fixture.repo.join("PATCHES.md")).unwrap();
+    fs::remove_dir_all(fixture.repo.join("patches")).unwrap();
 
     let plan = fixture.forkctl_ok(&[&["--format", "json"], args.as_slice(), &["-n"]].concat());
     let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
