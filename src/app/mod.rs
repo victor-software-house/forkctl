@@ -10,7 +10,7 @@ mod status;
 
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::ledger;
-use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind};
+use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind, Upstream};
 use crate::manifest_codec::ManifestFormat;
 use crate::process::{capture, output, run, succeeds};
 use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
@@ -238,32 +238,11 @@ impl App {
     }
 
     pub(super) fn upstream_tracking_ref(&self) -> Result<String> {
-        let manifest = self.manifest()?;
-        let branch = manifest
-            .upstream
-            .fetch_ref
-            .strip_prefix("refs/heads/")
-            .ok_or_else(|| AppError::internal_message("validated upstream branch ref"))?;
-        Ok(format!(
-            "refs/remotes/{}/{branch}",
-            manifest.upstream.remote
-        ))
+        upstream_tracking_ref(&self.manifest()?.upstream)
     }
 
     pub(super) fn fetch_upstream(&self, quiet: bool) -> Result<()> {
-        let manifest = self.manifest()?;
-        let destination = self.upstream_tracking_ref()?;
-        let refspec = format!("+{}:{destination}", manifest.upstream.fetch_ref);
-        let mut args = vec!["fetch"];
-        if quiet {
-            args.push("--quiet");
-        }
-        args.extend([
-            "--no-tags",
-            manifest.upstream.remote.as_str(),
-            refspec.as_str(),
-        ]);
-        run(&self.repo, "git", args)
+        fetch_upstream(&self.repo, &self.manifest()?.upstream, quiet)
     }
 
     pub(super) fn fetch_target(&self, target: &BaseTarget, quiet: bool) -> Result<()> {
@@ -841,6 +820,26 @@ pub(super) struct WorktreeInventory {
     pub staged: Vec<String>,
     pub unstaged: Vec<String>,
     pub untracked: Vec<String>,
+}
+
+/// The remote-tracking ref that mirrors the declared upstream branch.
+pub(super) fn upstream_tracking_ref(upstream: &Upstream) -> Result<String> {
+    let branch = upstream
+        .fetch_ref
+        .strip_prefix("refs/heads/")
+        .ok_or_else(|| AppError::internal_message("validated upstream branch ref"))?;
+    Ok(format!("refs/remotes/{}/{branch}", upstream.remote))
+}
+
+pub(super) fn fetch_upstream(repo: &Path, upstream: &Upstream, quiet: bool) -> Result<()> {
+    let destination = upstream_tracking_ref(upstream)?;
+    let refspec = format!("+{}:{destination}", upstream.fetch_ref);
+    let mut args = vec!["fetch"];
+    if quiet {
+        args.push("--quiet");
+    }
+    args.extend(["--no-tags", upstream.remote.as_str(), refspec.as_str()]);
+    run(repo, "git", args)
 }
 
 pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Result<BaseTarget> {

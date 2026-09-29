@@ -43,6 +43,19 @@ horizon:
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
 archive:
+  - id: FRK-014
+    title: Bootstrap on a release tag outside the upstream branch
+    scope: init
+    outcome: init bootstraps a downstream on an upstream release tag that no upstream branch contains, and rebase moves it to the next such tag.
+    plan: openspec/changes/init-off-branch-tag-base/proposal.md
+    notes:
+      - >2-
+        Reported from a private downstream whose upstream tags each release on a version-bump commit off main: init recorded the tag commit as canonical, then every check failed with a merge-base mismatch.
+    completed: 2026-09-29T15:36:38
+    evidence:
+      - 24822d00164d8f52f8b262dc4098b197fad9b50b
+    disposition: completed
+
   - id: FRK-012
     title: Adopt the mr-boxington build cache
     scope: build

@@ -261,7 +261,7 @@ impl App {
         Ok(())
     }
 
-    fn check_allowed_diff(
+    pub(super) fn check_allowed_diff(
         &self,
         from: &str,
         to: &str,
