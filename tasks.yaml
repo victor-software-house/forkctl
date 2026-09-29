@@ -33,22 +33,6 @@ queue:
       - Both runner families are free for this public repository; release-macos.yml already runs verify on macos-latest for every published release.
       - Until then mise run release builds the macOS asset on the machine it runs on, which is why 0.0.28 was published from a workstation.
       - Consider jdx/mr-boxington-action for these jobs once the ctl repos settle the mbx pattern.
-
-  - id: FRK-012
-    title: Adopt the mr-boxington build cache
-    scope: build
-    outcome: forkctl builds share one mbx store and compiler pool across worktrees and CI, and a pre-push verify needs no network.
-    blocked_by: []
-    acceptance:
-      - The rust tool entry sets mr_boxington = true with mr-boxington 1.17.0 pinned and min_version 2026.9.2.
-      - Each compiling task sets its own CARGO_TARGET_DIR under target/.
-      - Every workflow uses jdx/mr-boxington-action instead of Swatinem/rust-cache.
-      - deny:advisories runs only in CI; the local verify gate runs the offline cargo-deny checks.
-    notes:
-      - >2-
-        Canonical pattern confirmed by the ctl-core session on 2026-09-29: unixd, which matches the rust-projects skill. A single mise.toml is fine for a binary.
-      - Without mbx each forkctl worktree on the build host kept its own 1.2 GB target and compiled cold.
-      - The 0.0.28 release verify failed because cargo-deny fetched advisories through a dead system proxy on the build host.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -59,6 +43,20 @@ horizon:
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
 archive:
+  - id: FRK-012
+    title: Adopt the mr-boxington build cache
+    scope: build
+    outcome: forkctl builds share one mbx store and compiler pool across worktrees and CI, and a pre-push verify needs no network.
+    notes:
+      - >2-
+        Canonical pattern confirmed by the ctl-core session on 2026-09-29: unixd, which matches the rust-projects skill. A single mise.toml is fine for a binary.
+      - Without mbx each forkctl worktree on the build host kept its own 1.2 GB target and compiled cold.
+      - The 0.0.28 release verify failed because cargo-deny fetched advisories through a dead system proxy on the build host.
+    completed: 2026-09-29T15:22:53
+    evidence:
+      - 853b2f9c277b0dab76d1c2ed645861fe57c0051b
+    disposition: completed
+
   - id: FRK-013
     title: Read worktree status without trimming
     scope: check
