@@ -90,7 +90,7 @@ archive:
     title: Promote only pushed proposals
     scope: publish
     outcome: publish --promote never finds an unpushed proposal commit on the local proposal ref.
-    plan: openspec/changes/promote-only-pushed-proposals/proposal.md
+    plan: openspec/changes/archive/2026-09-29-promote-only-pushed-proposals/proposal.md
     notes:
       - >2-
         Found while fixing FRK-001: the local ref moved before the leased push.
@@ -121,7 +121,7 @@ archive:
       - >2-
         Two symptoms, one check: init failed with "branch tracks upstream/main, expected origin/main", and patch refresh failed with "no upstream configured for branch main". Both come from require_declared_branch in src/app/mod.rs.
       - The workaround pushed the plain upstream base to the downstream remote first, with Actions disabled so nothing ran, then set tracking by hand.
-    plan: openspec/changes/bootstrap-downstream-tracking/proposal.md
+    plan: openspec/changes/archive/2026-09-29-bootstrap-downstream-tracking/proposal.md
     completed: 2026-09-28T23:28:07
     evidence:
       - 33b06587f0a49000b3d247989dd89a05c2a7db0e
@@ -133,7 +133,7 @@ archive:
     outcome: init bootstraps a clone whose only change is the untracked mise configuration that provides mise run fork.
     notes:
       - bootstrap calls require_clean, which counts untracked files, so the mise.toml that provides mise run fork had to be hidden during bootstrap.
-    plan: openspec/changes/capture-bootstrap-configuration/proposal.md
+    plan: openspec/changes/archive/2026-09-29-capture-bootstrap-configuration/proposal.md
     completed: 2026-09-28T23:28:07
     evidence:
       - 33b06587f0a49000b3d247989dd89a05c2a7db0e
@@ -147,7 +147,7 @@ archive:
       - >2-
         open_proposal_pr in src/app/publish.rs discards every gh failure: the caller applies .ok().flatten() and a non-zero exit returns Ok(None). A gh login without access to the repository produced a pushed branch, no pull request, and no notice.
       - The title, body and --draft flag are fixed literals.
-    plan: openspec/changes/report-proposal-pull-request/proposal.md
+    plan: openspec/changes/archive/2026-09-29-report-proposal-pull-request/proposal.md
     completed: 2026-09-28T22:52:09
     evidence:
       - d6270acfb3d065d8f1d619dd5899217353b5c957
@@ -165,7 +165,7 @@ archive:
       - >2-
         Candidate designs: parent the new proposal commit on the current remote proposal tip, or push with --force-with-lease on the proposal ref. The OpenSpec change picks one.
       - The operator chose the lease rewrite on 2026-09-28.
-    plan: openspec/changes/update-open-proposal/proposal.md
+    plan: openspec/changes/archive/2026-09-29-update-open-proposal/proposal.md
     completed: 2026-09-28T22:52:09
     evidence:
       - d6270acfb3d065d8f1d619dd5899217353b5c957

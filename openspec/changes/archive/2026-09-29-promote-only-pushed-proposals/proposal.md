@@ -34,5 +34,5 @@ None.
 2. Tests: the lease race test asserts that no local proposal ref exists after
    the rejected push. The test fails on the previous code.
 
-[ledger]: ../../../tasks.yaml
-[publish]: ../../../src/app/publish.rs
+[ledger]: ../../../../tasks.yaml
+[publish]: ../../../../src/app/publish.rs

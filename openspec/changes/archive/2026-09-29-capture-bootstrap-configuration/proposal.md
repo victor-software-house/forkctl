@@ -38,6 +38,6 @@ None.
 3. Operator surfaces: the `init` paragraph of the
    [instructions template][instructions-template].
 
-[ledger]: ../../../tasks.yaml
-[init]: ../../../src/app/init.rs
-[instructions-template]: ../../../.ctl/operator/instructions.md.jinja
+[ledger]: ../../../../tasks.yaml
+[init]: ../../../../src/app/init.rs
+[instructions-template]: ../../../../.ctl/operator/instructions.md.jinja

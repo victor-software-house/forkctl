@@ -42,8 +42,8 @@ None.
 4. A pull request on GitHub stays open across updates. Earlier review comments
    remain and show as outdated.
 
-[ledger]: ../../../tasks.yaml
-[publish]: ../../../src/app/publish.rs
-[lifecycle]: ../../../tests/lifecycle.rs
-[instructions]: ../../../src/instructions.md
-[instructions-template]: ../../../.ctl/operator/instructions.md.jinja
+[ledger]: ../../../../tasks.yaml
+[publish]: ../../../../src/app/publish.rs
+[lifecycle]: ../../../../tests/lifecycle.rs
+[instructions]: ../../../../src/instructions.md
+[instructions-template]: ../../../../.ctl/operator/instructions.md.jinja

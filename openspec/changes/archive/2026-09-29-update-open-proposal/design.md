@@ -19,7 +19,7 @@ failure.
 **Non-Goals:**
 
 1. Pull-request creation and reporting. That is the
-   [`report-proposal-pull-request`](../report-proposal-pull-request/proposal.md)
+   [`report-proposal-pull-request`](../2026-09-29-report-proposal-pull-request/proposal.md)
    change.
 2. Recovery tags for replaced proposal commits. A proposal is a review surface,
    not published history, and the candidate stays reachable from the stack.
@@ -54,6 +54,6 @@ failure.
 2. [Two operators proposing at once.] → The loser's push fails on the lease,
    and a rerun reads the new tip.
 
-[publish]: ../../../src/app/publish.rs
-[decisions]: ../../../goals/forkctl-composed-upstreams/decisions.md
-[agents]: ../../../AGENTS.md
+[publish]: ../../../../src/app/publish.rs
+[decisions]: ../../../../goals/forkctl-composed-upstreams/decisions.md
+[agents]: ../../../../AGENTS.md

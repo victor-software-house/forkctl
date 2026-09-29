@@ -6,7 +6,7 @@
 `std::process::Command` for `gh pr create`, turns every failure into `None`,
 and uses fixed text. See [proposal.md](proposal.md) for the observed failure.
 The branch update itself belongs to the
-[`update-open-proposal`](../update-open-proposal/proposal.md) change, which
+[`update-open-proposal`](../2026-09-29-update-open-proposal/proposal.md) change, which
 lands first.
 
 ## Goals / Non-Goals
@@ -66,6 +66,6 @@ lands first.
    pull request there. `publish --rewrite` and `publish --append` are
    unchanged.
 
-[publish]: ../../../src/app/publish.rs
-[decisions]: ../../../goals/forkctl-composed-upstreams/decisions.md
-[agents]: ../../../AGENTS.md
+[publish]: ../../../../src/app/publish.rs
+[decisions]: ../../../../goals/forkctl-composed-upstreams/decisions.md
+[agents]: ../../../../AGENTS.md

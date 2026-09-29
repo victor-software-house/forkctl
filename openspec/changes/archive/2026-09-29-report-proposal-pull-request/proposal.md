@@ -69,9 +69,9 @@ None.
    that no pull request can reach.
 5. `publish --propose -n` still plans without calling `gh`.
 
-[ledger]: ../../../tasks.yaml
-[agents]: ../../../AGENTS.md
-[publish]: ../../../src/app/publish.rs
-[templates]: ../../../templates/
-[instructions-template]: ../../../.ctl/operator/instructions.md.jinja
-[cli]: ../../../src/cli.rs
+[ledger]: ../../../../tasks.yaml
+[agents]: ../../../../AGENTS.md
+[publish]: ../../../../src/app/publish.rs
+[templates]: ../../../../templates/
+[instructions-template]: ../../../../.ctl/operator/instructions.md.jinja
+[cli]: ../../../../src/cli.rs
