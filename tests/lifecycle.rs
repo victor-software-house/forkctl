@@ -2535,3 +2535,124 @@ fn publish_propose_dry_run_makes_no_gh_calls() {
     assert!(stub.calls().is_empty(), "{:?}", stub.calls());
     assert_eq!(remote_proposal_tip(&fixture), None);
 }
+
+#[test]
+fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
+    let fixture = Fixture::fresh_upstream_clone();
+    let base = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    assert_eq!(
+        git_capture_dynamic(
+            &fixture.repo,
+            &[
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}"
+            ]
+        ),
+        "upstream/main"
+    );
+    fs::write(
+        fixture.repo.join("mise.toml"),
+        "[tasks.fork]\nrun = \"forkctl\"\n",
+    )
+    .unwrap();
+    fs::write(fixture.repo.join("notes.txt"), "unrelated\n").unwrap();
+    // The ledger is inside the bookkeeping scope, but bootstrap writes it, so an existing
+    // untracked ledger refuses rather than being overwritten.
+    fs::write(fixture.repo.join("PATCHES.md"), "operator notes\n").unwrap();
+    // A stray export from an earlier attempt is generated territory too.
+    fs::create_dir_all(fixture.repo.join("patches/downstream")).unwrap();
+    fs::write(
+        fixture.repo.join("patches/downstream/0001-stray.patch"),
+        "stale\n",
+    )
+    .unwrap();
+    let args = fixture.bootstrap_args();
+    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+
+    let refused = fixture.forkctl(&[&["--format", "json"], args.as_slice()].concat());
+    assert!(!refused.status.success());
+    let refused = json_output(&refused);
+    assert_eq!(refused["error"]["code"], "dirty_worktree", "{refused}");
+    assert_eq!(
+        refused["error"]["details"]["paths"],
+        serde_json::json!([
+            "PATCHES.md",
+            "notes.txt",
+            "patches/downstream/0001-stray.patch"
+        ])
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("PATCHES.md")).unwrap(),
+        "operator notes\n"
+    );
+    assert!(!fixture.repo.join("patches/fork.yaml").exists());
+    assert!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]).is_empty()
+    );
+    fs::remove_file(fixture.repo.join("notes.txt")).unwrap();
+    fs::remove_file(fixture.repo.join("PATCHES.md")).unwrap();
+    fs::remove_dir_all(fixture.repo.join("patches")).unwrap();
+
+    let plan = fixture.forkctl_ok(&[&["--format", "json"], args.as_slice(), &["-n"]].concat());
+    let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
+    assert_eq!(
+        plan["result"]["ref_updates"],
+        serde_json::json!([format!("{base} -> origin refs/heads/main (create)")]),
+        "{plan}"
+    );
+    assert!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]).is_empty()
+    );
+
+    fixture.forkctl_ok(&args);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"])
+            .split_whitespace()
+            .next(),
+        Some(base.as_str())
+    );
+    assert_eq!(
+        git_capture_dynamic(
+            &fixture.repo,
+            &[
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}"
+            ]
+        ),
+        "origin/main"
+    );
+    git_ok_dynamic(&fixture.repo, &["ls-files", "--error-unmatch", "mise.toml"]);
+    assert!(git_capture_dynamic(&fixture.repo, &["status", "--porcelain"]).is_empty());
+
+    create_source_patch(&fixture, "source-change", "source.txt", "first\n");
+    let published = fixture.forkctl_ok(&["--format", "json", "publish"]);
+    let published: serde_json::Value = serde_json::from_str(&published).unwrap();
+    assert_eq!(published["result"]["fast_forward"], true, "{published}");
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
+        git_capture(&fixture.repo, ["rev-parse", "HEAD"])
+    );
+}
+
+#[test]
+fn a_branch_without_upstream_names_the_fix() {
+    let fixture = Fixture::new();
+    git_ok_dynamic(&fixture.repo, &["branch", "--unset-upstream"]);
+
+    let output = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["code"], "invalid_request", "{output}");
+    assert_eq!(
+        output["error"]["message"],
+        "branch main tracks no upstream, expected origin/main"
+    );
+    assert_eq!(
+        output["error"]["suggested_command"],
+        "git branch --set-upstream-to=origin/main main"
+    );
+}

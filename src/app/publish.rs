@@ -291,14 +291,6 @@ impl App {
         })
     }
 
-    fn remote_ref_sha_if_present(&self, remote: &str, git_ref: &str) -> Result<Option<String>> {
-        let output = capture(&self.repo, "git", ["ls-remote", remote, git_ref])?;
-        Ok(output.lines().find_map(|line| {
-            let (sha, name) = line.split_once(char::is_whitespace)?;
-            (name.trim() == git_ref).then(|| sha.to_string())
-        }))
-    }
-
     fn open_proposal_pr(
         &self,
         github_repo: &str,

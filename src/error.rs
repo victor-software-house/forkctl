@@ -255,6 +255,15 @@ impl DomainError {
         )
     }
 
+    pub fn wrong_tracking(branch: &str, actual: Option<&str>, expected: &str) -> Self {
+        let message = match actual {
+            Some(actual) => format!("branch {branch} tracks {actual}, expected {expected}"),
+            None => format!("branch {branch} tracks no upstream, expected {expected}"),
+        };
+        Self::invalid_request(message)
+            .suggest(format!("git branch --set-upstream-to={expected} {branch}"))
+    }
+
     pub fn program_unavailable(program: &str, args: &[&str], cwd: &Path, cause: &str) -> Self {
         Self::new(
             ApiErrorCode::SubprocessFailed,

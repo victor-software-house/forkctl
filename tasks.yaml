@@ -20,31 +20,6 @@ queue:
       - Releases up to 0.0.27 ship only forkctl_<version>_macos_arm64.tar.gz. qctl already publishes a linux_x64 tarball and can serve as the model.
       - release-linux.yml attaches a static musl Linux x64 asset to each published release. The row closes when a published release shows the asset and the mounted fork task runs on ubuntu-latest.
 
-  - id: FRK-004
-    title: Bootstrap with the file that mounts the fork task
-    scope: init
-    outcome: init bootstraps a clone whose only change is the untracked mise configuration that provides mise run fork.
-    blocked_by: []
-    acceptance:
-      - init succeeds in a clone whose only change is an untracked mise.toml that mounts the fork task.
-      - init still refuses changes unrelated to mounting the fork task.
-    notes:
-      - bootstrap calls require_clean, which counts untracked files, so the mise.toml that provides mise run fork had to be hidden during bootstrap.
-
-  - id: FRK-005
-    title: Bootstrap before the downstream branch exists
-    scope: init
-    outcome: A fresh clone of upstream reaches its first patch refresh without an undocumented manual push or tracking change.
-    blocked_by: []
-    acceptance:
-      - The documented bootstrap path works when the downstream remote has no downstream branch yet.
-      - The documented bootstrap path works when the current branch tracks the upstream remote.
-      - The first patch refresh after init succeeds without a manual git branch --set-upstream-to.
-    notes:
-      - >2-
-        Two symptoms, one check: init failed with "branch tracks upstream/main, expected origin/main", and patch refresh failed with "no upstream configured for branch main". Both come from require_declared_branch in src/app/mod.rs.
-      - The workaround pushed the plain upstream base to the downstream remote first, with Actions disabled so nothing ran, then set tracking by hand.
-
   - id: FRK-006
     title: Decide the hardening pull-request stack
     scope: backlog
@@ -95,6 +70,32 @@ horizon:
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
 archive:
+  - id: FRK-005
+    title: Bootstrap before the downstream branch exists
+    scope: init
+    outcome: A fresh clone of upstream reaches its first patch refresh without an undocumented manual push or tracking change.
+    notes:
+      - >2-
+        Two symptoms, one check: init failed with "branch tracks upstream/main, expected origin/main", and patch refresh failed with "no upstream configured for branch main". Both come from require_declared_branch in src/app/mod.rs.
+      - The workaround pushed the plain upstream base to the downstream remote first, with Actions disabled so nothing ran, then set tracking by hand.
+    plan: openspec/changes/bootstrap-downstream-tracking/proposal.md
+    completed: 2026-09-28T23:28:07
+    evidence:
+      - 33b06587f0a49000b3d247989dd89a05c2a7db0e
+    disposition: completed
+
+  - id: FRK-004
+    title: Bootstrap with the file that mounts the fork task
+    scope: init
+    outcome: init bootstraps a clone whose only change is the untracked mise configuration that provides mise run fork.
+    notes:
+      - bootstrap calls require_clean, which counts untracked files, so the mise.toml that provides mise run fork had to be hidden during bootstrap.
+    plan: openspec/changes/capture-bootstrap-configuration/proposal.md
+    completed: 2026-09-28T23:28:07
+    evidence:
+      - 33b06587f0a49000b3d247989dd89a05c2a7db0e
+    disposition: completed
+
   - id: FRK-002
     title: Report proposal pull-request failures
     scope: publish

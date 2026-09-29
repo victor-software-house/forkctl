@@ -18,7 +18,19 @@ impl Fixture {
         Self::new_with_manifest("patches/fork.yaml")
     }
 
+    /// A bootstrapped fixture: `init` created the empty downstream branch at the base and set
+    /// tracking, as it does for an operator.
     pub fn new_with_manifest(manifest: &str) -> Self {
+        let mut fixture = Self::fresh_upstream_clone();
+        manifest.clone_into(&mut fixture.manifest);
+        let args = fixture.bootstrap_args();
+        fixture.forkctl_ok(&args.iter().map(String::as_str).collect::<Vec<_>>());
+        fixture
+    }
+
+    /// A fresh clone of upstream: its `upstream` remote is the clone source, its `origin`
+    /// downstream remote is empty, `main` still tracks `upstream/main`, and `init` has not run.
+    pub fn fresh_upstream_clone() -> Self {
         let directory = tempfile::tempdir().unwrap();
         prepare_sandbox(directory.path());
         let upstream_bare = directory.path().join("upstream.git");
@@ -26,46 +38,33 @@ impl Fixture {
         init_bare(directory.path(), &upstream_bare);
         let upstream_work = directory.path().join("upstream-work");
         create_upstream(directory.path(), &upstream_work, &upstream_bare);
-        git_ok(
-            directory.path(),
-            [
-                "clone",
-                "--bare",
-                "--quiet",
-                upstream_bare.to_str().unwrap(),
-                downstream_bare.to_str().unwrap(),
-            ],
-        );
-        git_ok(
-            directory.path(),
-            [
-                "--git-dir",
-                downstream_bare.to_str().unwrap(),
-                "symbolic-ref",
-                "HEAD",
-                "refs/heads/main",
-            ],
-        );
+        init_bare(directory.path(), &downstream_bare);
         let repo = directory.path().join("consumer");
         git_ok(
             directory.path(),
             [
                 "clone",
                 "--quiet",
-                downstream_bare.to_str().unwrap(),
+                upstream_bare.to_str().unwrap(),
                 repo.to_str().unwrap(),
             ],
         );
+        git_ok(&repo, ["remote", "rename", "origin", "upstream"]);
         git_ok(
             &repo,
-            ["remote", "add", "upstream", upstream_bare.to_str().unwrap()],
+            ["remote", "add", "origin", downstream_bare.to_str().unwrap()],
         );
-        let fixture = Self {
+        Self {
             _directory: directory,
             repo,
-            manifest: manifest.to_string(),
-        };
-        fixture.forkctl_ok(&[
+            manifest: "patches/fork.yaml".to_string(),
+        }
+    }
+
+    /// The bootstrap `init` invocation every fixture uses.
+    pub fn bootstrap_args(&self) -> Vec<String> {
+        let upstream_bare = self.repo.parent().unwrap().join("upstream.git");
+        [
             "init",
             "--upstream-remote",
             "upstream",
@@ -93,8 +92,10 @@ impl Fixture {
             "lefthook.yml",
             "--required-text",
             "base.txt=base",
-        ]);
-        fixture
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
     }
 
     pub fn forkctl(&self, args: &[&str]) -> Output {
