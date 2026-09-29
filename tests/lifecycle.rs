@@ -131,6 +131,21 @@ fn complete_check_rejects_unexpected_tracked_patch_export() {
 }
 
 #[test]
+fn unstaged_deletion_is_reported_under_its_full_path() {
+    let fixture = Fixture::new();
+    fs::remove_file(fixture.repo.join("PATCHES.md")).unwrap();
+
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check["error"]["code"], "dirty_worktree", "{check}");
+    assert_eq!(
+        check["error"]["details"]["paths"],
+        serde_json::json!(["PATCHES.md"])
+    );
+}
+
+#[test]
 fn complete_check_reports_a_missing_ledger_as_check_failed() {
     let fixture = Fixture::new();
     git_ok(&fixture.repo, ["rm", "--quiet", "PATCHES.md"]);
