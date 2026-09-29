@@ -20,8 +20,8 @@ impl App {
             return Err(DomainError::operation_in_progress(&operation).into());
         }
         self.check_repository(false)?;
-        self.fetch_upstream(false)?;
         let target = self.resolve_target(selector)?;
+        self.fetch_upstream(false)?;
         let plan = MutationPlan {
             command: "rebase".into(),
             reads: vec![
