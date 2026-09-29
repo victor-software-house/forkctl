@@ -91,20 +91,17 @@ pub fn github_repo(url: &str) -> Option<String> {
 }
 
 /// The URL without the user information of a `scheme://` authority, which can carry a token.
+///
+/// Everything up to the last `@` is dropped, because an unencoded password may itself contain
+/// `/` or `@`. An `@` later in the path over-redacts, which is safe for a message.
 pub fn redact_userinfo(url: &str) -> String {
     let Some((scheme, rest)) = url.split_once("://") else {
         return url.to_string();
     };
-    let (authority, path) = rest
-        .split_once('/')
-        .map_or((rest, None), |(authority, path)| (authority, Some(path)));
-    let Some((_, host)) = authority.rsplit_once('@') else {
-        return url.to_string();
-    };
-    match path {
-        Some(path) => format!("{scheme}://{host}/{path}"),
-        None => format!("{scheme}://{host}"),
-    }
+    rest.rsplit_once('@').map_or_else(
+        || url.to_string(),
+        |(_, after)| format!("{scheme}://{after}"),
+    )
 }
 
 fn escape_inline(value: &str) -> String {
@@ -139,6 +136,10 @@ mod tests {
         assert_eq!(
             redact_userinfo("https://token@example.com"),
             "https://example.com"
+        );
+        assert_eq!(
+            redact_userinfo("https://user:ab/cd@host.example.com/group/sub/repo.git"),
+            "https://host.example.com/group/sub/repo.git"
         );
         for url in [
             "https://github.com/example/downstream.git",
