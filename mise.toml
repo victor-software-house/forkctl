@@ -3,6 +3,14 @@ min_version = "2026.7.7"
 [settings]
 lockfile = true
 
+[task_config]
+# includes replaces mise's default task directories, so mise-tasks stays listed.
+# The qctl ref is the v0.4.4 tag's commit.
+includes = [
+  "mise-tasks",
+  "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=8d69a9e5065038cedd6a4cca228c5ff62ef41500",
+]
+
 [tools]
 rust = "1.97.1"
 "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }

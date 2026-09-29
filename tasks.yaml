@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/victor-software-house/qctl/8d69a9e5065038cedd6a4cca228c5ff62ef41500/schema/tasks.schema.json
+schema_version: 4
+prefix: FRK
+
+style:
+  timezone: "-03:00"
+  section_order: [queue, horizon, archive]
+active: null
+queue: []
+horizon: []
+archive: []

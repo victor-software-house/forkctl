@@ -65,7 +65,7 @@ Every release must additionally be exercised through the immutable mise catalog 
 
 ## Changes
 
-Plan a behaviour or contract change as an OpenSpec change in
-`openspec/changes/<name>/` before writing code. `openspec/config.yaml` holds
-this repository's context and rules, and `openspec validate <name>` checks the
-change.
+1. `tasks.yaml` is the work queue, with prefix `FRK`. Operate it with `mise run q status`, `mise run q check`, and the other qctl verbs; `mise run q instructions` is the installed contract. Never edit `tasks.yaml` by hand. A commit-body trailer `Closes FRK-NNN` archives the row on pre-push.
+2. Plan a behaviour or contract change as an OpenSpec change in `openspec/changes/<name>/` before writing code. `openspec/config.yaml` holds this repository's context and rules, and `openspec validate <name>` checks the change.
+3. One OpenSpec change maps to one row, and the row's `plan` names the change's `proposal.md`. Work that changes no behaviour or contract, such as CI or cleanup, has a row and no change.
+4. Before calling work done, run `mise run q check` and `openspec validate --all --strict`.

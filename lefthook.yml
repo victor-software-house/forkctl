@@ -25,3 +25,5 @@ pre-push:
       run: mise run verify
     full-history-secrets:
       run: mise run --no-deps hooks:secrets:history
+    qctl-close:
+      run: mise run q close-from-git -f 'tasks.yaml'
