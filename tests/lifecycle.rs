@@ -2642,6 +2642,50 @@ fn bootstrap_and_rebase_accept_an_off_branch_release_tag() {
     assert_eq!(check["result"]["stack_base"], next_release, "{check}");
 }
 
+#[test]
+fn bootstrap_refuses_a_base_without_upstream_history() {
+    let fixture = Fixture::fresh_upstream_clone();
+    let upstream_work = fixture.repo.parent().unwrap().join("upstream-work");
+    git_ok(
+        &upstream_work,
+        ["checkout", "--quiet", "--orphan", "orphan"],
+    );
+    git_ok(&upstream_work, ["rm", "--quiet", "-r", "-f", "."]);
+    fs::write(upstream_work.join("base.txt"), "base\n").unwrap();
+    git_ok(&upstream_work, ["add", "base.txt"]);
+    git_ok(
+        &upstream_work,
+        ["commit", "--quiet", "-m", "unrelated root"],
+    );
+    git_ok(
+        &upstream_work,
+        ["tag", "--annotate", "unrelated", "-m", "unrelated"],
+    );
+    git_ok(&upstream_work, ["push", "--quiet", "origin", "unrelated"]);
+    git_ok(
+        &fixture.repo,
+        ["fetch", "--quiet", "upstream", "tag", "unrelated"],
+    );
+    git_ok(&fixture.repo, ["reset", "--quiet", "--hard", "unrelated"]);
+    let args = fixture.bootstrap_args();
+    let base = args.iter().position(|arg| arg == "--base").unwrap() + 1;
+    let mut args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    args[base] = "refs/tags/unrelated";
+
+    let refused = fixture.forkctl(&[&["--format", "json"], args.as_slice()].concat());
+    assert!(!refused.status.success());
+    let refused = json_output(&refused);
+    assert_eq!(refused["error"]["code"], "invalid_request", "{refused}");
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("shares no history with refs/remotes/upstream/main"),
+        "{refused}"
+    );
+    assert!(!fixture.repo.join("patches/fork.yaml").exists());
+}
+
 /// Commits a version bump on a detached head above upstream main and pushes only its tag,
 /// the way a release tag sits off the branch it was cut from.
 fn tag_off_branch_release(upstream_work: &std::path::Path, tag: &str) -> String {

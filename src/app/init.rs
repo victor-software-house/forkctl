@@ -1,5 +1,5 @@
 use super::{App, fetch_upstream, resolve_target, upstream_tracking_ref};
-use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
+use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{
     Base, Contracts, Documents, Downstream, Manifest, Patch, PatchKind, Upstream,
 };
@@ -153,11 +153,22 @@ impl App {
         // cover. Both are settled before anything is pushed or written.
         fetch_upstream(&self.repo, &manifest.upstream, true)?;
         let upstream_tracking = upstream_tracking_ref(&manifest.upstream)?;
-        manifest.base.canonical = capture(
+        manifest.base.canonical = match capture(
             &self.repo,
             "git",
             ["merge-base", &target.commit, &upstream_tracking],
-        )?;
+        ) {
+            Ok(canonical) => canonical,
+            // git merge-base exits non-zero when the two commits share no history.
+            Err(AppError::Domain { .. }) => {
+                return Err(DomainError::invalid_request(format!(
+                    "base {} shares no history with {upstream_tracking}",
+                    target.commit
+                ))
+                .into());
+            }
+            Err(error) => return Err(error),
+        };
         self.check_allowed_diff(
             &manifest.base.canonical,
             &target.commit,
