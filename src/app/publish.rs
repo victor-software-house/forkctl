@@ -249,22 +249,23 @@ impl App {
         )?;
         // The local proposal ref moves only after the remote accepted the proposal, so a
         // rejected push never leaves an unreviewed commit where `--promote` looks first.
-        run(&self.repo, "git", ["update-ref", &local_ref, &review])?;
-        let text = proposal::render(self.manifest()?, &publication.head, &publication.remote_sha)?;
-        let proposal_url = self
-            .write_proposal_pr(
+        // Every step after the accepted push reports that the branch was pushed.
+        let after_push = || -> Result<String> {
+            run(&self.repo, "git", ["update-ref", &local_ref, &review])?;
+            let text =
+                proposal::render(self.manifest()?, &publication.head, &publication.remote_sha)?;
+            self.write_proposal_pr(
                 &github_repo,
                 open_pull_request,
                 &proposal_branch,
                 &branch,
                 &text,
             )
-            .map_err(|error| match error.downcast::<DomainError>() {
-                Ok(domain) => domain.after_proposal_push(&proposal_branch).into(),
-                Err(error) => {
-                    error.context(format!("proposal branch {proposal_branch} was pushed"))
-                }
-            })?;
+        };
+        let proposal_url = after_push().map_err(|error| match error.downcast::<DomainError>() {
+            Ok(domain) => domain.after_proposal_push(&proposal_branch).into(),
+            Err(error) => error.context(format!("proposal branch {proposal_branch} was pushed")),
+        })?;
         Ok(CommandResult::Publish(PublishResult {
             branch,
             head: review,

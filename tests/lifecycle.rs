@@ -2661,3 +2661,48 @@ fn a_branch_without_upstream_names_the_fix() {
         "git branch --set-upstream-to=origin/main main"
     );
 }
+
+#[test]
+fn publish_propose_reports_a_failed_local_ref_update_after_the_push() {
+    let (fixture, stub) = proposal_fixture();
+    let real_git = isolated_command(&fixture.repo, "sh")
+        .args(["-c", "command -v git"])
+        .output()
+        .unwrap();
+    assert!(real_git.status.success());
+    let wrapper_dir = fixture
+        .repo
+        .parent()
+        .unwrap()
+        .join("failing-update-ref-bin");
+    fs::create_dir_all(&wrapper_dir).unwrap();
+    let wrapper = wrapper_dir.join("git");
+    fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = update-ref ] && [ \"$2\" = {PROPOSAL_REF} ]; then\n  echo simulated-update-ref-failure >&2\n  exit 1\nfi\nexec \"{}\" \"$@\"\n",
+            String::from_utf8(real_git.stdout).unwrap().trim()
+        ),
+    )
+    .unwrap();
+    make_executable(&wrapper);
+
+    let output = stub.forkctl_with_path(
+        &fixture,
+        &["--format", "json", "publish", "--propose"],
+        &wrapper_dir,
+    );
+    assert!(!output.status.success());
+    let output = json_output(&output);
+    assert_eq!(output["error"]["retryable"], true, "{output}");
+    let message = output["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("proposal branch forkctl/proposal/main was pushed"),
+        "{message}"
+    );
+    assert!(
+        message.contains("simulated-update-ref-failure"),
+        "{message}"
+    );
+    assert!(remote_proposal_tip(&fixture).is_some());
+}
