@@ -1,0 +1,127 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/victor-software-house/qctl/8d69a9e5065038cedd6a4cca228c5ff62ef41500/schema/tasks.schema.json
+schema_version: 4
+prefix: FRK
+
+style:
+  timezone: "-03:00"
+  section_order: [queue, horizon, archive]
+active: null
+queue:
+  - id: FRK-001
+    title: Update an open proposal in place
+    scope: publish
+    outcome: A repeated publish --propose updates the open proposal branch and keeps its pull request and review history.
+    blocked_by: []
+    acceptance:
+      - A second publish --propose against an existing proposal branch succeeds without deleting the branch or closing its pull request.
+      - A proposal update never replaces a remote proposal tip that forkctl did not read first.
+      - publish --promote still refuses a proposal whose tree differs from HEAD.
+    notes:
+      - >2-
+        Observed on a private downstream fork: the second publish --propose failed with "! [rejected] forkctl/proposal/main (non-fast-forward)". The workaround was to close the pull request, delete the branch and propose again, which lost the review history.
+      - >2-
+        Cause: publish_propose in src/app/publish.rs builds each proposal as git commit-tree on the remote downstream tip and pushes it with a plain git push and no lease, so the new commit never descends from the existing proposal tip.
+      - >2-
+        Candidate designs: parent the new proposal commit on the current remote proposal tip, or push with --force-with-lease on the proposal ref. The OpenSpec change picks one.
+
+  - id: FRK-002
+    title: Report proposal pull-request failures
+    scope: publish
+    outcome: After publish --propose the operator always knows whether a proposal pull request exists and where it is.
+    blocked_by: []
+    acceptance:
+      - A failed gh pr create appears in the publish result with its error.
+      - When a pull request for the proposal branch is already open, publish reports that pull request and creates no other.
+      - The proposal pull-request title and body describe the candidate and name the promote command.
+    notes:
+      - >2-
+        open_proposal_pr in src/app/publish.rs discards every gh failure: the caller applies .ok().flatten() and a non-zero exit returns Ok(None). A gh login without access to the repository produced a pushed branch, no pull request, and no notice.
+      - The title, body and --draft flag are fixed literals.
+
+  - id: FRK-003
+    title: Publish a Linux release binary
+    scope: release
+    outcome: A Linux CI runner installs forkctl from the GitHub release through mise.
+    blocked_by: []
+    acceptance:
+      - Every forkctl release carries a Linux x64 tarball next to the macOS arm64 tarball.
+      - The mounted fork task installs and runs on ubuntu-latest.
+    notes:
+      - The operator chose a Linux release so that a downstream fork can run its daily rebase proposal on a Linux CI runner.
+      - Releases up to 0.0.27 ship only forkctl_<version>_macos_arm64.tar.gz. qctl already publishes a linux_x64 tarball and can serve as the model.
+
+  - id: FRK-004
+    title: Bootstrap with the file that mounts the fork task
+    scope: init
+    outcome: init bootstraps a clone whose only change is the untracked mise configuration that provides mise run fork.
+    blocked_by: []
+    acceptance:
+      - init succeeds in a clone whose only change is an untracked mise.toml that mounts the fork task.
+      - init still refuses changes unrelated to mounting the fork task.
+    notes:
+      - bootstrap calls require_clean, which counts untracked files, so the mise.toml that provides mise run fork had to be hidden during bootstrap.
+
+  - id: FRK-005
+    title: Bootstrap before the downstream branch exists
+    scope: init
+    outcome: A fresh clone of upstream reaches its first patch refresh without an undocumented manual push or tracking change.
+    blocked_by: []
+    acceptance:
+      - The documented bootstrap path works when the downstream remote has no downstream branch yet.
+      - The documented bootstrap path works when the current branch tracks the upstream remote.
+      - The first patch refresh after init succeeds without a manual git branch --set-upstream-to.
+    notes:
+      - >2-
+        Two symptoms, one check: init failed with "branch tracks upstream/main, expected origin/main", and patch refresh failed with "no upstream configured for branch main". Both come from require_declared_branch in src/app/mod.rs.
+      - The workaround pushed the plain upstream base to the downstream remote first, with Actions disabled so nothing ran, then set tracking by hand.
+
+  - id: FRK-006
+    title: Decide the hardening pull-request stack
+    scope: backlog
+    outcome: Pull requests 22, 23 and 24 are each merged after a rebase, reworked, or closed.
+    blocked_by: []
+    acceptance:
+      - None of pull requests 22, 23 or 24 is open.
+    links:
+      - https://github.com/victor-software-house/forkctl/pull/22
+      - https://github.com/victor-software-house/forkctl/pull/23
+      - https://github.com/victor-software-house/forkctl/pull/24
+    notes:
+      - >2-
+        The three form one stack: 24 is based on 23, and 23 on 22. All were opened 2026-08-06 and have not been rebased since the ctl-core 0.6 adoption.
+
+  - id: FRK-007
+    title: Remove production panic paths
+    scope: backlog
+    outcome: Production code reports failures as errors instead of panicking.
+    blocked_by:
+      - FRK-006
+    acceptance:
+      - No unwrap, expect, panic!, or unreachable! call remains outside test code.
+      - Clippy denies those calls outside tests.
+    links:
+      - https://github.com/victor-software-house/forkctl/pull/24
+    notes:
+      - At 0.0.27 about ten such calls remain, in protocol.rs, presentation.rs, update.rs, manifest.rs and app/patch.rs. Pull request 24 targets them.
+
+  - id: FRK-008
+    title: Decide the mark-candidates archive pull request
+    scope: backlog
+    outcome: Pull request 33 is merged after a rebase, reworked, or closed.
+    blocked_by: []
+    acceptance:
+      - Pull request 33 is not open.
+    links:
+      - https://github.com/victor-software-house/forkctl/pull/33
+    notes:
+      - Opened 2026-08-22 and untouched since.
+horizon:
+  - id: FRK-009
+    title: Install StGit without compiling it
+    scope: distribution
+    outcome: The mounted fork task installs StGit from a prebuilt binary.
+    kind: research
+    open: StGit 2.6.1 ships .deb, .rpm, .msi and a source tarball, with no macOS binary, and no mise backend is known to install a prebuilt StGit on both Linux and macOS.
+    notes:
+      - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
+archive: []
