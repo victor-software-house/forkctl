@@ -3,6 +3,7 @@ all-features = true
 
 [advisories]
 yanked = "deny"
+unmaintained = "all"
 
 [licenses]
 allow = [
@@ -18,6 +19,10 @@ confidence-threshold = 0.93
 multiple-versions = "warn"
 wildcards = "deny"
 highlight = "all"
+deny = [
+    { crate = "openssl", reason = "TLS is rustls" },
+    { crate = "native-tls", reason = "TLS is rustls" },
+]
 
 [sources]
 unknown-registry = "deny"
