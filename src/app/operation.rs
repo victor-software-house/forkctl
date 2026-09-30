@@ -9,13 +9,13 @@ use crate::protocol::{
 use crate::state::{OperationIntent, OperationKind};
 
 impl App {
-    pub fn operation_status(&self) -> Result<OperationStatusResult> {
+    pub(crate) fn operation_status(&self) -> Result<OperationStatusResult> {
         Ok(OperationStatusResult {
             operation: self.read_operation()?,
         })
     }
 
-    pub fn operation_continue(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
+    pub(crate) fn operation_continue(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
         let operation = self.require_operation()?;
         self.load_operation_manifest()?;
         self.clear_restored_workspace_bootstrap()?;
@@ -98,7 +98,7 @@ impl App {
         )))
     }
 
-    pub fn operation_abort(
+    pub(crate) fn operation_abort(
         &mut self,
         confirmed: bool,
         mode: ExecutionMode,

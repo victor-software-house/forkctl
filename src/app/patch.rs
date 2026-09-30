@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 impl App {
-    pub fn patch_list(&self) -> Result<PatchListResult> {
+    pub(crate) fn patch_list(&self) -> Result<PatchListResult> {
         let active = self.read_active()?;
         let applied = series(self, "--applied");
         let unapplied = series(self, "--unapplied");
@@ -58,7 +58,7 @@ impl App {
         })
     }
 
-    pub fn patch_show(&self, target: &PatchTarget) -> Result<PatchShowResult> {
+    pub(crate) fn patch_show(&self, target: &PatchTarget) -> Result<PatchShowResult> {
         if let Some(name) = target.patch.as_deref()
             && let Some(record) = self
                 .manifest()?
@@ -97,7 +97,7 @@ impl App {
         })
     }
 
-    pub fn patch_create(
+    pub(crate) fn patch_create(
         &self,
         args: PatchCreateArgs,
         mode: ExecutionMode,
@@ -133,7 +133,7 @@ impl App {
         }))
     }
 
-    pub fn patch_select(&self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
+    pub(crate) fn patch_select(&self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_no_operation()?;
         if self.manifest()?.patch(name).is_none() {
             return Err(DomainError::patch_not_found(
@@ -165,7 +165,7 @@ impl App {
         }))
     }
 
-    pub fn patch_edit(
+    pub(crate) fn patch_edit(
         &mut self,
         args: PatchEditArgs,
         mode: ExecutionMode,
@@ -402,7 +402,7 @@ impl App {
         )
     }
 
-    pub fn patch_refresh(
+    pub(crate) fn patch_refresh(
         &mut self,
         args: PatchRefreshArgs,
         mode: ExecutionMode,
@@ -612,7 +612,11 @@ impl App {
         }))
     }
 
-    pub fn patch_finish(&self, target: &PatchTarget, mode: ExecutionMode) -> Result<CommandResult> {
+    pub(crate) fn patch_finish(
+        &self,
+        target: &PatchTarget,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
         let active = self.require_active_patch()?;
         let name = target
             .patch
@@ -647,7 +651,7 @@ impl App {
         }))
     }
 
-    pub fn patch_remove(
+    pub(crate) fn patch_remove(
         &mut self,
         args: PatchTransitionArgs,
         mode: ExecutionMode,
@@ -655,7 +659,7 @@ impl App {
         self.patch_deactivate(args, mode, false)
     }
 
-    pub fn patch_disable(
+    pub(crate) fn patch_disable(
         &mut self,
         args: PatchTransitionArgs,
         mode: ExecutionMode,
@@ -779,7 +783,11 @@ impl App {
         self.finish_patch_transition(operation, patch.name, commit, disable)
     }
 
-    pub fn patch_enable(&mut self, name: &str, mode: ExecutionMode) -> Result<CommandResult> {
+    pub(crate) fn patch_enable(
+        &mut self,
+        name: &str,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
         self.require_no_active_patch()?;

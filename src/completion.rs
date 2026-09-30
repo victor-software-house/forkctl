@@ -4,26 +4,26 @@ use clap_complete::{CompletionCandidate, engine::ArgValueCompleter};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-pub fn patch_completer() -> ArgValueCompleter {
+pub(crate) fn patch_completer() -> ArgValueCompleter {
     ArgValueCompleter::new(patch_candidates)
 }
 
-pub fn ref_completer() -> ArgValueCompleter {
+pub(crate) fn ref_completer() -> ArgValueCompleter {
     ArgValueCompleter::new(ref_candidates)
 }
 
-pub fn remote_completer() -> ArgValueCompleter {
+pub(crate) fn remote_completer() -> ArgValueCompleter {
     ArgValueCompleter::new(remote_candidates)
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum CandidateKind {
+pub(crate) enum CandidateKind {
     Patch,
     Ref,
     Remote,
 }
 
-pub fn candidate_lines(kind: CandidateKind) -> Vec<String> {
+pub(crate) fn candidate_lines(kind: CandidateKind) -> Vec<String> {
     let values = match kind {
         CandidateKind::Patch => patch_candidates(OsStr::new("")),
         CandidateKind::Ref => ref_candidates(OsStr::new("")),

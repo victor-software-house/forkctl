@@ -16,7 +16,7 @@ macro_rules! ensure_check {
 }
 
 impl App {
-    pub fn check(&self, args: &CheckArgs) -> Result<CheckResult> {
+    pub(crate) fn check(&self, args: &CheckArgs) -> Result<CheckResult> {
         let result = match args.scope {
             CheckScope::Repository => {
                 if args.patch.is_some() {

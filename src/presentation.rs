@@ -9,7 +9,7 @@ use crate::protocol::{
     PatchSelectResult, PatchShowResult, PatchTransitionResult, RebaseResult, StatusResult,
 };
 
-pub enum Report {
+pub(crate) enum Report {
     Response {
         response: Box<ApiResponse>,
         update_notice: Option<String>,
@@ -19,18 +19,18 @@ pub enum Report {
 }
 
 impl Report {
-    pub fn response(response: ApiResponse, update_notice: Option<String>) -> Self {
+    pub(crate) fn response(response: ApiResponse, update_notice: Option<String>) -> Self {
         Self::Response {
             response: Box::new(response),
             update_notice,
         }
     }
 
-    pub fn json(value: serde_json::Value) -> Self {
+    pub(crate) fn json(value: serde_json::Value) -> Self {
         Self::Json(value)
     }
 
-    pub fn text(value: impl Into<String>) -> Self {
+    pub(crate) fn text(value: impl Into<String>) -> Self {
         Self::Text(value.into())
     }
 }
@@ -67,7 +67,7 @@ impl Present for Report {
             {
                 MessageKind::Error
             }
-            _ => MessageKind::Success,
+            Self::Response { .. } | Self::Json(_) | Self::Text(_) => MessageKind::Success,
         }
     }
 
@@ -87,7 +87,9 @@ impl Present for Report {
             {
                 2
             }
-            _ => self.message_kind().default_exit_code(),
+            Self::Response { .. } | Self::Json(_) | Self::Text(_) => {
+                self.message_kind().default_exit_code()
+            }
         }
     }
 }

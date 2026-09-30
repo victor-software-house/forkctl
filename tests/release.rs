@@ -1,4 +1,8 @@
 #![cfg(unix)]
+#![expect(
+    clippy::unwrap_used,
+    reason = "test setup helpers fail the test on the first unexpected error"
+)]
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

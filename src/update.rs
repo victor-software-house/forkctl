@@ -21,7 +21,7 @@ struct RegistryPackage {
     newest_version: String,
 }
 
-pub fn available_notice() -> Option<String> {
+pub(crate) fn available_notice() -> Option<String> {
     if !io::stdout().is_terminal()
         || env::var_os("FORKCTL_NO_UPDATE_CHECK").is_some()
         || !check_is_due()
@@ -47,7 +47,7 @@ fn latest_version() -> Option<Version> {
             "--max-time",
             "1",
             "--user-agent",
-            concat!("forkctl/", env!("CARGO_PKG_VERSION")),
+            USER_AGENT,
             REGISTRY_URL,
         ],
     )
@@ -90,6 +90,12 @@ fn update_message(version: &str) -> String {
         "forkctl {version} is available; run `cargo install forkctl --locked` or update the pinned mise catalog"
     )
 }
+
+#[expect(
+    clippy::disallowed_macros,
+    reason = "a compile-time user agent, not a multiline string"
+)]
+const USER_AGENT: &str = concat!("forkctl/", env!("CARGO_PKG_VERSION"));
 
 #[cfg(test)]
 mod tests {

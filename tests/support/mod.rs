@@ -1,3 +1,9 @@
+#![expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test setup helpers fail the test on the first unexpected error"
+)]
+
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -7,20 +13,20 @@ use std::process::{Command, Output, Stdio};
 const SANDBOX_DIR: &str = ".forkctl-test-env";
 const FIXED_GIT_DATE: &str = "2001-02-03T04:05:06Z";
 
-pub struct Fixture {
+pub(crate) struct Fixture {
     _directory: tempfile::TempDir,
     pub repo: PathBuf,
     manifest: String,
 }
 
 impl Fixture {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::new_with_manifest("patches/fork.yaml")
     }
 
     /// A bootstrapped fixture: `init` created the empty downstream branch at the base and set
     /// tracking, as it does for an operator.
-    pub fn new_with_manifest(manifest: &str) -> Self {
+    pub(crate) fn new_with_manifest(manifest: &str) -> Self {
         let mut fixture = Self::fresh_upstream_clone();
         manifest.clone_into(&mut fixture.manifest);
         let args = fixture.bootstrap_args();
@@ -30,7 +36,7 @@ impl Fixture {
 
     /// A fresh clone of upstream: its `upstream` remote is the clone source, its `origin`
     /// downstream remote is empty, `main` still tracks `upstream/main`, and `init` has not run.
-    pub fn fresh_upstream_clone() -> Self {
+    pub(crate) fn fresh_upstream_clone() -> Self {
         let directory = tempfile::tempdir().unwrap();
         prepare_sandbox(directory.path());
         let upstream_bare = directory.path().join("upstream.git");
@@ -62,7 +68,7 @@ impl Fixture {
     }
 
     /// The bootstrap `init` invocation every fixture uses.
-    pub fn bootstrap_args(&self) -> Vec<String> {
+    pub(crate) fn bootstrap_args(&self) -> Vec<String> {
         let upstream_bare = self.repo.parent().unwrap().join("upstream.git");
         [
             "init",
@@ -98,7 +104,7 @@ impl Fixture {
         .collect()
     }
 
-    pub fn forkctl(&self, args: &[&str]) -> Output {
+    pub(crate) fn forkctl(&self, args: &[&str]) -> Output {
         forkctl_command(&self.repo)
             .arg("--manifest")
             .arg(&self.manifest)
@@ -107,7 +113,7 @@ impl Fixture {
             .unwrap()
     }
 
-    pub fn forkctl_ok(&self, args: &[&str]) -> String {
+    pub(crate) fn forkctl_ok(&self, args: &[&str]) -> String {
         let output = self.forkctl(args);
         assert!(
             output.status.success(),
@@ -118,7 +124,7 @@ impl Fixture {
         String::from_utf8(output.stdout).unwrap()
     }
 
-    pub fn api_call(&self, mode: &str, request: &serde_json::Value) -> Output {
+    pub(crate) fn api_call(&self, mode: &str, request: &serde_json::Value) -> Output {
         let invocation = serde_json::json!({
             "protocol_version": 1,
             "manifest": self.manifest,
@@ -177,11 +183,11 @@ fn create_upstream(directory: &Path, work: &Path, bare: &Path) {
     git_ok(work, ["push", "--quiet", "-u", "origin", "main"]);
 }
 
-pub fn forkctl_command(dir: &Path) -> Command {
+pub(crate) fn forkctl_command(dir: &Path) -> Command {
     sandboxed_command(dir, env!("CARGO_BIN_EXE_forkctl"), false)
 }
 
-pub fn isolated_command(dir: &Path, program: impl AsRef<OsStr>) -> Command {
+pub(crate) fn isolated_command(dir: &Path, program: impl AsRef<OsStr>) -> Command {
     sandboxed_command(dir, program, true)
 }
 
@@ -248,7 +254,7 @@ fn sandbox_path(dir: &Path) -> PathBuf {
         .unwrap_or_else(|| panic!("no forkctl test sandbox above {}", dir.display()))
 }
 
-pub fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
+pub(crate) fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
     let output = isolated_command(dir, "git")
         .args(args)
         .current_dir(dir)

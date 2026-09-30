@@ -10,11 +10,11 @@ use std::thread;
 static GIT_LOCAL_ENV: OnceLock<Vec<OsString>> = OnceLock::new();
 static STREAM_OPERATOR: AtomicBool = AtomicBool::new(false);
 
-pub fn set_stream_operator_output(enabled: bool) {
+pub(crate) fn set_stream_operator_output(enabled: bool) {
     STREAM_OPERATOR.store(enabled, Ordering::Relaxed);
 }
 
-pub fn command(dir: &Path, program: &str) -> Command {
+pub(crate) fn command(dir: &Path, program: &str) -> Command {
     let mut command = Command::new(program);
     command.current_dir(dir);
     for key in git_local_env_vars() {
@@ -23,7 +23,7 @@ pub fn command(dir: &Path, program: &str) -> Command {
     command
 }
 
-pub fn capture<I, S>(dir: &Path, program: &str, args: I) -> AppResult<String>
+pub(crate) fn capture<I, S>(dir: &Path, program: &str, args: I) -> AppResult<String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -35,7 +35,7 @@ where
         .to_string())
 }
 
-pub fn output<I, S>(dir: &Path, program: &str, args: I) -> AppResult<Output>
+pub(crate) fn output<I, S>(dir: &Path, program: &str, args: I) -> AppResult<Output>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -52,7 +52,7 @@ where
     }
 }
 
-pub fn succeeds<I, S>(dir: &Path, program: &str, args: I) -> AppResult<bool>
+pub(crate) fn succeeds<I, S>(dir: &Path, program: &str, args: I) -> AppResult<bool>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -65,7 +65,7 @@ where
         .success())
 }
 
-pub fn run<I, S>(dir: &Path, program: &str, args: I) -> AppResult<()>
+pub(crate) fn run<I, S>(dir: &Path, program: &str, args: I) -> AppResult<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -73,7 +73,7 @@ where
     output(dir, program, args).map(|_| ())
 }
 
-pub fn run_operator<I, S>(dir: &Path, program: &str, args: I) -> AppResult<()>
+pub(crate) fn run_operator<I, S>(dir: &Path, program: &str, args: I) -> AppResult<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,

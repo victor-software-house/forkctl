@@ -22,7 +22,11 @@ struct Publication {
 }
 
 impl App {
-    pub fn publish(&mut self, args: &PublishArgs, mode: ExecutionMode) -> Result<CommandResult> {
+    pub(crate) fn publish(
+        &mut self,
+        args: &PublishArgs,
+        mode: ExecutionMode,
+    ) -> Result<CommandResult> {
         if args.promote && args.mode.is_some() {
             return Err(DomainError::invalid_request(
                 "publish --promote cannot be combined with --rewrite, --append, or --propose",

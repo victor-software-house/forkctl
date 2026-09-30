@@ -9,7 +9,7 @@ use std::fs;
 use std::path::PathBuf;
 
 impl App {
-    pub fn rebase(&mut self, selector: &str, mode: ExecutionMode) -> Result<CommandResult> {
+    pub(crate) fn rebase(&mut self, selector: &str, mode: ExecutionMode) -> Result<CommandResult> {
         self.require_clean()?;
         self.require_declared_branch()?;
         self.require_no_active_patch()?;

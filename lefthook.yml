@@ -21,6 +21,8 @@ pre-push:
   skip:
     - run: test -n "$CI"
   commands:
+    lockfile:
+      run: mise install --locked
     verify:
       run: mise run verify
     full-history-secrets:

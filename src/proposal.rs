@@ -6,7 +6,7 @@ use askama::Template;
 const SHORT_COMMIT: usize = 12;
 
 /// Title and body of the proposal pull request for one candidate.
-pub struct ProposalText {
+pub(crate) struct ProposalText {
     pub title: String,
     pub body: String,
 }
@@ -28,7 +28,11 @@ struct PatchRow {
     purpose: String,
 }
 
-pub fn render(manifest: &Manifest, candidate: &str, downstream_tip: &str) -> Result<ProposalText> {
+pub(crate) fn render(
+    manifest: &Manifest,
+    candidate: &str,
+    downstream_tip: &str,
+) -> Result<ProposalText> {
     let branch = &manifest.downstream.branch;
     let short = candidate.get(..SHORT_COMMIT).unwrap_or(candidate);
     let mut body = ProposalTemplate {
@@ -62,7 +66,7 @@ pub fn render(manifest: &Manifest, candidate: &str, downstream_tip: &str) -> Res
 ///
 /// Accepts `https://`, `http://`, and `ssh://` URLs and scp-style `[USER@]HOST:OWNER/REPO`, each
 /// with an optional `.git` suffix. Anything else, such as a local path, names no repository.
-pub fn github_repo(url: &str) -> Option<String> {
+pub(crate) fn github_repo(url: &str) -> Option<String> {
     let (host, path) = if let Some((scheme, rest)) = url.split_once("://") {
         let (authority, path) = rest.split_once('/')?;
         let host = authority
@@ -94,7 +98,7 @@ pub fn github_repo(url: &str) -> Option<String> {
 ///
 /// Everything up to the last `@` is dropped, because an unencoded password may itself contain
 /// `/` or `@`. An `@` later in the path over-redacts, which is safe for a message.
-pub fn redact_userinfo(url: &str) -> String {
+pub(crate) fn redact_userinfo(url: &str) -> String {
     let Some((scheme, rest)) = url.split_once("://") else {
         return url.to_string();
     };

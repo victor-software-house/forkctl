@@ -16,7 +16,7 @@ use std::path::PathBuf;
     about = "Maintain an explicit audited StGit downstream patch stack",
     arg_required_else_help = true
 )]
-pub struct Cli {
+pub(crate) struct Cli {
     /// Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.yaml`.
     #[arg(short = 'm', long, global = true, value_hint = clap::ValueHint::FilePath, help_heading = "Output")]
     pub manifest: Option<PathBuf>,
@@ -29,7 +29,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand)]
-pub enum Command {
+pub(crate) enum Command {
     /// Bootstrap a new contract or hydrate a fresh clone.
     Init(InitCliArgs),
     /// Inspect repository, patch, worktree, check, and operation state.
@@ -75,7 +75,7 @@ pub enum Command {
 }
 
 #[derive(Args)]
-pub struct InitCliArgs {
+pub(crate) struct InitCliArgs {
     /// Fetch-only upstream remote name.
     #[arg(long, help_heading = "Repository", add = crate::completion::remote_completer())]
     pub upstream_remote: Option<String>,
@@ -120,7 +120,7 @@ pub struct InitCliArgs {
 }
 
 #[derive(Args)]
-pub struct CheckCliArgs {
+pub(crate) struct CheckCliArgs {
     /// Check the staged index against an explicit or active patch.
     #[arg(short = 's', long, help_heading = "Check scope")]
     pub staged: bool,
@@ -130,7 +130,7 @@ pub struct CheckCliArgs {
 }
 
 #[derive(Subcommand)]
-pub enum PatchCommand {
+pub(crate) enum PatchCommand {
     /// List the declared series and active patch.
     List,
     /// Show one patch; defaults to the active patch.
@@ -176,7 +176,7 @@ pub enum PatchCommand {
 }
 
 #[derive(Args)]
-pub struct PatchTransitionCliArgs {
+pub(crate) struct PatchTransitionCliArgs {
     /// Patch name.
     #[arg(add = crate::completion::patch_completer())]
     pub name: String,
@@ -188,7 +188,7 @@ pub struct PatchTransitionCliArgs {
 }
 
 #[derive(Args)]
-pub struct PatchCreateCliArgs {
+pub(crate) struct PatchCreateCliArgs {
     /// Unique patch name.
     pub name: String,
     /// Patch layer.
@@ -225,7 +225,7 @@ pub struct PatchCreateCliArgs {
         .args(["set_scope", "add_scope", "remove_scope"])
         .multiple(true)
 ))]
-pub struct PatchEditCliArgs {
+pub(crate) struct PatchEditCliArgs {
     /// Patch name; defaults to the active patch.
     #[arg(add = crate::completion::patch_completer())]
     pub name: Option<String>,
@@ -282,7 +282,7 @@ pub struct PatchEditCliArgs {
         .args(["staged", "all", "paths"])
         .multiple(false)
 ))]
-pub struct PatchRefreshCliArgs {
+pub(crate) struct PatchRefreshCliArgs {
     /// Patch name; defaults to the active patch.
     #[arg(add = crate::completion::patch_completer())]
     pub name: Option<String>,
@@ -310,7 +310,7 @@ pub struct PatchRefreshCliArgs {
         .required(true)
         .multiple(true)
 ))]
-pub struct ContractEditCliArgs {
+pub(crate) struct ContractEditCliArgs {
     /// Clear all existing contracts before adding the supplied values.
     #[arg(long, help_heading = "Contracts")]
     pub clear: bool,
@@ -328,13 +328,13 @@ pub struct ContractEditCliArgs {
 }
 
 #[derive(Subcommand)]
-pub enum ContractCommand {
+pub(crate) enum ContractCommand {
     /// Append contracts or clear and replace the complete contract set.
     Edit(ContractEditCliArgs),
 }
 
 #[derive(Args)]
-pub struct RebaseCliArgs {
+pub(crate) struct RebaseCliArgs {
     /// Full upstream branch/tag ref or commit SHA.
     #[arg(short = 'o', long, help_heading = "Target", add = crate::completion::ref_completer())]
     pub onto: String,
@@ -343,8 +343,11 @@ pub struct RebaseCliArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
-pub struct PublishCliArgs {
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool is an independent clap flag"
+)]
+pub(crate) struct PublishCliArgs {
     /// Exact-lease rewrite. Overrides the repository default.
     #[arg(long, group = "publish_mode", help_heading = "Mode")]
     pub rewrite: bool,
@@ -368,7 +371,7 @@ pub struct PublishCliArgs {
 }
 
 #[derive(Subcommand)]
-pub enum OperationCommand {
+pub(crate) enum OperationCommand {
     /// Show the current operation and exact next actions.
     Status,
     /// Resume after operator conflict resolution.
@@ -384,7 +387,7 @@ pub enum OperationCommand {
 }
 
 #[derive(Subcommand)]
-pub enum ApiCommand {
+pub(crate) enum ApiCommand {
     /// Emit JSON Schema 2020-12.
     Schema {
         /// Schema document to emit.
@@ -396,7 +399,7 @@ pub enum ApiCommand {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum CompletionShell {
+pub(crate) enum CompletionShell {
     Bash,
     Elvish,
     Fish,
@@ -405,7 +408,7 @@ pub enum CompletionShell {
     Zsh,
 }
 
-pub enum CliAction {
+pub(crate) enum CliAction {
     Request {
         request: Box<ApiRequest>,
         mode: ExecutionMode,
@@ -417,7 +420,7 @@ pub enum CliAction {
 }
 
 impl Cli {
-    pub fn into_action(self) -> Result<CliAction> {
+    pub(crate) fn into_action(self) -> Result<CliAction> {
         let command = self.command.context("a command is required")?;
         let action = match command {
             Command::Init(args) => CliAction::Request {

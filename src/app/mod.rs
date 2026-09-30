@@ -25,7 +25,7 @@ use tempfile::NamedTempFile;
 const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
 const APPEND_BRIDGE_MESSAGE_PREFIX: &str = "forkctl: keep published history ";
 
-pub struct App {
+pub(crate) struct App {
     pub(super) repo: PathBuf,
     pub(super) manifest_path: PathBuf,
     pub(super) manifest_format: ManifestFormat,
@@ -34,7 +34,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn discover(manifest_arg: &Path) -> Result<Self> {
+    pub(crate) fn discover(manifest_arg: &Path) -> Result<Self> {
         let cwd = env::current_dir().internal("read current directory")?;
         let repo = capture(&cwd, "git", ["rev-parse", "--show-toplevel"])
             .map(PathBuf::from)

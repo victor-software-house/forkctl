@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use askama::Template;
 
-pub struct RebaseReport {
+pub(crate) struct RebaseReport {
     pub target: String,
     pub old_base: String,
     pub old_tip: String,
@@ -12,7 +12,7 @@ pub struct RebaseReport {
     pub range_diff: String,
 }
 
-pub struct ExportEvidence {
+pub(crate) struct ExportEvidence {
     pub path: String,
     pub hash: String,
 }
@@ -35,7 +35,7 @@ struct ExportRow {
     hash: String,
 }
 
-pub fn render(report: RebaseReport) -> Result<String> {
+pub(crate) fn render(report: RebaseReport) -> Result<String> {
     let mut output = RebaseReportTemplate {
         target: escape_inline(&report.target),
         old_base: escape_inline(&report.old_base),
