@@ -27,6 +27,7 @@ lefthook = "2.1.10"
 gitleaks = "8.30.0"
 usage = "6.11.1"
 gh = "2.95.0"
+"github:victor-software-house/verctl" = "0.3.9"
 # Test-only: the declared-check lifecycle test exercises a real ast-grep command. Consumers
 # name their own tools in their own mise.toml; forkctl ships no check tooling.
 ast-grep = "0.45.0"
