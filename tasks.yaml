@@ -33,6 +33,17 @@ queue:
       - Both runner families are free for this public repository; release-macos.yml already runs verify on macos-latest for every published release.
       - Until then mise run release builds the macOS asset on the machine it runs on, which is why 0.0.28 was published from a workstation.
       - Consider jdx/mr-boxington-action for these jobs once the ctl repos settle the mbx pattern.
+
+  - id: FRK-015
+    title: Bound test parallelism on a shared build host
+    scope: build
+    outcome: 'Running forkctl tests on a shared build host does not saturate it: the slow suite runs with bounded parallelism or on a manually started runner.'
+    blocked_by: []
+    acceptance:
+      - The committed test configuration caps concurrent lifecycle tests, and the full suite still runs before merge.
+    notes:
+      - On 2026-09-29 a pre-push verify ran one lifecycle test per CPU, each spawning git and StGit, on a host already at load 40 to 130 and nearly out of swap. The same suite took 32 s on a Namespace Linux 8x16 instance and 63 s on macOS 6x14.
+      - The operator wants slow suites to run only on approval, with merge blocked until they have run.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -42,6 +53,16 @@ horizon:
     open: StGit 2.6.1 ships .deb, .rpm, .msi and a source tarball, with no macOS binary, and no mise backend is known to install a prebuilt StGit on both Linux and macOS.
     notes:
       - The mounted task and the repository mise.toml install StGit as cargo:stgit, which compiles from source on every new runner.
+
+  - id: FRK-016
+    title: Separate tool faults from failed checks in check
+    scope: check
+    outcome: forkctl check reports a tool fault, such as a git that cannot start, as internal_error, and reserves check_failed for repository drift.
+    kind: evaluation
+    open: Changing the code a client sees is a protocol contract change. It needs an OpenSpec change and a decision on which read failures count as drift, such as a missing ledger.
+    notes:
+      - >2-
+        Raised in review of pull request 23: check maps every untyped failure to check_failed, as it did before the AppError refactor.
 archive:
   - id: FRK-014
     title: Bootstrap on a release tag outside the upstream branch
