@@ -7,7 +7,7 @@ use crate::protocol::{
 };
 
 impl App {
-    pub fn contract_edit(
+    pub(crate) fn contract_edit(
         &mut self,
         args: ContractEditArgs,
         mode: ExecutionMode,

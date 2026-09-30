@@ -1,21 +1,26 @@
+#![expect(
+    clippy::disallowed_macros,
+    reason = "schemars' JsonSchema derive expands concat!"
+)]
+
 use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchKind, RequiredText};
 use crate::state::{ActivePatchState, OperationState};
 use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub(crate) const PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ExecutionMode {
+pub(crate) enum ExecutionMode {
     Execute,
     Plan,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ApiInvocation {
+pub(crate) struct ApiInvocation {
     pub protocol_version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manifest: Option<String>,
@@ -25,7 +30,7 @@ pub struct ApiInvocation {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "command", content = "arguments", deny_unknown_fields)]
-pub enum ApiRequest {
+pub(crate) enum ApiRequest {
     #[serde(rename = "init")]
     Init(InitArgs),
     #[serde(rename = "status")]
@@ -69,7 +74,7 @@ pub enum ApiRequest {
 }
 
 impl ApiRequest {
-    pub fn command(&self) -> &'static str {
+    pub(crate) fn command(&self) -> &'static str {
         match self {
             Self::Init(_) => "init",
             Self::Status(_) => "status",
@@ -94,7 +99,7 @@ impl ApiRequest {
         }
     }
 
-    pub fn is_read_only(&self) -> bool {
+    pub(crate) fn is_read_only(&self) -> bool {
         matches!(
             self,
             Self::Status(_)
@@ -109,11 +114,11 @@ impl ApiRequest {
 
 #[derive(Debug, Clone, Default, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct EmptyArgs {}
+pub(crate) struct EmptyArgs {}
 
 #[derive(Debug, Clone, Default, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct InitArgs {
+pub(crate) struct InitArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream_remote: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -143,7 +148,7 @@ pub struct InitArgs {
 }
 
 impl InitArgs {
-    pub fn is_bootstrap(&self) -> bool {
+    pub(crate) fn is_bootstrap(&self) -> bool {
         self.upstream_remote.is_some()
             || self.upstream_url.is_some()
             || self.upstream_ref.is_some()
@@ -162,14 +167,14 @@ impl InitArgs {
 
 #[derive(Debug, Clone, Copy, Deserialize, Eq, JsonSchema, PartialEq, Serialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
-pub enum CheckScope {
+pub(crate) enum CheckScope {
     Repository,
     Staged,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CheckArgs {
+pub(crate) struct CheckArgs {
     pub scope: CheckScope,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
@@ -177,27 +182,27 @@ pub struct CheckArgs {
 
 #[derive(Debug, Clone, Default, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchTarget {
+pub(crate) struct PatchTarget {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchName {
+pub(crate) struct PatchName {
     pub patch: String,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchTransitionArgs {
+pub(crate) struct PatchTransitionArgs {
     pub patch: String,
     pub reason: String,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchCreateArgs {
+pub(crate) struct PatchCreateArgs {
     pub name: String,
     pub kind: PatchKind,
     pub purpose: String,
@@ -224,7 +229,7 @@ impl From<PatchCreateArgs> for Patch {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ScopeEdit {
+pub(crate) enum ScopeEdit {
     Set {
         patterns: Vec<String>,
     },
@@ -236,7 +241,7 @@ pub enum ScopeEdit {
 
 #[derive(Debug, Clone, Default, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchEditArgs {
+pub(crate) struct PatchEditArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -256,14 +261,14 @@ pub struct PatchEditArgs {
 /// Replacement or additive edit of a patch's declared checks.
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
-pub enum CheckEdit {
+pub(crate) enum CheckEdit {
     Set { checks: Vec<Check> },
     Add { checks: Vec<Check> },
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
-pub enum CaptureSource {
+pub(crate) enum CaptureSource {
     Staged,
     All,
     Paths { pathspecs: Vec<String> },
@@ -271,7 +276,7 @@ pub enum CaptureSource {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchRefreshArgs {
+pub(crate) struct PatchRefreshArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
     pub capture: CaptureSource,
@@ -282,7 +287,7 @@ pub struct PatchRefreshArgs {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ContractEditArgs {
+pub(crate) struct ContractEditArgs {
     #[serde(default)]
     pub clear: bool,
     #[serde(default)]
@@ -295,19 +300,19 @@ pub struct ContractEditArgs {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct RebaseArgs {
+pub(crate) struct RebaseArgs {
     pub onto: String,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct OperationAbortArgs {
+pub(crate) struct OperationAbortArgs {
     pub confirmed: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PublishArgs {
+pub(crate) struct PublishArgs {
     /// Override the repository default for this invocation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<crate::manifest::PublishMode>,
@@ -324,7 +329,7 @@ pub struct PublishArgs {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
-pub enum ApiResponse {
+pub(crate) enum ApiResponse {
     Success {
         protocol_version: u32,
         command: String,
@@ -344,7 +349,7 @@ pub enum ApiResponse {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum CommandResult {
+pub(crate) enum CommandResult {
     Init(InitResult),
     Status(Box<StatusResult>),
     Check(CheckResult),
@@ -369,14 +374,14 @@ pub enum CommandResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct Outcome {
+pub(crate) struct Outcome {
     pub result: CommandResult,
     pub notices: Vec<Notice>,
     pub operation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct Notice {
+pub(crate) struct Notice {
     pub code: NoticeCode,
     pub message: String,
     pub details: NoticeDetails,
@@ -384,7 +389,7 @@ pub struct Notice {
 
 #[derive(Debug, Clone, Copy, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum NoticeCode {
+pub(crate) enum NoticeCode {
     UpstreamPatchDropped,
     ActivePatchRetained,
     HookModifiedIndex,
@@ -393,7 +398,7 @@ pub enum NoticeCode {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum NoticeDetails {
+pub(crate) enum NoticeDetails {
     None,
     Patch {
         patch: String,
@@ -409,7 +414,7 @@ pub enum NoticeDetails {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct ApiError {
+pub(crate) struct ApiError {
     pub code: ApiErrorCode,
     pub message: String,
     pub causes: Vec<String>,
@@ -420,7 +425,7 @@ pub struct ApiError {
 
 #[derive(Debug, Clone, Copy, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ApiErrorCode {
+pub(crate) enum ApiErrorCode {
     InvalidRequest,
     UnsupportedProtocol,
     RepositoryNotFound,
@@ -466,7 +471,7 @@ impl std::fmt::Display for ApiErrorCode {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum ErrorDetails {
+pub(crate) enum ErrorDetails {
     None,
     Paths {
         patch: Option<String>,
@@ -507,14 +512,14 @@ pub enum ErrorDetails {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct CheckFinding {
+pub(crate) struct CheckFinding {
     pub code: String,
     pub subject: String,
     pub message: String,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct CheckResult {
+pub(crate) struct CheckResult {
     pub scope: CheckScope,
     pub ok: bool,
     pub patch: Option<String>,
@@ -529,7 +534,7 @@ pub struct CheckResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct InitResult {
+pub(crate) struct InitResult {
     pub created: bool,
     pub hydrated: bool,
     pub manifest: String,
@@ -539,7 +544,7 @@ pub struct InitResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct StatusResult {
+pub(crate) struct StatusResult {
     pub repository: String,
     pub manifest: String,
     pub current_branch: Option<String>,
@@ -562,13 +567,13 @@ pub struct StatusResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct CheckSummary {
+pub(crate) struct CheckSummary {
     pub ok: bool,
     pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchSummary {
+pub(crate) struct PatchSummary {
     pub name: String,
     pub kind: PatchKind,
     pub state: String,
@@ -577,13 +582,13 @@ pub struct PatchSummary {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchListResult {
+pub(crate) struct PatchListResult {
     pub patches: Vec<PatchSummary>,
     pub active_patch: Option<ActivePatchState>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchShowResult {
+pub(crate) struct PatchShowResult {
     pub patch: Patch,
     pub commit: Option<String>,
     pub changed_paths: Vec<String>,
@@ -592,18 +597,18 @@ pub struct PatchShowResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchCreateResult {
+pub(crate) struct PatchCreateResult {
     pub active_patch: ActivePatchState,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchSelectResult {
+pub(crate) struct PatchSelectResult {
     pub previous: Option<ActivePatchState>,
     pub active_patch: ActivePatchState,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchEditResult {
+pub(crate) struct PatchEditResult {
     pub patch: Patch,
     pub old_commit: String,
     pub new_commit: String,
@@ -612,7 +617,7 @@ pub struct PatchEditResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchRefreshResult {
+pub(crate) struct PatchRefreshResult {
     pub patch: String,
     pub capture: CaptureSource,
     pub captured_paths: Vec<String>,
@@ -623,13 +628,13 @@ pub struct PatchRefreshResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchFinishResult {
+pub(crate) struct PatchFinishResult {
     pub patch: String,
     pub check: CheckResult,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PatchTransitionResult {
+pub(crate) struct PatchTransitionResult {
     pub patch: String,
     pub commit: String,
     pub recovery_tag: String,
@@ -638,14 +643,14 @@ pub struct PatchTransitionResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct ContractEditResult {
+pub(crate) struct ContractEditResult {
     pub contracts: Contracts,
     pub generated_paths: Vec<String>,
     pub check: CheckResult,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct MutationPlan {
+pub(crate) struct MutationPlan {
     pub command: String,
     pub reads: Vec<String>,
     pub writes: Vec<String>,
@@ -656,7 +661,7 @@ pub struct MutationPlan {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct RebaseResult {
+pub(crate) struct RebaseResult {
     pub selected_target: String,
     pub old_base: String,
     pub old_tip: String,
@@ -672,7 +677,7 @@ pub struct RebaseResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct PublishResult {
+pub(crate) struct PublishResult {
     pub branch: String,
     pub head: String,
     pub already_published: bool,
@@ -688,30 +693,30 @@ pub struct PublishResult {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct OperationStatusResult {
+pub(crate) struct OperationStatusResult {
     pub operation: Option<OperationState>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct OperationContinueResult {
+pub(crate) struct OperationContinueResult {
     pub operation: Option<OperationState>,
     pub result: Option<Box<CommandResult>>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct OperationAbortResult {
+pub(crate) struct OperationAbortResult {
     pub operation_id: String,
     pub restored_tip: String,
     pub check: CheckResult,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-pub struct InstructionsResult {
+pub(crate) struct InstructionsResult {
     pub markdown: String,
 }
 
 impl Outcome {
-    pub fn new(result: CommandResult) -> Self {
+    pub(crate) fn new(result: CommandResult) -> Self {
         Self {
             result,
             notices: Vec::new(),
@@ -721,7 +726,7 @@ impl Outcome {
 }
 
 impl ApiResponse {
-    pub fn success(command: &str, mode: ExecutionMode, outcome: Outcome) -> Self {
+    pub(crate) fn success(command: &str, mode: ExecutionMode, outcome: Outcome) -> Self {
         Self::Success {
             protocol_version: PROTOCOL_VERSION,
             command: command.to_string(),
@@ -732,7 +737,7 @@ impl ApiResponse {
         }
     }
 
-    pub fn error(command: &str, mode: ExecutionMode, error: ApiError) -> Self {
+    pub(crate) fn error(command: &str, mode: ExecutionMode, error: ApiError) -> Self {
         Self::Error {
             protocol_version: PROTOCOL_VERSION,
             command: command.to_string(),
@@ -742,7 +747,7 @@ impl ApiResponse {
     }
 }
 
-pub fn schema_document(kind: SchemaKind) -> serde_json::Result<serde_json::Value> {
+pub(crate) fn schema_document(kind: SchemaKind) -> serde_json::Result<serde_json::Value> {
     match kind {
         SchemaKind::Bundle => Ok(serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -764,7 +769,7 @@ pub fn schema_document(kind: SchemaKind) -> serde_json::Result<serde_json::Value
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
-pub enum SchemaKind {
+pub(crate) enum SchemaKind {
     Bundle,
     Manifest,
     Invocation,

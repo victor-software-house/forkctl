@@ -8,7 +8,7 @@ use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, Mutati
 use std::ffi::OsString;
 
 impl App {
-    pub fn init(&mut self, args: InitArgs, mode: ExecutionMode) -> Result<CommandResult> {
+    pub(crate) fn init(&mut self, args: InitArgs, mode: ExecutionMode) -> Result<CommandResult> {
         if self.manifest_present() {
             if args.is_bootstrap() {
                 return Err(DomainError::invalid_request(

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::disallowed_macros,
+    reason = "schemars' JsonSchema derive expands concat!"
+)]
+
 use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
 use globset::GlobBuilder;
@@ -7,7 +12,7 @@ use std::path::{Component, Path};
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Manifest {
+pub(crate) struct Manifest {
     pub schema: u32,
     pub downstream: Downstream,
     pub upstream: Upstream,
@@ -25,7 +30,7 @@ pub struct Manifest {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Downstream {
+pub(crate) struct Downstream {
     pub remote: String,
     pub branch: String,
     pub recovery_tag_prefix: String,
@@ -48,7 +53,7 @@ pub struct Downstream {
     ValueEnum,
 )]
 #[serde(rename_all = "lowercase")]
-pub enum PublishMode {
+pub(crate) enum PublishMode {
     /// Exact-lease rewrite of the downstream ref. Recovery tags keep the overwritten tip.
     #[default]
     Rewrite,
@@ -59,12 +64,15 @@ pub enum PublishMode {
 }
 
 impl PublishMode {
-    pub fn is_rewrite(self) -> bool {
+    pub(crate) fn is_rewrite(self) -> bool {
         matches!(self, Self::Rewrite)
     }
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde passes skip_serializing_if arguments by reference"
+)]
 fn skip_rewrite_mode(mode: &PublishMode) -> bool {
     mode.is_rewrite()
 }
@@ -81,7 +89,7 @@ impl std::fmt::Display for PublishMode {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Upstream {
+pub(crate) struct Upstream {
     pub remote: String,
     pub url: String,
     pub fetch_ref: String,
@@ -89,7 +97,7 @@ pub struct Upstream {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Base {
+pub(crate) struct Base {
     pub target: BaseTarget,
     pub canonical: String,
     pub stack: String,
@@ -97,14 +105,14 @@ pub struct Base {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Documents {
+pub(crate) struct Documents {
     pub ledger: String,
     pub exports: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct BaseTarget {
+pub(crate) struct BaseTarget {
     pub kind: TargetKind,
     pub selector: String,
     pub commit: String,
@@ -114,7 +122,7 @@ pub struct BaseTarget {
 
 #[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum TargetKind {
+pub(crate) enum TargetKind {
     Commit,
     Branch,
     Tag,
@@ -124,14 +132,14 @@ pub enum TargetKind {
     Debug, Clone, Copy, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize, ValueEnum,
 )]
 #[serde(rename_all = "lowercase")]
-pub enum PatchKind {
+pub(crate) enum PatchKind {
     Source,
     Tooling,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Patch {
+pub(crate) struct Patch {
     pub name: String,
     pub kind: PatchKind,
     pub purpose: String,
@@ -149,7 +157,7 @@ pub struct Patch {
 /// files the patch does not own. Scope governs what a patch may modify, never what it may check.
 #[derive(Debug, Clone, Deserialize, Eq, Hash, PartialEq, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Check {
+pub(crate) struct Check {
     pub name: String,
     pub run: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -163,7 +171,7 @@ pub struct Check {
     Debug, Clone, Copy, Default, Deserialize, Eq, Hash, PartialEq, schemars::JsonSchema, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
-pub enum CheckStage {
+pub(crate) enum CheckStage {
     /// The complete applied stack, in a disposable clone with no origin remote.
     #[default]
     Stack,
@@ -173,7 +181,7 @@ pub enum CheckStage {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum HistoryEvent {
+pub(crate) enum HistoryEvent {
     Rebase {
         target: BaseTarget,
         recovery: RecoveryEvidence,
@@ -193,7 +201,7 @@ pub enum HistoryEvent {
 /// A surviving patch whose touched paths changed across replay.
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReplayPathChange {
+pub(crate) struct ReplayPathChange {
     pub patch: String,
     pub commit: String,
     pub lost_paths: Vec<String>,
@@ -201,7 +209,7 @@ pub struct ReplayPathChange {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct RecoveryEvidence {
+pub(crate) struct RecoveryEvidence {
     pub tag: String,
     pub tag_object: String,
     pub old_base: String,
@@ -210,14 +218,14 @@ pub struct RecoveryEvidence {
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct DroppedPatch {
+pub(crate) struct DroppedPatch {
     pub patch: Patch,
     pub commit: String,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct DisabledPatch {
+pub(crate) struct DisabledPatch {
     pub patch: Patch,
     pub commit: String,
     pub position: usize,
@@ -227,20 +235,20 @@ pub struct DisabledPatch {
 
 #[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Contracts {
+pub(crate) struct Contracts {
     pub allow_base: Vec<String>,
     pub required_text: Vec<RequiredText>,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct RequiredText {
+pub(crate) struct RequiredText {
     pub path: String,
     pub contains: String,
 }
 
 impl Manifest {
-    pub fn recovery_evidence(&self) -> Vec<&RecoveryEvidence> {
+    pub(crate) fn recovery_evidence(&self) -> Vec<&RecoveryEvidence> {
         let mut recoveries = self
             .disabled_patches
             .iter()
@@ -259,7 +267,7 @@ impl Manifest {
         recoveries
     }
 
-    pub fn validate(&self, repo: &Path, manifest_path: &Path) -> Result<()> {
+    pub(crate) fn validate(&self, repo: &Path, manifest_path: &Path) -> Result<()> {
         self.validate_identity()?;
         self.validate_patches()?;
         self.validate_disabled_patches()?;
@@ -542,22 +550,22 @@ impl Manifest {
         Ok(())
     }
 
-    pub fn patch_names(&self) -> Vec<String> {
+    pub(crate) fn patch_names(&self) -> Vec<String> {
         self.patches
             .iter()
             .map(|patch| patch.name.clone())
             .collect()
     }
 
-    pub fn patch(&self, name: &str) -> Option<&Patch> {
+    pub(crate) fn patch(&self, name: &str) -> Option<&Patch> {
         self.patches.iter().find(|patch| patch.name == name)
     }
 
-    pub fn check_count(&self) -> usize {
+    pub(crate) fn check_count(&self) -> usize {
         self.patches.iter().map(|patch| patch.checks.len()).sum()
     }
 
-    pub fn insertion_index(&self, patch: &Patch) -> usize {
+    pub(crate) fn insertion_index(&self, patch: &Patch) -> usize {
         if patch.name == self.bookkeeping_patch {
             return self.patches.len();
         }
@@ -571,7 +579,7 @@ impl Manifest {
         }
     }
 
-    pub fn export_path(&self, index: usize, patch: &Patch) -> Option<String> {
+    pub(crate) fn export_path(&self, index: usize, patch: &Patch) -> Option<String> {
         (patch.kind == PatchKind::Source).then(|| {
             format!(
                 "{}/{:04}-{}.patch",
@@ -582,7 +590,7 @@ impl Manifest {
         })
     }
 
-    pub fn source_exports(&self) -> Vec<SourceExport<'_>> {
+    pub(crate) fn source_exports(&self) -> Vec<SourceExport<'_>> {
         self.patches
             .iter()
             .enumerate()
@@ -594,13 +602,13 @@ impl Manifest {
     }
 }
 
-pub struct SourceExport<'a> {
+pub(crate) struct SourceExport<'a> {
     pub patch: &'a Patch,
     pub path: String,
 }
 
 impl BaseTarget {
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         ensure!(
             is_full_sha(&self.commit),
             "target commit must be a full SHA"
@@ -641,7 +649,7 @@ impl BaseTarget {
 }
 
 impl Patch {
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         ensure!(
             valid_patch_name(&self.name),
             "invalid patch name: {:?}",
@@ -712,7 +720,7 @@ impl Patch {
     }
 
     /// Files a check observes: its own globs, or the declaring patch's scope by default.
-    pub fn check_globs<'a>(&'a self, check: &'a Check) -> &'a [String] {
+    pub(crate) fn check_globs<'a>(&'a self, check: &'a Check) -> &'a [String] {
         if check.glob.is_empty() {
             &self.scope
         } else {
@@ -720,13 +728,13 @@ impl Patch {
         }
     }
 
-    pub fn owns(&self, path: &str) -> bool {
+    pub(crate) fn owns(&self, path: &str) -> bool {
         self.scope
             .iter()
             .any(|pattern| scope_matches(pattern, path))
     }
 
-    pub fn message(&self) -> String {
+    pub(crate) fn message(&self) -> String {
         format!(
             "{}\n\nDownstream-Reason: {}\nUpstream-Status: {}\nDrop-When: {}",
             self.name, self.purpose, self.upstream_status, self.drop_when
@@ -752,7 +760,7 @@ impl RecoveryEvidence {
     }
 }
 
-pub fn is_full_sha(value: &str) -> bool {
+pub(crate) fn is_full_sha(value: &str) -> bool {
     value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
@@ -797,7 +805,7 @@ fn validate_repo_path(repo: &Path, value: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn scope_matches(pattern: &str, path: &str) -> bool {
+pub(crate) fn scope_matches(pattern: &str, path: &str) -> bool {
     build_glob(pattern).is_ok_and(|glob| glob.compile_matcher().is_match(path))
 }
 

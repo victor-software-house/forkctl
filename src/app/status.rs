@@ -3,7 +3,7 @@ use crate::error::AppResult as Result;
 use crate::protocol::{CheckSummary, PatchSummary, StatusResult};
 
 impl App {
-    pub fn status(&mut self) -> Result<StatusResult> {
+    pub(crate) fn status(&mut self) -> Result<StatusResult> {
         if self.manifest.is_none() && self.read_operation()?.is_some() {
             self.load_operation_manifest()?;
         }

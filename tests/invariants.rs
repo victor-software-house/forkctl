@@ -1,3 +1,8 @@
+#![expect(
+    clippy::unwrap_used,
+    reason = "test setup helpers fail the test on the first unexpected error"
+)]
+
 mod support;
 
 use std::collections::BTreeSet;
@@ -300,6 +305,9 @@ fn collect_commands(value: &serde_json::Value, commands: &mut BTreeSet<String>) 
                 collect_commands(value, commands);
             }
         }
-        _ => {}
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_) => {}
     }
 }

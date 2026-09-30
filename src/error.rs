@@ -5,10 +5,10 @@ use std::fmt::Display;
 use std::path::Path;
 use std::process::Output;
 
-pub type AppResult<T> = std::result::Result<T, AppError>;
+pub(crate) type AppResult<T> = std::result::Result<T, AppError>;
 
 #[derive(Debug)]
-pub enum AppError {
+pub(crate) enum AppError {
     Domain {
         error: Box<DomainError>,
         causes: Vec<String>,
@@ -17,18 +17,18 @@ pub enum AppError {
 }
 
 impl AppError {
-    pub fn internal(
+    pub(crate) fn internal(
         error: impl Into<anyhow::Error>,
         context: impl Display + Send + Sync + 'static,
     ) -> Self {
         Self::Internal(error.into().context(context))
     }
 
-    pub fn internal_message(message: impl Into<String>) -> Self {
+    pub(crate) fn internal_message(message: impl Into<String>) -> Self {
         Self::Internal(anyhow::Error::msg(message.into()))
     }
 
-    pub fn context(self, context: impl Into<String>) -> Self {
+    pub(crate) fn context(self, context: impl Into<String>) -> Self {
         let context = context.into();
         match self {
             Self::Domain { error, mut causes } => {
@@ -39,7 +39,7 @@ impl AppError {
         }
     }
 
-    pub fn to_api_error(&self) -> ApiError {
+    pub(crate) fn to_api_error(&self) -> ApiError {
         match self {
             Self::Domain { error, causes } => error.to_api_error(causes.clone()),
             Self::Internal(error) => ApiError {
@@ -78,7 +78,7 @@ impl std::error::Error for AppError {}
 ///
 /// `AppError` intentionally has no blanket `From<anyhow::Error>` or I/O conversion: callers must
 /// choose domain classification or invoke this adapter with actionable context.
-pub trait InternalResultExt<T> {
+pub(crate) trait InternalResultExt<T> {
     fn internal(self, context: impl Display + Send + Sync + 'static) -> AppResult<T>;
 }
 
@@ -92,7 +92,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct DomainError {
+pub(crate) struct DomainError {
     code: ApiErrorCode,
     message: String,
     details: ErrorDetails,
@@ -101,7 +101,7 @@ pub struct DomainError {
 }
 
 impl DomainError {
-    pub fn invalid_request(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid_request(message: impl Into<String>) -> Self {
         let message = message.into();
         Self::new(
             ApiErrorCode::InvalidRequest,
@@ -113,7 +113,7 @@ impl DomainError {
         )
     }
 
-    pub fn repository_not_found(message: impl Into<String>) -> Self {
+    pub(crate) fn repository_not_found(message: impl Into<String>) -> Self {
         Self::new(
             ApiErrorCode::RepositoryNotFound,
             message,
@@ -121,11 +121,11 @@ impl DomainError {
         )
     }
 
-    pub fn manifest_invalid(message: impl Into<String>) -> Self {
+    pub(crate) fn manifest_invalid(message: impl Into<String>) -> Self {
         Self::new(ApiErrorCode::ManifestInvalid, message, ErrorDetails::None)
     }
 
-    pub fn dirty_worktree(paths: Vec<String>) -> Self {
+    pub(crate) fn dirty_worktree(paths: Vec<String>) -> Self {
         Self::new(
             ApiErrorCode::DirtyWorktree,
             "worktree is not clean",
@@ -133,7 +133,7 @@ impl DomainError {
         )
     }
 
-    pub fn active_patch_required() -> Self {
+    pub(crate) fn active_patch_required() -> Self {
         Self::new(
             ApiErrorCode::ActivePatchRequired,
             "an active patch is required",
@@ -146,7 +146,7 @@ impl DomainError {
         .suggest("forkctl patch create NAME ... or forkctl patch select NAME")
     }
 
-    pub fn active_patch_exists(active: String) -> Self {
+    pub(crate) fn active_patch_exists(active: String) -> Self {
         Self::new(
             ApiErrorCode::ActivePatchExists,
             format!("an active patch already exists: {active}"),
@@ -159,7 +159,7 @@ impl DomainError {
         .suggest("forkctl patch finish")
     }
 
-    pub fn patch_not_found(
+    pub(crate) fn patch_not_found(
         requested: impl Into<String>,
         available: Vec<String>,
         active: Option<String>,
@@ -177,7 +177,7 @@ impl DomainError {
         .suggest("forkctl patch list")
     }
 
-    pub fn staged_scope_violation(patch: String, paths: Vec<String>) -> Self {
+    pub(crate) fn staged_scope_violation(patch: String, paths: Vec<String>) -> Self {
         Self::new(
             ApiErrorCode::StagedScopeViolation,
             format!(
@@ -192,7 +192,7 @@ impl DomainError {
         .suggest("forkctl patch edit --add-scope GLOB")
     }
 
-    pub fn rewrite_below_required(patch: &str, above: &[String]) -> Self {
+    pub(crate) fn rewrite_below_required(patch: &str, above: &[String]) -> Self {
         let above_list = above.join(", ");
         Self::new(
             ApiErrorCode::OperationConflict,
@@ -208,11 +208,11 @@ impl DomainError {
         .suggest("mise run fork patch create NAME")
     }
 
-    pub fn capture_conflict(message: impl Into<String>) -> Self {
+    pub(crate) fn capture_conflict(message: impl Into<String>) -> Self {
         Self::new(ApiErrorCode::CaptureConflict, message, ErrorDetails::None)
     }
 
-    pub fn operation_in_progress(operation: &OperationState) -> Self {
+    pub(crate) fn operation_in_progress(operation: &OperationState) -> Self {
         Self::new(
             ApiErrorCode::OperationInProgress,
             format!("operation {} is in progress", operation.id),
@@ -226,11 +226,11 @@ impl DomainError {
         .suggest("forkctl operation status")
     }
 
-    pub fn check_failed(message: impl Into<String>) -> Self {
+    pub(crate) fn check_failed(message: impl Into<String>) -> Self {
         Self::new(ApiErrorCode::CheckFailed, message, ErrorDetails::None)
     }
 
-    pub fn declared_checks_failed(findings: Vec<crate::protocol::CheckFinding>) -> Self {
+    pub(crate) fn declared_checks_failed(findings: Vec<crate::protocol::CheckFinding>) -> Self {
         Self::new(
             ApiErrorCode::CheckFailed,
             format!("{} declared patch check(s) failed", findings.len()),
@@ -239,7 +239,7 @@ impl DomainError {
         .suggest("forkctl patch show PATCH")
     }
 
-    pub fn operation_conflict(
+    pub(crate) fn operation_conflict(
         message: impl Into<String>,
         operation: Option<&OperationState>,
     ) -> Self {
@@ -253,7 +253,7 @@ impl DomainError {
             .suggest("forkctl operation status")
     }
 
-    pub fn remote_advanced(
+    pub(crate) fn remote_advanced(
         remote: String,
         git_ref: String,
         expected: String,
@@ -273,7 +273,7 @@ impl DomainError {
         .retryable()
     }
 
-    pub fn publication_rejected(error: &Self) -> Self {
+    pub(crate) fn publication_rejected(error: &Self) -> Self {
         Self::new(
             ApiErrorCode::PublicationRejected,
             "remote rejected atomic publication",
@@ -281,7 +281,7 @@ impl DomainError {
         )
     }
 
-    pub fn publication_restoration_failed(
+    pub(crate) fn publication_restoration_failed(
         publication: &Self,
         restoration: impl std::fmt::Display,
     ) -> Self {
@@ -294,7 +294,7 @@ impl DomainError {
         combined
     }
 
-    pub fn publication_ref_mismatch(
+    pub(crate) fn publication_ref_mismatch(
         remote: String,
         git_ref: String,
         expected: String,
@@ -313,7 +313,12 @@ impl DomainError {
         )
     }
 
-    pub fn subprocess(program: &str, args: &[OsString], cwd: &Path, output: &Output) -> Self {
+    pub(crate) fn subprocess(
+        program: &str,
+        args: &[OsString],
+        cwd: &Path,
+        output: &Output,
+    ) -> Self {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let args = args
             .iter()
@@ -342,7 +347,7 @@ impl DomainError {
         )
     }
 
-    pub fn wrong_tracking(branch: &str, actual: Option<&str>, expected: &str) -> Self {
+    pub(crate) fn wrong_tracking(branch: &str, actual: Option<&str>, expected: &str) -> Self {
         let message = match actual {
             Some(actual) => format!("branch {branch} tracks {actual}, expected {expected}"),
             None => format!("branch {branch} tracks no upstream, expected {expected}"),
@@ -351,7 +356,12 @@ impl DomainError {
             .suggest(format!("git branch --set-upstream-to={expected} {branch}"))
     }
 
-    pub fn program_unavailable(program: &str, args: &[&str], cwd: &Path, cause: &str) -> Self {
+    pub(crate) fn program_unavailable(
+        program: &str,
+        args: &[&str],
+        cwd: &Path,
+        cause: &str,
+    ) -> Self {
         Self::new(
             ApiErrorCode::SubprocessFailed,
             format!("{program} could not run: {cause}"),
@@ -367,7 +377,7 @@ impl DomainError {
 
     /// Marks a failure that happened after the proposal branch was pushed. Rerunning the
     /// proposal is safe, so the error is retryable.
-    pub fn after_proposal_push(mut self, proposal_branch: &str) -> Self {
+    pub(crate) fn after_proposal_push(mut self, proposal_branch: &str) -> Self {
         self.message = format!(
             "proposal branch {proposal_branch} was pushed, but its pull request was not updated: {}",
             self.message
@@ -395,7 +405,7 @@ impl DomainError {
         self
     }
 
-    pub fn to_api_error(&self, causes: Vec<String>) -> ApiError {
+    pub(crate) fn to_api_error(&self, causes: Vec<String>) -> ApiError {
         ApiError {
             code: self.code,
             message: self.message.clone(),

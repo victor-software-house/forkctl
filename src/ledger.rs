@@ -45,7 +45,7 @@ struct DisabledRow {
     position: usize,
 }
 
-pub fn render(manifest: &Manifest) -> Result<String> {
+pub(crate) fn render(manifest: &Manifest) -> Result<String> {
     let history = history_rows(manifest);
     let checks = manifest
         .patches
@@ -160,7 +160,7 @@ fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
         .collect()
 }
 
-pub fn patch_kind(kind: PatchKind) -> &'static str {
+pub(crate) fn patch_kind(kind: PatchKind) -> &'static str {
     match kind {
         PatchKind::Source => "source",
         PatchKind::Tooling => "tooling",

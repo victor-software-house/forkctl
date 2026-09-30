@@ -26,13 +26,36 @@ version = "0.0.29"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unreachable_pub = "deny"
+rust_2018_idioms = { level = "deny", priority = -1 }
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+disallowed_macros = "deny"
+wildcard_enum_match_arm = "deny"
+match_wildcard_for_single_variants = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+# Duplicate versions come from transitive dependencies the crate does not
+# control; cargo-deny reports them (`bans.multiple-versions`).
+multiple_crate_versions = "allow"
 cognitive_complexity = "deny"
 needless_pass_by_ref_mut = "deny"
 redundant_clone = "deny"
+
+# Line tables keep backtraces readable at a fraction of full debug info.
+[profile.dev]
+debug = "line-tables-only"
 
 [profile.release]
 codegen-units = 1

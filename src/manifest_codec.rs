@@ -8,13 +8,13 @@ use std::path::Path;
 const MAX_YAML_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum ManifestFormat {
+pub(crate) enum ManifestFormat {
     Yaml,
     Json,
 }
 
 impl ManifestFormat {
-    pub fn from_path(path: &Path) -> AppResult<Self> {
+    pub(crate) fn from_path(path: &Path) -> AppResult<Self> {
         match path.extension().and_then(|extension| extension.to_str()) {
             Some("yaml" | "yml") => Ok(Self::Yaml),
             Some("json") => Ok(Self::Json),
@@ -26,7 +26,7 @@ impl ManifestFormat {
         }
     }
 
-    pub fn parse(self, bytes: &[u8], path: &Path) -> Result<Manifest> {
+    pub(crate) fn parse(self, bytes: &[u8], path: &Path) -> Result<Manifest> {
         match self {
             Self::Yaml => parse_yaml(bytes, path),
             Self::Json => serde_json::from_slice(bytes)
@@ -34,7 +34,7 @@ impl ManifestFormat {
         }
     }
 
-    pub fn serialize(self, manifest: &Manifest) -> Result<Vec<u8>> {
+    pub(crate) fn serialize(self, manifest: &Manifest) -> Result<Vec<u8>> {
         let mut bytes = match self {
             Self::Yaml => {
                 let options = serde_saphyr::ser_options! {

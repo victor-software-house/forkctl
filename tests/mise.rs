@@ -1,4 +1,8 @@
 #![cfg(unix)]
+#![expect(
+    clippy::unwrap_used,
+    reason = "test setup helpers fail the test on the first unexpected error"
+)]
 
 mod support;
 
@@ -143,7 +147,8 @@ impl MountedCatalog {
         let tasks = tempfile::tempdir().unwrap();
         let task_path = tasks.path().join("fork");
         let source =
-            fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tasks/fork/fork")).unwrap();
+            fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("tasks/fork/fork"))
+                .unwrap();
         let source = source
             .replace(
                 &format!(

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::unwrap_used,
+    reason = "test setup helpers fail the test on the first unexpected error"
+)]
+
 mod support;
 
 use std::fs;
@@ -1525,22 +1530,21 @@ fn declared_check_catches_an_upstream_case_the_patch_never_covered() {
     fs::create_dir_all(fixture.repo.join("fork-rules")).unwrap();
     fs::write(
         fixture.repo.join("fork-rules/unguarded-spawn.yml"),
-        concat!(
-            "id: unguarded-spawn\n",
-            "language: rust\n",
-            "severity: error\n",
-            "message: spawn_terminal bypasses the downstream guard\n",
-            "rule:\n",
-            "  all:\n",
-            "    - pattern: spawn_terminal($$$ARGS)\n",
-            "    - not:\n",
-            "        inside:\n",
-            "          kind: function_item\n",
-            "          has:\n",
-            "            field: name\n",
-            "            regex: ^spawn_terminal_guarded$\n",
-            "          stopBy: end\n",
-        ),
+        r"id: unguarded-spawn
+language: rust
+severity: error
+message: spawn_terminal bypasses the downstream guard
+rule:
+  all:
+    - pattern: spawn_terminal($$$ARGS)
+    - not:
+        inside:
+          kind: function_item
+          has:
+            field: name
+            regex: ^spawn_terminal_guarded$
+          stopBy: end
+",
     )
     .unwrap();
     fs::write(
