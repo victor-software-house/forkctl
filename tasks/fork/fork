@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version pins are generated from root mise.toml by `mise run version:sync`.
+# Tool pins are generated from root mise.toml by `mise run version:sync`; the forkctl pin is rewritten by the verctl Version PR.
 #MISE description="Run the complete forkctl CLI with exact Git/StGit tools and mounted shell completion"
 #MISE dir="{{cwd}}"
 #MISE raw_args=true

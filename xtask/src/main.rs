@@ -15,8 +15,6 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const FORKCTL_TOOL_MARKER: &str = "\"github:victor-software-house/forkctl\" = \"";
-const FORKCTL_REF_MARKER: &str = "forkctl.git//tasks/fork?ref=v";
 const MIN_MISE_MARKER: &str = "min_version = \"";
 const RUST_TOOL_MARKER: &str = "rust = \"";
 const RUST_ENTRY_MARKER: &str = "rust = { version = \"";
@@ -56,15 +54,13 @@ fn run() -> Result<(), String> {
         .parent()
         .ok_or_else(|| "xtask manifest has no parent".to_string())?
         .to_owned();
-    let version = env!("CARGO_PKG_VERSION");
     let tool_versions = read_tool_versions(&root.join("mise.toml"))?;
 
     sync_file(&root.join("Cargo.toml"), check, |contents| {
         replace_values(contents, RUST_VERSION_MARKER, &tool_versions.rust, 1)
     })?;
     sync_file(&root.join("tasks/fork/fork"), check, |contents| {
-        let contents = replace_values(contents, FORKCTL_TOOL_MARKER, version, 1)?;
-        let contents = replace_values(&contents, RUST_TOOL_MARKER, &tool_versions.rust, 1)?;
+        let contents = replace_values(contents, RUST_TOOL_MARKER, &tool_versions.rust, 1)?;
         replace_values(&contents, STGIT_TOOL_MARKER, &tool_versions.stgit, 1)
     })?;
     for path in [
@@ -76,8 +72,7 @@ fn run() -> Result<(), String> {
         })?;
     }
     sync_file(&root.join("examples/mise.toml"), check, |contents| {
-        let contents = replace_values(contents, MIN_MISE_MARKER, &tool_versions.minimum_mise, 1)?;
-        replace_values(&contents, FORKCTL_REF_MARKER, version, 1)
+        replace_values(contents, MIN_MISE_MARKER, &tool_versions.minimum_mise, 1)
     })?;
     sync_file(&root.join("README.md"), check, |contents| {
         replace_values(contents, MIN_MISE_MARKER, &tool_versions.minimum_mise, 1)
@@ -164,7 +159,10 @@ fn sync_file(
         return Ok(());
     }
     if check {
-        return Err(format!("{} does not match package version", path.display()));
+        return Err(format!(
+            "{} does not match mise.toml; run `mise run version:sync`",
+            path.display()
+        ));
     }
     fs::write(path, updated).map_err(|error| format!("write {}: {error}", path.display()))
 }
