@@ -88,6 +88,8 @@ jobs:
     name: macOS gates
     needs: crate
     uses: ./.github/workflows/release-macos.yml
+    with:
+      ref: ${{ needs.crate.outputs.tag }}
 
   mounted-task:
     name: Mounted task
