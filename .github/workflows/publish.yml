@@ -1,0 +1,99 @@
+name: Publish
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  crate:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged &&
+       github.event.pull_request.head.ref == 'version-packages')
+    runs-on: ubuntu-latest
+    permissions:
+      # Pushes the release tag and creates the GitHub Release.
+      contents: write
+    outputs:
+      has_assets: ${{ steps.plan.outputs.has_assets }}
+      tag: ${{ steps.plan.outputs.tag }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          fetch-depth: 0
+      - name: Install locked toolchain
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.9.13
+          cache: true
+      - name: Cache builds with mbx
+        uses: jdx/mr-boxington-action@9df1d4b18b2147788a7ee7a2c7b84ecf62fd89d3 # v1.5.0
+      - name: Plan native assets
+        id: plan
+        run: verctl assets --github-output "$GITHUB_OUTPUT"
+      - uses: victor-software-house/verctl/actions/publish@05b33d57f85b893eaa4fcfc83e6dc1d4d64090aa # v0.3.9
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  assets:
+    name: ${{ matrix.id }}
+    needs: crate
+    if: needs.crate.outputs.has_assets == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.crate.outputs.matrix) }}
+    runs-on: ${{ matrix.labels }}
+    permissions:
+      # Uploads the release asset.
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          fetch-depth: 0
+      - name: Install locked toolchain
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.9.13
+          cache: true
+      - name: Cache builds with mbx
+        uses: jdx/mr-boxington-action@9df1d4b18b2147788a7ee7a2c7b84ecf62fd89d3 # v1.5.0
+      - uses: victor-software-house/verctl/actions/asset@05b33d57f85b893eaa4fcfc83e6dc1d4d64090aa # v0.3.9
+        with:
+          target: ${{ matrix.id }}
+          tag: ${{ needs.crate.outputs.tag }}
+
+  # A release created with GITHUB_TOKEN triggers no `release` workflow, so the
+  # macOS gates are called here.
+  macos:
+    name: macOS gates
+    needs: crate
+    uses: ./.github/workflows/release-macos.yml
+    with:
+      ref: ${{ needs.crate.outputs.tag }}
+
+  mounted-task:
+    name: Mounted task
+    needs: [crate, assets]
+    uses: ./.github/workflows/mounted-task.yml
+    with:
+      tag: ${{ needs.crate.outputs.tag }}
