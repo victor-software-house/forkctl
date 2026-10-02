@@ -20,7 +20,7 @@ Domain/App operations return typed protocol values and errors. Clap and JSON are
 
 ### 2.1 Runtime isolation
 
-Remote mise tasks declare exact forkctl, Rust, StGit, and optional Lefthook tools. Root `mise.toml` is the sole source for toolchain versions; `[workspace.package].version` is the sole forkctl release source. `mise run version:sync` generates every operational copy and lock entry, and `version:check` rejects drift. No Homebrew/global installation or activated language environment is required.
+Remote mise tasks declare exact forkctl, Rust, StGit, and optional Lefthook tools. Root `mise.toml` is the sole source for toolchain versions; `[workspace.package].version` is the sole forkctl release source; the verctl Version PR bumps it and rewrites the forkctl pins declared in `.ctl/ver.yaml`. `mise run version:sync` generates every tool pin and lock entry, and `version:check` rejects drift. No Homebrew/global installation or activated language environment is required.
 
 ### 2.2 Rust dependencies
 
