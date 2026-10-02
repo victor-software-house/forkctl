@@ -1,0 +1,28 @@
+# Cargo.lock carries the version too, so a bump leaves it stale. `after`
+# regenerates it and `stage` puts it on the Version PR commit.
+prepare:
+  after: [cargo, update, --workspace]
+  stage: [Cargo.lock]
+
+# The version lives in [workspace.package]; the stock cargo driver reads it.
+packages:
+  - name: forkctl
+    path: Cargo.toml
+
+# Hand-written version spellings outside Cargo.toml. Each is named once and
+# listed by the file that carries it; too few or too many stop the release.
+patterns:
+  catalog:
+    match: "forkctl.git//tasks/fork?ref=v{version}"
+    occurrences: once
+  task:
+    match: '"github:victor-software-house/forkctl" = "{version}"'
+    occurrences: once
+
+pins:
+  - file: examples/mise.toml
+    package: forkctl
+    patterns: [catalog]
+  - file: tasks/fork/fork
+    package: forkctl
+    patterns: [task]
