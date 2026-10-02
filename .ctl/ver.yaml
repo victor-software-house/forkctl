@@ -26,3 +26,11 @@ pins:
   - file: tasks/fork/fork
     package: forkctl
     patterns: [task]
+
+# One key per host binary; the name is the job, the tarball, and the platform.
+# Both are built-in records; linux-x64 overrides only the triple, because the
+# Linux binary is static musl so it runs on any distribution.
+assets:
+  darwin-arm64: {}
+  linux-x64:
+    triple: x86_64-unknown-linux-musl
