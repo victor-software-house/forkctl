@@ -599,7 +599,21 @@ impl App {
         self.write_active(&ActivePatchState::Existing {
             patch: patch.name.clone(),
         })?;
-        let check = self.check_repository(true)?;
+        let check = match self.check_repository(true) {
+            Ok(check) => check,
+            Err(error) => {
+                // The commit and bookkeeping are already written, so the check failure stays resumable.
+                let mut operation = operation.clone();
+                operation.phase = "checking".into();
+                operation.next_actions = vec![
+                    "fix what the check reported, such as paths a hook left dirty".into(),
+                    "mise run fork operation continue".into(),
+                    "or discard the refresh: mise run fork operation abort --yes".into(),
+                ];
+                self.write_operation(&operation)?;
+                return Err(error);
+            }
+        };
         self.complete_local_operation(operation)?;
         Ok(CommandResult::PatchRefresh(PatchRefreshResult {
             patch: patch.name,
@@ -628,6 +642,7 @@ impl App {
             ))
             .into());
         }
+        self.require_no_operation()?;
         if !matches!(active, ActivePatchState::Existing { .. }) {
             return Err(DomainError::invalid_request("draft patch has not been refreshed").into());
         }
