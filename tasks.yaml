@@ -5,45 +5,8 @@ prefix: FRK
 style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
-active: FRK-003
-queue:
-  - id: FRK-003
-    title: Publish a Linux release binary
-    scope: release
-    outcome: A Linux CI runner installs forkctl from the GitHub release through mise.
-    blocked_by: []
-    acceptance:
-      - Every forkctl release carries a Linux x64 tarball next to the macOS arm64 tarball.
-      - The mounted fork task installs and runs on ubuntu-latest.
-    notes:
-      - The operator chose a Linux release so that a downstream fork can run its daily rebase proposal on a Linux CI runner.
-      - Releases up to 0.0.27 ship only forkctl_<version>_macos_arm64.tar.gz. qctl already publishes a linux_x64 tarball and can serve as the model.
-      - release-linux.yml attaches a static musl Linux x64 asset to each published release. The row closes when a published release shows the asset and the mounted fork task runs on ubuntu-latest.
-
-  - id: FRK-011
-    title: Build and publish every release asset on GitHub-hosted runners
-    scope: release
-    outcome: A forkctl release needs no local build, local token, or particular workstation.
-    blocked_by: []
-    acceptance:
-      - The macOS arm64 asset is built on macos-latest from the release tag, as the Linux x64 asset is on ubuntu-latest.
-      - crates.io publication runs in CI from the release tag.
-      - mise run release no longer builds or uploads a native asset.
-    notes:
-      - Both runner families are free for this public repository; release-macos.yml already runs verify on macos-latest for every published release.
-      - Until then mise run release builds the macOS asset on the machine it runs on, which is why 0.0.28 was published from a workstation.
-      - Consider jdx/mr-boxington-action for these jobs once the ctl repos settle the mbx pattern.
-
-  - id: FRK-015
-    title: Bound test parallelism on a shared build host
-    scope: build
-    outcome: 'Running forkctl tests on a shared build host does not saturate it: the slow suite runs with bounded parallelism or on a manually started runner.'
-    blocked_by: []
-    acceptance:
-      - The committed test configuration caps concurrent lifecycle tests, and the full suite still runs before merge.
-    notes:
-      - On 2026-09-29 a pre-push verify ran one lifecycle test per CPU, each spawning git and StGit, on a host already at load 40 to 130 and nearly out of swap. The same suite took 32 s on a Namespace Linux 8x16 instance and 63 s on macOS 6x14.
-      - The operator wants slow suites to run only on approval, with merge blocked until they have run.
+active: null
+queue: []
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -63,7 +26,47 @@ horizon:
     notes:
       - >2-
         Raised in review of pull request 23: check maps every untyped failure to check_failed, as it did before the AppError refactor.
+
+  - id: FRK-015
+    title: Bound test parallelism on a shared build host
+    scope: build
+    outcome: 'Running forkctl tests on a shared build host does not saturate it: the slow suite runs with bounded parallelism or on a manually started runner.'
+    notes:
+      - On 2026-09-29 a pre-push verify ran one lifecycle test per CPU, each spawning git and StGit, on a host already at load 40 to 130 and nearly out of swap. The same suite took 32 s on a Namespace Linux 8x16 instance and 63 s on macOS 6x14.
+      - The operator wants slow suites to run only on approval, with merge blocked until they have run.
+    kind: deferred
+    open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-011
+    title: Build and publish every release asset on GitHub-hosted runners
+    scope: release
+    outcome: A forkctl release needs no local build, local token, or particular workstation.
+    notes:
+      - Both runner families are free for this public repository; release-macos.yml already runs verify on macos-latest for every published release.
+      - Until then mise run release builds the macOS asset on the machine it runs on, which is why 0.0.28 was published from a workstation.
+      - Consider jdx/mr-boxington-action for these jobs once the ctl repos settle the mbx pattern.
+    completed: 2026-10-06T02:00:03
+    evidence:
+      - 'v0.0.30 published from CI: crate, release, macos_arm64 and linux_x64 assets: https://github.com/victor-software-house/forkctl/actions/runs/37415187193'
+      - 'mise run release removed in #69'
+      - 283b7d40ed7d618eeb664734a4201f3ba75dd423
+    disposition: completed
+
+  - id: FRK-003
+    title: Publish a Linux release binary
+    scope: release
+    outcome: A Linux CI runner installs forkctl from the GitHub release through mise.
+    notes:
+      - The operator chose a Linux release so that a downstream fork can run its daily rebase proposal on a Linux CI runner.
+      - Releases up to 0.0.27 ship only forkctl_<version>_macos_arm64.tar.gz. qctl already publishes a linux_x64 tarball and can serve as the model.
+      - release-linux.yml attaches a static musl Linux x64 asset to each published release. The row closes when a published release shows the asset and the mounted fork task runs on ubuntu-latest.
+    completed: 2026-10-06T02:00:03
+    evidence:
+      - 'v0.0.30 publish run attached forkctl_0.0.30_linux_x64.tar.gz: https://github.com/victor-software-house/forkctl/actions/runs/37415187193'
+      - Mounted fork task on ubuntu-latest reported forkctl 0.0.30
+      - 283b7d40ed7d618eeb664734a4201f3ba75dd423
+    disposition: completed
+
   - id: FRK-014
     title: Bootstrap on a release tag outside the upstream branch
     scope: init
