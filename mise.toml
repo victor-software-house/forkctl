@@ -1,5 +1,5 @@
-# mr_boxington on the rust entry needs mise 2026.9.2 or newer.
-min_version = "2026.9.2"
+# The latest stable mise is the floor; CI pins the same version.
+min_version = "2026.10.3"
 
 [settings]
 lockfile = true
