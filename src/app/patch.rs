@@ -612,7 +612,9 @@ impl App {
                 ];
                 if let Err(write_error) = self.write_operation(&operation) {
                     return Err(
-                        error.context(format!("could not record refresh recovery: {write_error}"))
+                        error.context(format!(
+                            "could not record refresh recovery: {write_error}; fix what the check reported, then run mise run fork operation continue, or mise run fork operation abort --yes"
+                        ))
                     );
                 }
                 return Err(error);
