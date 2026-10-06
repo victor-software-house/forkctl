@@ -107,6 +107,7 @@ Rules:
 - Use `patch refresh --all` only when every changed owned path is intended.
 - Use repeatable `patch refresh --path PATHSPEC` for explicit path-limited capture.
 - Repeat refresh while editing; finish only after the worktree/index is settled.
+- If a hook leaves files dirty, refresh stops in phase `checking`: restore those paths and run `operation continue`. `patch finish` refuses while an operation is in flight.
 - Never manually edit generated exports or the generated ledger. Change patch intent through forkctl and let refresh regenerate them.
 - Never stash operator work to satisfy a clean-state requirement.
 

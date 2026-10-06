@@ -6,22 +6,7 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue:
-  - id: FRK-017
-    title: Recover a refresh whose worktree turns dirty mid-run
-    scope: refresh
-    outcome: A patch refresh that finds a dirty worktree after writing its commit leaves one operation whose status names the recovery, and that recovery ends with no active patch.
-    blocked_by: []
-    acceptance:
-      - A lifecycle test reproduces a refresh whose worktree turns dirty after the new commit is written, and passes.
-      - After that failure, operation status names continue or abort as the next step, never none.
-      - After the named recovery completes, the clone has no active patch, and publish runs without a second patch finish.
-    notes:
-      - >2-
-        Reported from a downstream on 0.0.30: a mise run inside patch refresh of the bookkeeping patch rewrote mise.lock with gh entries for every platform. Refresh then failed with dirty_worktree after writing the new commit, leaving a patchrefresh operation in phase refreshing with next none.
-      - After mise.lock was restored, patch finish passed and operation continue reported completed. But the patch stayed active, so publish failed with active_patch_exists until a second patch finish.
-      - >2-
-        Repro conditions: lockfile = true, an aqua tool newly added to [tools], and only some platforms locked.
+queue: []
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -52,6 +37,22 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-017
+    title: Recover a refresh whose worktree turns dirty mid-run
+    scope: refresh
+    outcome: A patch refresh that fails its final check after writing its commit leaves one operation whose status names the recovery, and patch finish waits until that operation is done.
+    notes:
+      - >2-
+        Reported from a downstream on 0.0.30: a mise run inside patch refresh of the bookkeeping patch rewrote mise.lock with gh entries for every platform. Refresh then failed with dirty_worktree after writing the new commit, leaving a patchrefresh operation in phase refreshing with next none.
+      - After mise.lock was restored, patch finish passed and operation continue reported completed. But the patch stayed active, so publish failed with active_patch_exists until a second patch finish.
+      - >2-
+        Repro conditions: lockfile = true, an aqua tool newly added to [tools], and only some platforms locked.
+    plan: openspec/changes/recover-refresh-after-final-check/proposal.md
+    completed: 2026-10-06T12:09:40
+    evidence:
+      - 12873813216e79c709c293c8c319cad9419db129
+    disposition: completed
+
   - id: FRK-011
     title: Build and publish every release asset on GitHub-hosted runners
     scope: release

@@ -538,6 +538,61 @@ fn refresh_consumes_pre_commit_hook_modified_index() {
 }
 
 #[test]
+fn refresh_left_dirty_by_a_hook_names_its_recovery() {
+    let fixture = Fixture::new();
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "hook-lock",
+        "--kind",
+        "source",
+        "--purpose",
+        "change source while a hook regenerates a lockfile",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "upstream provides equivalent behavior",
+        "--scope",
+        "hook-lock.txt",
+    ]);
+    let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\nprintf 'locked\\n' > tool.lock\n").unwrap();
+    make_executable(&hook);
+    fs::write(fixture.repo.join("hook-lock.txt"), "downstream\n").unwrap();
+    git_ok(&fixture.repo, ["add", "hook-lock.txt"]);
+
+    let output = fixture.forkctl(&["--format", "json", "patch", "refresh"]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "dirty_worktree");
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let operation = &status["result"]["operation"];
+    assert_eq!(operation["phase"], "checking");
+    let next = operation["next_actions"].to_string();
+    assert!(next.contains("operation continue"), "{next}");
+    assert!(next.contains("operation abort --yes"), "{next}");
+
+    let output = fixture.forkctl(&["--format", "json", "patch", "finish"]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "operation_in_progress");
+
+    fs::remove_file(fixture.repo.join("tool.lock")).unwrap();
+    fixture.forkctl_ok(&["operation", "continue"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["result"]["active_patch"]["patch"], "hook-lock");
+    assert!(status["result"]["operation"].is_null());
+    fixture.forkctl_ok(&["patch", "finish"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["active_patch"].is_null());
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
 fn documented_staged_check_hook_accepts_source_and_bookkeeping_refreshes() {
     let fixture = Fixture::new();
     fixture.forkctl_ok(&[
