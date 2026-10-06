@@ -48,7 +48,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - VSH Lefthook defaults call `mise run fork check -s` on pre-commit and `mise run fork check -q` on pre-push; other managers call the same commands.
 - `skills/forkctl/SKILL.md` is the portable skills.sh-installable operator workflow. Keep it concise and synchronized with released CLI behavior; installed help/instructions remain authoritative, so the skill must not duplicate a full flag grammar. Templates under `.ctl/operator/` keep domain prose and import ctl-core's mounted invocation/no-`--` and command-inventory fragments from the Clap-derived `Surface`. `operator_docs` byte-compares both committed renders; update them with `UPDATE_OPERATOR_DOCS=1 cargo test operator_docs`.
 - Lifecycle fixtures use real Git/StGit binaries inside a private `tempfile` root with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment only; never inherit operator Git config or mutate the test process environment.
-- `mise run test:isolated` is the cargo-nextest lane that proves each test passes in its own process; keep ordinary lifecycle tests container-free unless the scenario actually requires another OS, daemon, network, or toolchain image.
+- `mise run test:isolated` runs the cargo-nextest suite one test at a time (`--test-threads=1`); keep ordinary lifecycle tests container-free unless the scenario actually requires another OS, daemon, network, or toolchain image.
 
 ## Versioning
 
