@@ -31,7 +31,7 @@ jobs:
       - name: Install Rust and verctl
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          version: 2026.9.13
+          version: 2026.10.3
           install_args: rust mr-boxington github:victor-software-house/verctl
           cache: true
       - uses: victor-software-house/verctl/actions/version-pr@05b33d57f85b893eaa4fcfc83e6dc1d4d64090aa # v0.3.9
