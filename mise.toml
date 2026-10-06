@@ -59,7 +59,7 @@ run = "cargo test --doc --workspace --all-features"
 env.CARGO_TARGET_DIR = "target/doc-test"
 
 [tasks."test:isolated"]
-description = "Same suite, one test per process"
+description = "Same suite, one test at a time"
 run = "cargo nextest run --workspace --all-features --test-threads=1"
 env.CARGO_TARGET_DIR = "target/test-isolated"
 
