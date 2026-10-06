@@ -214,6 +214,21 @@ Every rewrite requires exact evidence that it was computed against the current p
 
 Pretty `publish` streams `git push` and hook output to stderr as it happens (pre-push Jest, husky, remote progress). `--format json` and `api call` still capture that output and keep stderr empty.
 
+### Scheduled proposals in GitHub Actions
+
+A scheduled `publish --propose` job needs a GitHub App installation token, not the workflow's `GITHUB_TOKEN`. A rebase replays upstream changes to `.github/workflows/`, and `GITHUB_TOKEN` can never be granted `workflows: write`. A pull request opened with `GITHUB_TOKEN` also starts no workflows, so the proposal would get no CI.
+
+victor-software-house runs one private App for this, `forkctl`, shared by every fork that runs scheduled proposals:
+
+| Permission | Access | Used for |
+|:--|:--|:--|
+| Contents | write | pushing `forkctl/proposal/<branch>`, including workflow files from upstream |
+| Workflows | write | the same push when it changes `.github/workflows/` |
+| Pull requests | write | `gh pr create` and `gh pr edit` on the proposal |
+| Metadata | read | required by GitHub |
+
+It subscribes to no events and has no webhook. It is installed on selected repositories only, and a fork is added when it moves to `publish: propose` with a scheduled workflow. The org variable `FORKCTL_APP_CLIENT_ID` and the org secret `FORKCTL_APP_PRIVATE_KEY` are scoped to the same repositories. The calling workflow mints a token per run with `actions/create-github-app-token` (`client-id`, `private-key`), checks out with it, and passes it to `publish --propose` as `GH_TOKEN`. Promotion stays a manual `publish --promote`.
+
 ## Hooks
 
 Forkctl exposes ordinary read-only checks and does not own a hook manager:
