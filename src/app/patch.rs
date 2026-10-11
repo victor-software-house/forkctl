@@ -1,6 +1,7 @@
 use super::App;
 use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
+use crate::manifest_edit::ManifestEdit;
 use crate::process::{capture, run};
 use crate::protocol::{
     CaptureSource, CheckEdit, CommandResult, ExecutionMode, MutationPlan, PatchCreateArgs,
@@ -213,7 +214,7 @@ impl App {
         patch
             .validate()
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
-        let proposed = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
+        let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let plan = MutationPlan {
             command: "patch.edit".into(),
             reads: vec![self.manifest_path.display().to_string(), old_commit.clone()],
@@ -260,7 +261,7 @@ impl App {
                 operation.recovery.tag
             )));
         }
-        self.finish_patch_edit(&operation, proposed, patch, old_commit)
+        self.finish_patch_edit(&operation, edits, patch, old_commit)
     }
 
     pub(super) fn continue_patch_edit(
@@ -273,7 +274,7 @@ impl App {
             .manifest()?
             .patch(&patch.name)
             .map_or(patch.kind, |existing| existing.kind);
-        let proposed = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
+        let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let conflicts = capture(
             &self.repo,
             "git",
@@ -318,17 +319,17 @@ impl App {
                     Some(operation),
                 )
             })?;
-        self.finish_patch_edit(operation, proposed, patch, old_commit)
+        self.finish_patch_edit(operation, edits, patch, old_commit)
     }
 
     fn finish_patch_edit(
         &mut self,
         operation: &OperationState,
-        proposed: crate::manifest::Manifest,
+        edits: Vec<ManifestEdit>,
         patch: Patch,
         old_commit: String,
     ) -> Result<CommandResult> {
-        self.manifest = Some(proposed);
+        self.edit_manifest(edits)?;
         self.write_manifest()?;
         let exports = self.write_exports()?;
         let ledger = self.write_ledger()?;
@@ -353,35 +354,36 @@ impl App {
         &self,
         patch: Patch,
         old_kind: crate::manifest::PatchKind,
-    ) -> Result<crate::manifest::Manifest> {
-        let mut proposed = self.manifest()?.clone();
-        let old_index = proposed
-            .patches
-            .iter()
-            .position(|candidate| candidate.name == patch.name)
-            .ok_or_else(|| {
-                DomainError::patch_not_found(
-                    &patch.name,
-                    proposed.patch_names(),
-                    self.read_active()
-                        .ok()
-                        .flatten()
-                        .map(|active| active.name().to_string()),
-                )
-            })?;
-        proposed.patches.remove(old_index);
+    ) -> Result<(crate::manifest::Manifest, Vec<ManifestEdit>)> {
+        let manifest = self.manifest()?;
+        manifest.patch(&patch.name).ok_or_else(|| {
+            DomainError::patch_not_found(
+                &patch.name,
+                manifest.patch_names(),
+                self.read_active()
+                    .ok()
+                    .flatten()
+                    .map(|active| active.name().to_string()),
+            )
+        })?;
         // Only a kind change repositions a patch; an in-place edit must not move it, or the
         // declared order would diverge from the series StGit still holds.
-        let index = if old_kind == patch.kind {
-            old_index
+        let edits = if old_kind == patch.kind {
+            vec![ManifestEdit::ReplacePatch(patch)]
         } else {
-            proposed.insertion_index(&patch)
+            let remove = ManifestEdit::RemovePatch {
+                name: patch.name.clone(),
+            };
+            let index = manifest
+                .edited(std::slice::from_ref(&remove))
+                .insertion_index(&patch);
+            vec![remove, ManifestEdit::InsertPatch { index, patch }]
         };
-        proposed.patches.insert(index, patch);
+        let proposed = manifest.edited(&edits);
         proposed
             .validate(&self.repo, &self.manifest_path)
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
-        Ok(proposed)
+        Ok((proposed, edits))
     }
 
     fn reorder_series(&self, manifest: &crate::manifest::Manifest) -> Result<()> {
@@ -582,10 +584,11 @@ impl App {
         old_commit: Option<String>,
     ) -> Result<CommandResult> {
         if self.manifest()?.patch(&patch.name).is_none() {
-            let insertion = self.manifest()?.insertion_index(&patch);
-            self.manifest_mut()?
-                .patches
-                .insert(insertion, patch.clone());
+            let index = self.manifest()?.insertion_index(&patch);
+            self.edit_manifest([ManifestEdit::InsertPatch {
+                index,
+                patch: patch.clone(),
+            }])?;
         }
         self.write_manifest()?;
         let exports = self.write_exports()?;
@@ -792,15 +795,17 @@ impl App {
             reason,
             recovery: operation.recovery.clone(),
         };
-        let manifest = self.manifest_mut()?;
-        manifest
-            .patches
-            .retain(|candidate| candidate.name != patch.name);
-        if disable {
-            manifest.disabled_patches.push(record);
+        let recorded = if disable {
+            ManifestEdit::PushDisabled(record)
         } else {
-            manifest.history.push(HistoryEvent::PatchRemoved { record });
-        }
+            ManifestEdit::PushHistory(HistoryEvent::PatchRemoved { record })
+        };
+        self.edit_manifest([
+            ManifestEdit::RemovePatch {
+                name: patch.name.clone(),
+            },
+            recorded,
+        ])?;
         self.finish_patch_transition(operation, patch.name, commit, disable)
     }
 
@@ -863,18 +868,22 @@ impl App {
                 operation.recovery.tag
             )));
         }
-        let manifest = self.manifest_mut()?;
-        manifest
-            .disabled_patches
-            .retain(|candidate| candidate.patch.name != name);
-        let insertion = record
+        let index = record
             .position
-            .min(manifest.patches.len().saturating_sub(1));
-        manifest.patches.insert(insertion, record.patch.clone());
-        manifest.history.push(HistoryEvent::PatchEnabled {
-            record: record.clone(),
-            recovery: operation.recovery.clone(),
-        });
+            .min(self.manifest()?.patches.len().saturating_sub(1));
+        self.edit_manifest([
+            ManifestEdit::RemoveDisabled {
+                name: name.to_string(),
+            },
+            ManifestEdit::InsertPatch {
+                index,
+                patch: record.patch.clone(),
+            },
+            ManifestEdit::PushHistory(HistoryEvent::PatchEnabled {
+                record: record.clone(),
+                recovery: operation.recovery.clone(),
+            }),
+        ])?;
         self.finish_patch_transition(&mut operation, name.to_string(), record.commit, false)
     }
 
@@ -950,16 +959,20 @@ impl App {
                         patch.name
                     ))
                 })?;
-            let manifest = self.manifest_mut()?;
-            manifest
-                .disabled_patches
-                .retain(|candidate| candidate.patch.name != patch.name);
-            let insertion = position.min(manifest.patches.len().saturating_sub(1));
-            manifest.patches.insert(insertion, patch.clone());
-            manifest.history.push(HistoryEvent::PatchEnabled {
-                record,
-                recovery: operation.recovery.clone(),
-            });
+            let index = position.min(self.manifest()?.patches.len().saturating_sub(1));
+            self.edit_manifest([
+                ManifestEdit::RemoveDisabled {
+                    name: patch.name.clone(),
+                },
+                ManifestEdit::InsertPatch {
+                    index,
+                    patch: patch.clone(),
+                },
+                ManifestEdit::PushHistory(HistoryEvent::PatchEnabled {
+                    record,
+                    recovery: operation.recovery.clone(),
+                }),
+            ])?;
             return self.finish_patch_transition(&mut operation, patch.name, commit, false);
         }
         self.finish_patch_deactivate(
@@ -973,7 +986,7 @@ impl App {
     }
 
     fn finish_patch_transition(
-        &self,
+        &mut self,
         operation: &mut OperationState,
         patch: String,
         commit: String,

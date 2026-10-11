@@ -18,6 +18,7 @@ mod error;
 mod ledger;
 mod manifest;
 mod manifest_codec;
+mod manifest_edit;
 mod presentation;
 mod process;
 mod proposal;

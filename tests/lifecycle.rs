@@ -173,6 +173,7 @@ fn complete_check_reports_a_missing_ledger_as_check_failed() {
 #[test]
 fn yaml_manifest_preserves_disable_enable_and_remove_history() {
     let fixture = Fixture::new();
+    add_manifest_comment(&fixture);
     create_source_patch(&fixture, "optional-feature", "optional.txt", "enabled\n");
     create_source_patch(&fixture, "later-feature", "later.txt", "later\n");
 
@@ -212,9 +213,11 @@ fn yaml_manifest_preserves_disable_enable_and_remove_history() {
         manifest["disabled_patches"][0]["patch"]["name"],
         "optional-feature"
     );
+    assert_manifest_comment(&fixture);
     fixture.forkctl_ok(&["publish"]);
 
     fixture.forkctl_ok(&["patch", "enable", "optional-feature"]);
+    assert_manifest_comment(&fixture);
     assert_eq!(
         fs::read_to_string(fixture.repo.join("optional.txt")).unwrap(),
         "enabled\n"
@@ -259,6 +262,37 @@ fn yaml_manifest_preserves_disable_enable_and_remove_history() {
             .unwrap()
             .iter()
             .any(|event| event["kind"] == "patch_removed")
+    );
+    assert_manifest_comment(&fixture);
+}
+
+const MANIFEST_COMMENT: &str = "# owned by the platform team\n";
+
+fn add_manifest_comment(fixture: &Fixture) {
+    let path = fixture.repo.join("patches/fork.yaml");
+    let manifest = fs::read_to_string(&path).unwrap();
+    assert!(manifest.contains("\ndownstream:\n"), "{manifest}");
+    fs::write(
+        &path,
+        manifest.replacen(
+            "\ndownstream:\n",
+            &format!("\n{MANIFEST_COMMENT}downstream:\n"),
+            1,
+        ),
+    )
+    .unwrap();
+    fixture.forkctl_ok(&["patch", "select", "fork-tooling"]);
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    assert_manifest_comment(fixture);
+}
+
+fn assert_manifest_comment(fixture: &Fixture) {
+    let manifest = fs::read_to_string(fixture.repo.join("patches/fork.yaml")).unwrap();
+    assert!(
+        manifest.contains(&format!("{MANIFEST_COMMENT}downstream:\n")),
+        "{manifest}"
     );
 }
 
@@ -405,6 +439,7 @@ fn bookkeeping_patch_edit_remains_final_after_source_patches() {
 #[test]
 fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
     let fixture = Fixture::new();
+    add_manifest_comment(&fixture);
     create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
     create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
     fixture.forkctl_ok(&["patch", "select", "lower"]);
@@ -427,9 +462,51 @@ fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
     assert!(!first_continue.status.success());
     fs::write(fixture.repo.join("shared.txt"), "lower updated\nupper\n").unwrap();
     git_ok(&fixture.repo, ["add", "shared.txt"]);
+    // The bookkeeping patch is popped, so continue edits the snapshotted manifest text.
+    assert!(!fixture.repo.join("patches/fork.yaml").exists());
     fixture.forkctl_ok(&["operation", "continue"]);
     fixture.forkctl_ok(&["patch", "finish"]);
     fixture.forkctl_ok(&["check"]);
+    assert_manifest_comment(&fixture);
+}
+
+#[test]
+fn continue_without_a_manifest_source_snapshot_names_its_recovery() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
+    fixture.forkctl_ok(&["patch", "select", "lower"]);
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    assert!(
+        !fixture
+            .forkctl(&["patch", "refresh", "--rewrite-below"])
+            .status
+            .success()
+    );
+    // An operation that an earlier forkctl started has no manifest.source snapshot.
+    let source = git_capture_dynamic(
+        &fixture.repo,
+        &["rev-parse", "--git-path", "forkctl/manifest.source"],
+    );
+    fs::remove_file(fixture.repo.join(source)).unwrap();
+
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    assert!(!fixture.forkctl(&["operation", "continue"]).status.success());
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\nupper\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    let output = fixture.forkctl(&["--format", "json", "operation", "continue"]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "operation_conflict");
+    assert!(
+        output["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("operation abort --yes"),
+        "{output}"
+    );
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
 }
 
 #[test]
@@ -711,9 +788,11 @@ fn json_status_is_one_clean_envelope() {
 #[test]
 fn rebase_publish_and_fresh_clone_hydrate_exact_recovery() {
     let fixture = Fixture::new();
+    add_manifest_comment(&fixture);
     create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
     advance_upstream(&fixture.repo, "upstream v2\n");
     let response = fixture.forkctl_ok(&["--format", "json", "rebase", "--onto", "refs/heads/main"]);
+    assert_manifest_comment(&fixture);
     let response: serde_json::Value = serde_json::from_str(&response).unwrap();
     let recovery = response["result"]["recovery_tag"].as_str().unwrap();
     fixture.forkctl_ok(&["publish"]);
@@ -1450,7 +1529,9 @@ fn git_capture(repo: &std::path::Path, args: [&str; 2]) -> String {
 
 fn read_manifest_value(path: &std::path::Path) -> serde_json::Value {
     let contents = fs::read_to_string(path).unwrap();
-    serde_saphyr::from_str(&contents).unwrap()
+    ctl_core::input::Input::new(path.display().to_string(), contents)
+        .parse()
+        .unwrap()
 }
 
 fn make_executable(path: &std::path::Path) {

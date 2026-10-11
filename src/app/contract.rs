@@ -2,6 +2,7 @@ use super::App;
 use crate::error::AppResult as Result;
 use crate::error::DomainError;
 use crate::manifest::Contracts;
+use crate::manifest_edit::ManifestEdit;
 use crate::protocol::{
     CommandResult, ContractEditArgs, ContractEditResult, ExecutionMode, MutationPlan,
 };
@@ -45,12 +46,12 @@ impl App {
             }
         }
 
-        let mut proposed = self.manifest()?.clone();
-        proposed.contracts = contracts.clone();
+        let mut edits = vec![ManifestEdit::SetContracts(contracts.clone())];
         if let Some(mode) = args.publish_mode {
-            proposed.downstream.publish = mode;
+            edits.push(ManifestEdit::SetPublishMode(mode));
         }
-        proposed
+        self.manifest()?
+            .edited(&edits)
             .validate(&self.repo, &self.manifest_path)
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
         self.validate_required_text(&contracts.required_text)
@@ -76,7 +77,7 @@ impl App {
             return Ok(CommandResult::Plan(plan));
         }
 
-        self.manifest = Some(proposed);
+        self.edit_manifest(edits)?;
         self.write_manifest()?;
         let ledger = self.write_ledger()?;
         let generated = vec![self.manifest_path.clone(), ledger];

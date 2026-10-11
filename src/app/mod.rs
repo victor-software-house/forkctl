@@ -12,6 +12,7 @@ use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt
 use crate::ledger;
 use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind, Upstream};
 use crate::manifest_codec::ManifestFormat;
+use crate::manifest_edit::{ManifestEdit, edit_yaml};
 use crate::process::{capture, output, run, succeeds};
 use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
 use std::env;
@@ -31,6 +32,10 @@ pub(crate) struct App {
     pub(super) manifest_format: ManifestFormat,
     pub(super) manifest: Option<Manifest>,
     pub(super) manifest_error: Option<String>,
+    /// The tracked manifest text the edits below apply to.
+    pub(super) manifest_text: Option<String>,
+    /// Changes applied to `manifest` and not yet written.
+    pub(super) manifest_edits: Vec<ManifestEdit>,
 }
 
 impl App {
@@ -49,15 +54,19 @@ impl App {
             repo.join(manifest_arg)
         };
         let manifest_format = ManifestFormat::from_path(&manifest_path)?;
-        let (manifest, manifest_error) = match fs::read(&manifest_path) {
-            Ok(bytes) => match manifest_format.parse(&bytes, &manifest_path) {
-                Ok(manifest) => match manifest.validate(&repo, &manifest_path) {
-                    Ok(()) => (Some(manifest), None),
-                    Err(error) => (None, Some(error.to_string())),
-                },
-                Err(error) => (None, Some(error.to_string())),
-            },
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None),
+        let (manifest, manifest_error, manifest_text) = match fs::read(&manifest_path) {
+            Ok(bytes) => {
+                let parsed = manifest_format.parse(&bytes, &manifest_path);
+                let text = String::from_utf8(bytes).ok();
+                match parsed {
+                    Ok(manifest) => match manifest.validate(&repo, &manifest_path) {
+                        Ok(()) => (Some(manifest), None, text),
+                        Err(error) => (None, Some(error.to_string()), None),
+                    },
+                    Err(error) => (None, Some(error.to_string()), None),
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None, None),
             Err(error) => {
                 return Err(AppError::internal(
                     error,
@@ -71,6 +80,8 @@ impl App {
             manifest_format,
             manifest,
             manifest_error,
+            manifest_text,
+            manifest_edits: Vec::new(),
         })
     }
 
@@ -90,13 +101,23 @@ impl App {
         self.manifest.is_some() || self.manifest_error.is_some()
     }
 
-    pub(super) fn manifest_mut(&mut self) -> Result<&mut Manifest> {
+    /// Apply `edits` to the typed manifest now; `write_manifest` writes them.
+    pub(super) fn edit_manifest(
+        &mut self,
+        edits: impl IntoIterator<Item = ManifestEdit>,
+    ) -> Result<()> {
         if self.manifest.is_none() {
             self.manifest()?;
         }
-        self.manifest
+        let manifest = self
+            .manifest
             .as_mut()
-            .ok_or_else(|| AppError::internal_message("forkctl manifest is unavailable"))
+            .ok_or_else(|| AppError::internal_message("forkctl manifest is unavailable"))?;
+        for edit in edits {
+            manifest.apply(&edit);
+            self.manifest_edits.push(edit);
+        }
+        Ok(())
     }
 
     pub(super) fn require_clean(&self) -> Result<()> {
@@ -440,12 +461,48 @@ impl App {
         }
     }
 
-    pub(super) fn write_manifest(&self) -> Result<()> {
+    /// Write the pending edits: in place for YAML, in full for JSON.
+    pub(super) fn write_manifest(&mut self) -> Result<()> {
+        let manifest = self.manifest()?;
+        let text = match self.manifest_format {
+            ManifestFormat::Yaml => {
+                // Only an operation that an earlier forkctl started lacks its manifest.source snapshot.
+                let source = self.manifest_text.as_deref().ok_or_else(|| {
+                    DomainError::operation_conflict(
+                        format!(
+                            "no manifest text to edit for {}: an earlier forkctl started this operation without a manifest.source snapshot; run mise run fork operation abort --yes, then start the command again",
+                            self.manifest_path.display()
+                        ),
+                        None,
+                    )
+                })?;
+                edit_yaml(source, &self.manifest_path, &self.manifest_edits, manifest)?
+            }
+            ManifestFormat::Json => String::from_utf8(
+                self.manifest_format
+                    .serialize(manifest)
+                    .internal(format!("serialize {}", self.manifest_path.display()))?,
+            )
+            .internal("serialized JSON manifest is UTF-8")?,
+        };
+        write_atomic(&self.manifest_path, text.as_bytes())?;
+        self.manifest_text = Some(text);
+        self.manifest_edits.clear();
+        Ok(())
+    }
+
+    /// Write a manifest that has no file yet, in full.
+    pub(super) fn write_new_manifest(&mut self, manifest: Manifest) -> Result<()> {
         let bytes = self
             .manifest_format
-            .serialize(self.manifest()?)
+            .serialize(&manifest)
             .internal(format!("serialize {}", self.manifest_path.display()))?;
-        write_atomic(&self.manifest_path, &bytes)
+        write_atomic(&self.manifest_path, &bytes)?;
+        self.manifest_text =
+            Some(String::from_utf8(bytes).internal("serialized manifest is UTF-8")?);
+        self.manifest = Some(manifest);
+        self.manifest_edits.clear();
+        Ok(())
     }
 
     pub(super) fn write_ledger(&self) -> Result<PathBuf> {
@@ -567,6 +624,16 @@ impl App {
         self.git_private_path("forkctl/manifest.json")
     }
 
+    /// The tracked manifest text an operation's edits apply to.
+    fn operation_manifest_source_path(&self) -> Result<PathBuf> {
+        self.git_private_path("forkctl/manifest.source")
+    }
+
+    fn remove_operation_manifest_snapshot(&self) -> Result<()> {
+        remove_optional(&self.operation_manifest_snapshot_path()?)?;
+        remove_optional(&self.operation_manifest_source_path()?)
+    }
+
     pub(super) fn snapshot_workspace_bootstrap(&self) -> Result<()> {
         snapshot_workspace_bootstrap(&self.repo)
     }
@@ -607,8 +674,20 @@ impl App {
         manifest
             .validate(&self.repo, &self.manifest_path)
             .internal("validate operation manifest snapshot")?;
+        let source = self.operation_manifest_source_path()?;
+        self.manifest_text = match fs::read_to_string(&source) {
+            Ok(text) => Some(text),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(AppError::internal(
+                    error,
+                    format!("read operation manifest source {}", source.display()),
+                ));
+            }
+        };
         self.manifest = Some(manifest);
         self.manifest_error = None;
+        self.manifest_edits.clear();
         Ok(())
     }
 
@@ -629,12 +708,12 @@ impl App {
         if let Some(recovery) = &operation.publication_recovery {
             run(&self.repo, "git", ["tag", "--delete", &recovery.tag])?;
         }
-        remove_optional(&self.operation_manifest_snapshot_path()?)?;
+        self.remove_operation_manifest_snapshot()?;
         self.clear_operation()
     }
 
     pub(super) fn complete_published_operation(&self) -> Result<()> {
-        remove_optional(&self.operation_manifest_snapshot_path()?)?;
+        self.remove_operation_manifest_snapshot()?;
         self.clear_operation()
     }
 
@@ -698,6 +777,11 @@ impl App {
         target: Option<BaseTarget>,
     ) -> Result<OperationState> {
         self.require_no_operation()?;
+        if !self.manifest_edits.is_empty() {
+            return Err(AppError::internal_message(
+                "manifest edits are pending at operation start",
+            ));
+        }
         self.normalize_append_bridge_head()?;
         let manifest = self.manifest()?;
         let expected_remote_sha = self.downstream_sha()?;
@@ -725,6 +809,9 @@ impl App {
         let snapshot_bytes = serde_json::to_vec_pretty(manifest)
             .internal("serialize operation manifest snapshot")?;
         write_atomic(&snapshot, &snapshot_bytes)?;
+        if let Some(text) = &self.manifest_text {
+            write_atomic(&self.operation_manifest_source_path()?, text.as_bytes())?;
+        }
         self.snapshot_workspace_bootstrap()?;
         Ok(OperationState {
             schema: 1,

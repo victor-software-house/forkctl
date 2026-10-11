@@ -1,6 +1,7 @@
 use super::{App, write_atomic};
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent, ReplayPathChange};
+use crate::manifest_edit::ManifestEdit;
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, RebaseResult};
 use crate::report::{self, ExportEvidence, RebaseReport};
@@ -77,18 +78,20 @@ impl App {
             "git",
             ["merge-base", &new_base, &upstream_tracking],
         )?;
-        let manifest = self.manifest_mut()?;
-        manifest.base.target = target.clone();
-        manifest.base.stack.clone_from(&new_base);
-        manifest.base.canonical = canonical;
+        let mut edits = vec![ManifestEdit::SetBase {
+            target: target.clone(),
+            stack: new_base.clone(),
+            canonical,
+        }];
         if !dropped.items.is_empty() || !path_changes.is_empty() {
-            manifest.history.push(HistoryEvent::Rebase {
+            edits.push(ManifestEdit::PushHistory(HistoryEvent::Rebase {
                 target: target.clone(),
                 recovery: operation.recovery.clone(),
                 dropped: dropped.items.clone(),
                 path_changes: path_changes.clone(),
-            });
+            }));
         }
+        self.edit_manifest(edits)?;
         self.write_manifest()?;
         let exports = self.write_exports()?;
         let ledger = self.write_ledger()?;
@@ -263,13 +266,11 @@ impl App {
             .iter()
             .map(|item| item.patch.name.clone())
             .collect::<Vec<_>>();
-        let set = names
-            .iter()
-            .map(String::as_str)
-            .collect::<std::collections::HashSet<_>>();
-        self.manifest_mut()?
-            .patches
-            .retain(|patch| !set.contains(patch.name.as_str()));
+        self.edit_manifest(
+            names
+                .iter()
+                .map(|name| ManifestEdit::RemovePatch { name: name.clone() }),
+        )?;
         let mut removed_exports = Vec::new();
         for item in &dropped {
             if item.patch.kind == crate::manifest::PatchKind::Source {
