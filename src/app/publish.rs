@@ -1,6 +1,7 @@
 use super::{App, recovery_id};
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{PublishMode, RecoveryEvidence};
+use crate::manifest_edit::ManifestEdit;
 use crate::process::{capture, run, run_operator, succeeds};
 use crate::proposal::{self, ProposalText};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, PublishArgs, PublishResult};
@@ -58,12 +59,12 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(());
         }
-        let mut proposed = self.manifest()?.clone();
-        proposed.downstream.publish = publish;
-        proposed
+        let edits = [ManifestEdit::SetPublishMode(publish)];
+        self.manifest()?
+            .edited(&edits)
             .validate(&self.repo, &self.manifest_path)
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
-        self.manifest = Some(proposed);
+        self.edit_manifest(edits)?;
         self.write_manifest()?;
         let ledger = self.write_ledger()?;
         self.refresh_bookkeeping(&[self.manifest_path.clone(), ledger])?;

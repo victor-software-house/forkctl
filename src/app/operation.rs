@@ -147,6 +147,8 @@ impl App {
         )?;
         self.manifest = rediscovered.manifest;
         self.manifest_error = rediscovered.manifest_error;
+        self.manifest_text = rediscovered.manifest_text;
+        self.manifest_edits.clear();
         let check = self.check_restored_repository(matches!(
             operation.kind,
             OperationKind::PatchRefresh

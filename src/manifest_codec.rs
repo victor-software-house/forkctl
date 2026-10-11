@@ -1,11 +1,8 @@
 use crate::error::{AppResult, DomainError};
 use crate::manifest::Manifest;
-use anyhow::{Context, Result};
-use serde_saphyr::RequireIndent;
-use serde_saphyr::options::{DuplicateKeyPolicy, MergeKeyPolicy};
+use anyhow::Result;
+use ctl_core::input::Input;
 use std::path::Path;
-
-const MAX_YAML_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum ManifestFormat {
@@ -26,11 +23,26 @@ impl ManifestFormat {
         }
     }
 
-    pub(crate) fn parse(self, bytes: &[u8], path: &Path) -> Result<Manifest> {
+    pub(crate) fn parse(self, bytes: &[u8], path: &Path) -> AppResult<Manifest> {
         match self {
-            Self::Yaml => parse_yaml(bytes, path),
-            Self::Json => serde_json::from_slice(bytes)
-                .with_context(|| format!("parse JSON manifest {}", path.display())),
+            Self::Yaml => {
+                let text = std::str::from_utf8(bytes).map_err(|error| {
+                    DomainError::manifest_invalid(format!(
+                        "YAML manifest {} is not UTF-8: {error}",
+                        path.display()
+                    ))
+                })?;
+                Input::new(path.display().to_string(), text)
+                    .parse()
+                    .map_err(|error| DomainError::manifest_invalid(error.to_string()).into())
+            }
+            Self::Json => serde_json::from_slice(bytes).map_err(|error| {
+                DomainError::manifest_invalid(format!(
+                    "parse JSON manifest {}: {error}",
+                    path.display()
+                ))
+                .into()
+            }),
         }
     }
 
@@ -53,37 +65,6 @@ impl ManifestFormat {
         }
         Ok(bytes)
     }
-}
-
-fn parse_yaml(bytes: &[u8], path: &Path) -> Result<Manifest> {
-    if bytes.len() > MAX_YAML_BYTES {
-        return Err(DomainError::manifest_invalid(format!(
-            "YAML manifest {} exceeds {} bytes",
-            path.display(),
-            MAX_YAML_BYTES
-        ))
-        .into());
-    }
-    let input = std::str::from_utf8(bytes)
-        .with_context(|| format!("YAML manifest {} is not UTF-8", path.display()))?;
-    let options = serde_saphyr::options! {
-        budget: serde_saphyr::budget! {
-            max_documents: 1,
-            max_aliases: 0,
-            max_anchors: 0,
-            max_depth: 32,
-            max_nodes: 100_000,
-            max_total_scalar_bytes: MAX_YAML_BYTES,
-            max_merge_keys: 0,
-            max_inclusion_depth: 0,
-        },
-        duplicate_keys: DuplicateKeyPolicy::Error,
-        merge_keys: MergeKeyPolicy::Error,
-        strict_booleans: true,
-        require_indent: RequireIndent::Even,
-    };
-    serde_saphyr::from_str_with_options(input, options)
-        .with_context(|| format!("parse YAML manifest {}", path.display()))
 }
 
 #[cfg(test)]
@@ -137,6 +118,25 @@ mod tests {
                 .parse(multiple.as_bytes(), path)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn accepts_anchors_and_aliases() {
+        let anchored = EXAMPLE
+            .replacen(
+                "drop_when: Upstream provides the required behavior.\n",
+                "drop_when: &drop Upstream provides the required behavior.\n",
+                1,
+            )
+            .replacen(
+                "drop_when: The downstream fork is retired.\n",
+                "drop_when: *drop\n",
+                1,
+            );
+        let manifest = ManifestFormat::Yaml
+            .parse(anchored.as_bytes(), Path::new("fork.yaml"))
+            .unwrap();
+        assert_eq!(manifest.patches[1].drop_when, manifest.patches[0].drop_when);
     }
 
     #[test]

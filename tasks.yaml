@@ -6,7 +6,17 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-018
+    title: Edit the manifest in place through yamled
+    scope: manifest
+    outcome: A command that changes a YAML manifest leaves comments, key order, and formatting outside the changed nodes byte for byte, and the manifest is read through ctl-core input.
+    blocked_by: []
+    acceptance:
+      - Each ManifestEdit has a unit test that compares the edited text with the original outside the edited node.
+      - Lifecycle tests prove a manifest comment survives patch disable, enable, remove, and rebase.
+      - mise run verify passes with ctl-core 0.6.10 and yamled 0.0.5.
+    plan: openspec/changes/edit-manifest-in-place/proposal.md
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

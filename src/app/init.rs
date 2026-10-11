@@ -246,8 +246,7 @@ impl App {
                 &manifest.downstream.branch,
             ],
         )?;
-        self.manifest = Some(manifest);
-        self.write_manifest()?;
+        self.write_new_manifest(manifest)?;
         let ledger_path = self.write_ledger()?;
         run(&self.repo, "stg", ["init"])?;
         run(
