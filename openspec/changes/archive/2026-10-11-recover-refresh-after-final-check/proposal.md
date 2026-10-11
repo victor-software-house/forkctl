@@ -40,7 +40,7 @@ None.
 - [`tests/lifecycle.rs`][lifecycle]: a pre-commit hook that leaves an untracked lockfile reproduces the report.
 - [`.ctl/operator/instructions.md.jinja`][instructions] and [`.ctl/operator/SKILL.md.jinja`][skill]: the recovery for a hook that leaves files dirty.
 
-[patch]: ../../../src/app/patch.rs
-[lifecycle]: ../../../tests/lifecycle.rs
-[instructions]: ../../../.ctl/operator/instructions.md.jinja
-[skill]: ../../../.ctl/operator/SKILL.md.jinja
+[patch]: ../../../../src/app/patch.rs
+[lifecycle]: ../../../../tests/lifecycle.rs
+[instructions]: ../../../../.ctl/operator/instructions.md.jinja
+[skill]: ../../../../.ctl/operator/SKILL.md.jinja
