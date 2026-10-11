@@ -2,6 +2,8 @@
 min_version = "2026.10.3"
 
 [settings]
+# The qctl task include below is a git:: source, which mise treats as experimental.
+experimental = true
 lockfile = true
 
 # Every tool declared here must match mise.lock.
