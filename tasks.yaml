@@ -47,7 +47,7 @@ archive:
       - After mise.lock was restored, patch finish passed and operation continue reported completed. But the patch stayed active, so publish failed with active_patch_exists until a second patch finish.
       - >2-
         Repro conditions: lockfile = true, an aqua tool newly added to [tools], and only some platforms locked.
-    plan: openspec/changes/recover-refresh-after-final-check/proposal.md
+    plan: openspec/changes/archive/2026-10-11-recover-refresh-after-final-check/proposal.md
     completed: 2026-10-06T12:09:40
     evidence:
       - 12873813216e79c709c293c8c319cad9419db129
@@ -87,7 +87,7 @@ archive:
     title: Bootstrap on a release tag outside the upstream branch
     scope: init
     outcome: init bootstraps a downstream on an upstream release tag that no upstream branch contains, and rebase moves it to the next such tag.
-    plan: openspec/changes/init-off-branch-tag-base/proposal.md
+    plan: openspec/changes/archive/2026-10-06-init-off-branch-tag-base/proposal.md
     notes:
       - >2-
         Reported from a private downstream whose upstream tags each release on a version-bump commit off main: init recorded the tag commit as canonical, then every check failed with a merge-base mismatch.

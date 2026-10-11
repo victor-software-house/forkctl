@@ -33,8 +33,8 @@ None.
 - [`tests/lifecycle.rs`][lifecycle]: bootstrap and rebase on off-branch release tags.
 - [`.ctl/operator/instructions.md.jinja`][instructions]: the `init` paragraph.
 
-[init]: ../../../src/app/init.rs
-[mod]: ../../../src/app/mod.rs
-[check]: ../../../src/app/check.rs
-[lifecycle]: ../../../tests/lifecycle.rs
-[instructions]: ../../../.ctl/operator/instructions.md.jinja
+[init]: ../../../../src/app/init.rs
+[mod]: ../../../../src/app/mod.rs
+[check]: ../../../../src/app/check.rs
+[lifecycle]: ../../../../tests/lifecycle.rs
+[instructions]: ../../../../.ctl/operator/instructions.md.jinja
