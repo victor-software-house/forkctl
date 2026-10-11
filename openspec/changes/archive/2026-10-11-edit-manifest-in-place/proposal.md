@@ -39,7 +39,7 @@ None.
 - `Cargo.toml`: ctl-core with the `input` feature at its next patch, and yamled 0.0.5.
 - [`README.md`][readme]: the YAML parsing paragraph.
 
-[codec]: ../../../src/manifest_codec.rs
-[mod]: ../../../src/app/mod.rs
-[readme]: ../../../README.md
+[codec]: ../../../../src/manifest_codec.rs
+[mod]: ../../../../src/app/mod.rs
+[readme]: ../../../../README.md
 [yamled]: https://github.com/victor-software-house/yamled
