@@ -75,6 +75,7 @@ It has no override, because writing a manifest that does not match the command's
 When an operation starts, forkctl already writes the JSON snapshot.
 It now also copies the tracked manifest bytes to `$(git rev-parse --git-path forkctl/manifest.source)`, and `load_operation_manifest` reads both.
 An operation's edits apply to that text, which parses to the same manifest as the snapshot by construction.
+An operation that an earlier forkctl started has no such snapshot. Its write fails with `operation_conflict` and says to run `operation abort --yes` and start the command again; there is no fallback to a full rewrite, as for every older forkctl contract.
 
 Alternative considered: edit whatever text is on disk when the operation writes.
 It lost because a stack in flight may have popped or changed the file, so the edits would apply to a document that no longer matches the snapshot.
@@ -82,7 +83,9 @@ It lost because a stack in flight may have popped or changed the file, so the ed
 ### 4. Aliases are refused at the edited node
 
 yamled edits the text it is given; an edit that lands on an alias, or inside a node another node aliases, would silently change both or neither.
-forkctl refuses such an edit with `manifest_invalid`, naming the path and saying to expand the alias by hand.
+forkctl refuses such an edit with `manifest_invalid` and says to expand the anchor or alias by hand.
+No separate alias check is needed: an alias whose anchor an edit removed no longer parses, so yamled refuses the edit, and an anchored value that changes in more places than the edit fails the parse-back comparison of decision 2.
+The same refusal covers a flow collection yamled cannot edit in place.
 Reading a manifest with anchors and aliases is allowed.
 
 Alternative considered: expand every alias before editing.

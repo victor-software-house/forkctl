@@ -466,11 +466,15 @@ impl App {
         let manifest = self.manifest()?;
         let text = match self.manifest_format {
             ManifestFormat::Yaml => {
+                // Only an operation that an earlier forkctl started lacks its manifest.source snapshot.
                 let source = self.manifest_text.as_deref().ok_or_else(|| {
-                    AppError::internal_message(format!(
-                        "no source text to edit for {}",
-                        self.manifest_path.display()
-                    ))
+                    DomainError::operation_conflict(
+                        format!(
+                            "no manifest text to edit for {}: an earlier forkctl started this operation without a manifest.source snapshot; run mise run fork operation abort --yes, then start the command again",
+                            self.manifest_path.display()
+                        ),
+                        None,
+                    )
                 })?;
                 edit_yaml(source, &self.manifest_path, &self.manifest_edits, manifest)?
             }

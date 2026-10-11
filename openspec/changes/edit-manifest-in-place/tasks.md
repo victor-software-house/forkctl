@@ -13,6 +13,8 @@ Compile, format, lint, and test tasks run on the build host with `mise run verif
   - 2026-10-11 (UTC): both pass on the build host. serde-saphyr refuses the second document on its own when parsing into one type, so forkctl sets no limit.
 - [x] 2.2 Keep the source text beside the typed manifest in `App`, and snapshot it at operation start as `forkctl/manifest.source`; proof: `lower_patch_refresh_conflict_can_continue_from_typed_journal` asserts the tracked manifest is absent before `operation continue`, and the manifest comment survives it
   - 2026-10-11 (UTC): passes on the build host.
+- [x] 2.3 Fail with `operation_conflict` naming `operation abort --yes` when an operation has no manifest.source snapshot; proof: `continue_without_a_manifest_source_snapshot_names_its_recovery` passes
+  - 2026-10-11 (UTC): passes on the build host; before this fix the same write failed as an internal error.
 
 ## 3. Edits
 
@@ -31,6 +33,6 @@ Compile, format, lint, and test tasks run on the build host with `mise run verif
   - 2026-10-11 (UTC): `grep` finds nothing; both `operator_docs` tests pass on the build host.
 - [x] 4.2 Add a changeset fragment; proof: `.changeset/manifest-edits-in-place.md` is a `forkctl: patch` fragment
 - [x] 4.3 Run the full gate; proof: `mise run verify` and `openspec validate --all --strict` pass on the build host
-  - 2026-10-11 (UTC): `mise run verify` runs 125 of 125 tests on the build host; `openspec validate --all --strict` passes.
+  - 2026-10-11 (UTC): `mise run verify` runs 126 of 126 tests on the build host; `openspec validate --all --strict` passes.
 
 [ctl-core]: https://github.com/victor-software-house/ctl-core

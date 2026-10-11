@@ -471,6 +471,45 @@ fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
 }
 
 #[test]
+fn continue_without_a_manifest_source_snapshot_names_its_recovery() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
+    fixture.forkctl_ok(&["patch", "select", "lower"]);
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    assert!(
+        !fixture
+            .forkctl(&["patch", "refresh", "--rewrite-below"])
+            .status
+            .success()
+    );
+    // An operation that an earlier forkctl started has no manifest.source snapshot.
+    let source = git_capture_dynamic(
+        &fixture.repo,
+        &["rev-parse", "--git-path", "forkctl/manifest.source"],
+    );
+    fs::remove_file(fixture.repo.join(source)).unwrap();
+
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    assert!(!fixture.forkctl(&["operation", "continue"]).status.success());
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\nupper\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    let output = fixture.forkctl(&["--format", "json", "operation", "continue"]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "operation_conflict");
+    assert!(
+        output["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("operation abort --yes"),
+        "{output}"
+    );
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+}
+
+#[test]
 fn patch_kind_reorder_conflict_can_continue_from_typed_journal() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "lower", "shared.txt", "lower\n");

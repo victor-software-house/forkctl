@@ -100,7 +100,11 @@ pub(crate) fn edit_yaml(
     }
     let text = document.into_string();
     let written = ManifestFormat::Yaml.parse(text.as_bytes(), path)?;
-    if serde_json::to_value(&written).ok() != serde_json::to_value(expected).ok() {
+    let written = serde_json::to_value(&written)
+        .map_err(|error| AppError::internal(error, "serialize the edited manifest"))?;
+    let expected = serde_json::to_value(expected)
+        .map_err(|error| AppError::internal(error, "serialize the expected manifest"))?;
+    if written != expected {
         return Err(DomainError::manifest_invalid(format!(
             "cannot edit {} in place: the edited text no longer reads as the change forkctl made; \
              an anchor or alias likely shares an edited value, so expand it by hand",
@@ -443,6 +447,6 @@ mod tests {
         let edits = [ManifestEdit::ReplacePatch(patch)];
         let expected = manifest.edited(&edits);
         let error = edit_yaml(&source, Path::new("fork.yaml"), &edits, &expected).unwrap_err();
-        assert!(error.to_string().contains("cannot"), "{error}");
+        assert!(error.to_string().contains("alias"), "{error}");
     }
 }

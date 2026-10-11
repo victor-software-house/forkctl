@@ -45,6 +45,11 @@ An operation SHALL apply its manifest edits to the tracked manifest text capture
 - **WHEN** the manifest carries comments and the operator runs `forkctl patch disable docs-banner --reason obsolete --yes`
 - **THEN** the written `patches/fork.yaml` keeps every comment, lacks the `docs-banner` patch item, and gains one `disabled_patches` item
 
+#### Scenario: An operation started without the snapshot
+
+- **WHEN** `forkctl/manifest.source` is missing under the Git directory while a `patchrefresh` operation is stopped on a conflict, and the operator resolves it and runs `forkctl --format json operation continue`
+- **THEN** it fails with `error.code` equal to `operation_conflict`, and the message names `operation abort --yes`
+
 ### Requirement: An edit through an alias is refused
 
 forkctl SHALL fail with `manifest_invalid`, and SHALL NOT write the manifest, when an edit would change an alias or a node that an alias refers to.
@@ -52,7 +57,7 @@ forkctl SHALL fail with `manifest_invalid`, and SHALL NOT write the manifest, wh
 #### Scenario: Editing an anchored patch
 
 - **WHEN** patch `docs-banner` is anchored as `&banner` and aliased elsewhere, and the operator runs `forkctl --format json patch edit docs-banner --description new`
-- **THEN** it fails with `error.code` equal to `manifest_invalid`, naming the alias
+- **THEN** it fails with `error.code` equal to `manifest_invalid`, saying to expand the anchor or alias by hand
 - **AND** `patches/fork.yaml` is unchanged
 
 ### Requirement: Bootstrap and JSON manifests are written in full
