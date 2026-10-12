@@ -1,3 +1,4 @@
+//! The mounted mise task: proxied output, exit codes, cwd, and completion.
 #![cfg(unix)]
 #![expect(
     clippy::unwrap_used,
@@ -10,6 +11,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+
 use support::Fixture;
 
 #[test]

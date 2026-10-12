@@ -1,8 +1,10 @@
-use crate::error::{AppResult, DomainError};
-use crate::manifest::Manifest;
+use std::path::Path;
+
 use anyhow::Result;
 use ctl_core::input::Input;
-use std::path::Path;
+
+use crate::error::{AppResult, DomainError};
+use crate::manifest::Manifest;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum ManifestFormat {

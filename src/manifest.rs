@@ -3,12 +3,13 @@
     reason = "schemars' JsonSchema derive expands concat!"
 )]
 
+use std::collections::HashSet;
+use std::path::{Component, Path};
+
 use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
 use globset::GlobBuilder;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::path::{Component, Path};
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -54,12 +55,15 @@ pub(crate) struct Downstream {
 )]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum PublishMode {
-    /// Exact-lease rewrite of the downstream ref. Recovery tags keep the overwritten tip.
+    /// Exact-lease rewrite of the downstream ref. Recovery tags keep the
+    /// overwritten tip.
     #[default]
     Rewrite,
-    /// Keep the previous tip as an ancestor and fast-forward. `git log` stays a line.
+    /// Keep the previous tip as an ancestor and fast-forward. `git log` stays a
+    /// line.
     Append,
-    /// Open a proposal of the net tree. `publish --promote` later moves the lease.
+    /// Open a proposal of the net tree. `publish --promote` later moves the
+    /// lease.
     Propose,
 }
 
@@ -152,9 +156,10 @@ pub(crate) struct Patch {
 
 /// One command that must succeed for the declaring patch to still hold.
 ///
-/// `glob` defaults to the declaring patch's scope and may reach anywhere in the repository: the
-/// drift that breaks a long-lived fork is upstream introducing cases the patch never covered, in
-/// files the patch does not own. Scope governs what a patch may modify, never what it may check.
+/// `glob` defaults to the declaring patch's scope and may reach anywhere in the
+/// repository: the drift that breaks a long-lived fork is upstream introducing
+/// cases the patch never covered, in files the patch does not own. Scope
+/// governs what a patch may modify, never what it may check.
 #[derive(Debug, Clone, Deserialize, Eq, Hash, PartialEq, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Check {
@@ -175,7 +180,8 @@ pub(crate) enum CheckStage {
     /// The complete applied stack, in a disposable clone with no origin remote.
     #[default]
     Stack,
-    /// The declaring patch's own commit, in a disposable clone with no origin remote.
+    /// The declaring patch's own commit, in a disposable clone with no origin
+    /// remote.
     Patch,
 }
 
@@ -719,7 +725,8 @@ impl Patch {
         Ok(())
     }
 
-    /// Files a check observes: its own globs, or the declaring patch's scope by default.
+    /// Files a check observes: its own globs, or the declaring patch's scope by
+    /// default.
     pub(crate) fn check_globs<'a>(&'a self, check: &'a Check) -> &'a [String] {
         if check.glob.is_empty() {
             &self.scope

@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 use super::{App, fetch_upstream, resolve_target, upstream_tracking_ref};
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{
@@ -5,7 +7,6 @@ use crate::manifest::{
 };
 use crate::process::{capture, run, run_operator};
 use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, MutationPlan};
-use std::ffi::OsString;
 
 impl App {
     pub(crate) fn init(&mut self, args: InitArgs, mode: ExecutionMode) -> Result<CommandResult> {
@@ -52,14 +53,16 @@ impl App {
                 scope.push(path);
             }
         }
-        // Untracked files inside the bookkeeping scope, such as the mise configuration that
-        // mounts the fork task, join the bookkeeping patch. Every other change still refuses.
+        // Untracked files inside the bookkeeping scope, such as the mise
+        // configuration that mounts the fork task, join the bookkeeping
+        // patch. Every other change still refuses.
         let inventory = self.worktree_inventory()?;
         let exports_prefix = format!("{}/", exports.trim_end_matches('/'));
         let (captured, untracked_outside): (Vec<String>, Vec<String>) =
             inventory.untracked.into_iter().partition(|path| {
-                // Bootstrap writes the manifest, the ledger, and the exports itself, so an
-                // existing untracked file at any of those paths is not captured: it would be
+                // Bootstrap writes the manifest, the ledger, and the exports
+                // itself, so an existing untracked file at any
+                // of those paths is not captured: it would be
                 // overwritten, or fail the export check after mutation.
                 *path != manifest_relative
                     && *path != ledger
@@ -148,9 +151,10 @@ impl App {
         manifest
             .validate(&self.repo, &self.manifest_path)
             .internal("validate bootstrapped manifest")?;
-        // A release tag may sit off the upstream branch. Canonical is where the base meets that
-        // branch, as rebase records it, and the tag's own commits are drift that allow_base must
-        // cover. Both are settled before anything is pushed or written.
+        // A release tag may sit off the upstream branch. Canonical is where the
+        // base meets that branch, as rebase records it, and the tag's
+        // own commits are drift that allow_base must cover. Both are
+        // settled before anything is pushed or written.
         fetch_upstream(&self.repo, &manifest.upstream, true)?;
         let upstream_tracking = upstream_tracking_ref(&manifest.upstream)?;
         manifest.base.canonical = match capture(
@@ -210,8 +214,9 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
-        // The downstream branch starts at the exact base, so the first publish is a plain
-        // fast-forward. The empty lease requires that the branch still does not exist.
+        // The downstream branch starts at the exact base, so the first publish
+        // is a plain fast-forward. The empty lease requires that the
+        // branch still does not exist.
         if create_downstream {
             run_operator(
                 &self.repo,

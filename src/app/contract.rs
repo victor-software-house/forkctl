@@ -1,6 +1,5 @@
 use super::App;
-use crate::error::AppResult as Result;
-use crate::error::DomainError;
+use crate::error::{AppResult as Result, DomainError};
 use crate::manifest::Contracts;
 use crate::manifest_edit::ManifestEdit;
 use crate::protocol::{

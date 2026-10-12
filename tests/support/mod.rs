@@ -24,8 +24,8 @@ impl Fixture {
         Self::new_with_manifest("patches/fork.yaml")
     }
 
-    /// A bootstrapped fixture: `init` created the empty downstream branch at the base and set
-    /// tracking, as it does for an operator.
+    /// A bootstrapped fixture: `init` created the empty downstream branch at
+    /// the base and set tracking, as it does for an operator.
     pub(crate) fn new_with_manifest(manifest: &str) -> Self {
         let mut fixture = Self::fresh_upstream_clone();
         manifest.clone_into(&mut fixture.manifest);
@@ -34,8 +34,9 @@ impl Fixture {
         fixture
     }
 
-    /// A fresh clone of upstream: its `upstream` remote is the clone source, its `origin`
-    /// downstream remote is empty, `main` still tracks `upstream/main`, and `init` has not run.
+    /// A fresh clone of upstream: its `upstream` remote is the clone source,
+    /// its `origin` downstream remote is empty, `main` still tracks
+    /// `upstream/main`, and `init` has not run.
     pub(crate) fn fresh_upstream_clone() -> Self {
         let directory = tempfile::tempdir().unwrap();
         prepare_sandbox(directory.path());

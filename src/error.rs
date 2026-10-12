@@ -1,9 +1,10 @@
-use crate::protocol::{ApiError, ApiErrorCode, ErrorDetails};
-use crate::state::OperationState;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::path::Path;
 use std::process::Output;
+
+use crate::protocol::{ApiError, ApiErrorCode, ErrorDetails};
+use crate::state::OperationState;
 
 pub(crate) type AppResult<T> = std::result::Result<T, AppError>;
 
@@ -76,8 +77,9 @@ impl std::error::Error for AppError {}
 
 /// Explicitly marks an infrastructure failure as internal.
 ///
-/// `AppError` intentionally has no blanket `From<anyhow::Error>` or I/O conversion: callers must
-/// choose domain classification or invoke this adapter with actionable context.
+/// `AppError` intentionally has no blanket `From<anyhow::Error>` or I/O
+/// conversion: callers must choose domain classification or invoke this adapter
+/// with actionable context.
 pub(crate) trait InternalResultExt<T> {
     fn internal(self, context: impl Display + Send + Sync + 'static) -> AppResult<T>;
 }
@@ -375,8 +377,8 @@ impl DomainError {
         )
     }
 
-    /// Marks a failure that happened after the proposal branch was pushed. Rerunning the
-    /// proposal is safe, so the error is retryable.
+    /// Marks a failure that happened after the proposal branch was pushed.
+    /// Rerunning the proposal is safe, so the error is retryable.
     pub(crate) fn after_proposal_push(mut self, proposal_branch: &str) -> Self {
         self.message = format!(
             "proposal branch {proposal_branch} was pushed, but its pull request was not updated: {}",

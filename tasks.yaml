@@ -37,6 +37,15 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-020
+    title: Take the shared Rust setup from the Copier template
+    scope: repository setup
+    outcome: forkctl renders its repository setup from the shared template, builds on the pinned stable 1.99.0, runs the shared task catalog with nextest for test, and arms its git hooks on mise install.
+    completed: 2026-10-12T05:29:33
+    evidence:
+      - 18e9a243df2991b6e5b04b83f63ef10710b73d38
+    disposition: completed
+
   - id: FRK-019
     title: Honor repository input limits
     scope: manifest

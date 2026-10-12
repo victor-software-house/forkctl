@@ -1,6 +1,7 @@
-use crate::manifest::{CheckStage, HistoryEvent, Manifest, PatchKind};
 use anyhow::{Context, Result};
 use askama::Template;
+
+use crate::manifest::{CheckStage, HistoryEvent, Manifest, PatchKind};
 
 #[derive(Template)]
 #[template(path = "patches.md", escape = "none")]

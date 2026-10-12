@@ -1,11 +1,12 @@
-use crate::process;
-use semver::Version;
-use serde::Deserialize;
-use std::env;
-use std::fs;
 use std::io::{self, IsTerminal};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
+use std::{env, fs};
+
+use semver::Version;
+use serde::Deserialize;
+
+use crate::process;
 
 const CHECK_INTERVAL: Duration = Duration::from_hours(24);
 const REGISTRY_URL: &str = "https://crates.io/api/v1/crates/forkctl";

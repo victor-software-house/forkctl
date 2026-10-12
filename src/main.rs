@@ -1,3 +1,4 @@
+//! Audited downstream patch stacks, delegated to `git` and `stg`.
 // Production code reports failures as errors; tests may still panic.
 #![cfg_attr(
     not(test),
@@ -139,7 +140,8 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         .or_else(|| env::var_os("FORK_MANIFEST").map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from(DEFAULT_MANIFEST));
     let mut app = App::discover(&manifest)?;
-    // Every run names each limit the repository loosens; it is the operator's only signal.
+    // Every run names each limit the repository loosens; it is the operator's
+    // only signal.
     for warning in &app.input_warnings {
         eprintln!("forkctl: warning: {warning}");
     }

@@ -1,3 +1,4 @@
+//! The command-line surface: arguments, output formats, and typed errors.
 #![expect(
     clippy::unwrap_used,
     reason = "test setup helpers fail the test on the first unexpected error"
@@ -7,6 +8,7 @@ mod support;
 
 use std::io::Write;
 use std::process::{Command, Stdio};
+
 use support::Fixture;
 
 fn forkctl() -> Command {

@@ -8,6 +8,14 @@ mod publish;
 mod rebase;
 mod status;
 
+use std::ffi::{OsStr, OsString};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::{env, fs};
+
+use tempfile::NamedTempFile;
+
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::ledger;
 use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind, Upstream};
@@ -15,13 +23,6 @@ use crate::manifest_codec::ManifestFormat;
 use crate::manifest_edit::{ManifestEdit, edit_yaml};
 use crate::process::{capture, output, run, succeeds};
 use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
-use std::env;
-use std::ffi::{OsStr, OsString};
-use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-use tempfile::NamedTempFile;
 
 const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
 const APPEND_BRIDGE_MESSAGE_PREFIX: &str = "forkctl: keep published history ";
@@ -50,8 +51,9 @@ impl App {
         // refresh pops them. Restore the last snapshot so `mise run fork`
         // and operation continue/abort stay usable.
         restore_workspace_bootstrap(&repo);
-        // A malformed .ctl/input.yaml blocks a YAML manifest like an unreadable one, so
-        // operation status, continue, and abort still run from the snapshot.
+        // A malformed .ctl/input.yaml blocks a YAML manifest like an unreadable
+        // one, so operation status, continue, and abort still run from
+        // the snapshot.
         let (input_warnings, input_error) = match ctl_core::input::use_repo_limits(&repo) {
             Ok(loosened) => (loosened.iter().map(ToString::to_string).collect(), None),
             Err(error) => (Vec::new(), Some(error.to_string())),
@@ -177,7 +179,8 @@ impl App {
             ))
             .into());
         }
-        // A branch with no upstream is reported like a wrong one, with the command that fixes it.
+        // A branch with no upstream is reported like a wrong one, with the
+        // command that fixes it.
         let tracking = capture(
             &self.repo,
             "git",
@@ -211,7 +214,8 @@ impl App {
     }
 
     pub(super) fn worktree_inventory(&self) -> Result<WorktreeInventory> {
-        // Not `capture`: trimming would eat the leading space of an unstaged-only first entry.
+        // Not `capture`: trimming would eat the leading space of an
+        // unstaged-only first entry.
         let status = output(
             &self.repo,
             "git",
@@ -229,8 +233,9 @@ impl App {
             let x = bytes[0] as char;
             let y = bytes[1] as char;
             let path = entry[3..].to_string();
-            // Rename and copy entries carry their original path in the following field. Both
-            // sides are affected, so both are inventoried; reading the original as its own
+            // Rename and copy entries carry their original path in the
+            // following field. Both sides are affected, so both are
+            // inventoried; reading the original as its own
             // entry would strip three characters from a real repository path.
             let origin = if matches!(x, 'R' | 'C') || matches!(y, 'R' | 'C') {
                 fields.next().map(str::to_string)
@@ -479,7 +484,8 @@ impl App {
         let manifest = self.manifest()?;
         let text = match self.manifest_format {
             ManifestFormat::Yaml => {
-                // Only an operation that an earlier forkctl started lacks its manifest.source snapshot.
+                // Only an operation that an earlier forkctl started lacks its
+                // manifest.source snapshot.
                 let source = self.manifest_text.as_deref().ok_or_else(|| {
                     DomainError::operation_conflict(
                         format!(
@@ -588,7 +594,8 @@ impl App {
         Ok(sha.to_string())
     }
 
-    /// The SHA of `git_ref` on `remote`, or `None` when the remote has no such ref.
+    /// The SHA of `git_ref` on `remote`, or `None` when the remote has no such
+    /// ref.
     pub(super) fn remote_ref_sha_if_present(
         &self,
         remote: &str,

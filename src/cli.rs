@@ -1,3 +1,9 @@
+use std::path::PathBuf;
+
+use anyhow::{Context, Result, ensure};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
+use ctl_core::{DryRunArgs, OutputArgs};
+
 use crate::manifest::{Check, CheckStage, PatchKind, RequiredText};
 use crate::protocol::{
     ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ContractEditArgs, EmptyArgs,
@@ -5,10 +11,6 @@ use crate::protocol::{
     PatchRefreshArgs, PatchTarget, PatchTransitionArgs, PublishArgs, RebaseArgs, SchemaKind,
     ScopeEdit,
 };
-use anyhow::{Context, Result, ensure};
-use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
-use ctl_core::{DryRunArgs, OutputArgs};
-use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
@@ -48,7 +50,8 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ContractCommand,
     },
-    /// Publish the managed branch using the repository default, or an explicit mode.
+    /// Publish the managed branch using the repository default, or an explicit
+    /// mode.
     Publish(PublishCliArgs),
     /// Inspect, continue, or abort the current operation.
     Operation {
@@ -206,13 +209,16 @@ pub(crate) struct PatchCreateCliArgs {
     /// Persistent ownership glob; repeatable.
     #[arg(short = 's', long, required = true, help_heading = "Ownership")]
     pub scope: Vec<String>,
-    /// Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable.
+    /// Declared check as NAME=COMMAND, where {files} expands to the checked
+    /// files; repeatable.
     #[arg(short = 'C', long = "check", help_heading = "Checks", value_parser = parse_check)]
     pub checks: Vec<Check>,
-    /// Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable.
+    /// Restrict a declared check as NAME=GLOB, defaulting to the patch scope;
+    /// repeatable.
     #[arg(short = 'g', long = "check-glob", help_heading = "Checks", value_parser = parse_named_value)]
     pub check_globs: Vec<(String, String)>,
-    /// Evaluate a declared check at its own patch commit as NAME=patch; repeatable.
+    /// Evaluate a declared check at its own patch commit as NAME=patch;
+    /// repeatable.
     #[arg(long = "check-at", help_heading = "Checks", value_parser = parse_check_stage)]
     pub check_stages: Vec<(String, CheckStage)>,
     #[command(flatten)]
@@ -263,13 +269,16 @@ pub(crate) struct PatchEditCliArgs {
     /// Replace the complete check set before adding supplied checks.
     #[arg(long, help_heading = "Checks")]
     pub clear_checks: bool,
-    /// Declared check as NAME=COMMAND, where {files} expands to the checked files; repeatable.
+    /// Declared check as NAME=COMMAND, where {files} expands to the checked
+    /// files; repeatable.
     #[arg(short = 'C', long = "check", help_heading = "Checks", value_parser = parse_check)]
     pub checks: Vec<Check>,
-    /// Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable.
+    /// Restrict a declared check as NAME=GLOB, defaulting to the patch scope;
+    /// repeatable.
     #[arg(short = 'g', long = "check-glob", help_heading = "Checks", value_parser = parse_named_value)]
     pub check_globs: Vec<(String, String)>,
-    /// Evaluate a declared check at its own patch commit as NAME=patch; repeatable.
+    /// Evaluate a declared check at its own patch commit as NAME=patch;
+    /// repeatable.
     #[arg(long = "check-at", help_heading = "Checks", value_parser = parse_check_stage)]
     pub check_stages: Vec<(String, CheckStage)>,
     #[command(flatten)]
@@ -354,7 +363,8 @@ pub(crate) struct PublishCliArgs {
     /// Keep the previous tip as an ancestor and fast-forward.
     #[arg(long, group = "publish_mode", help_heading = "Mode")]
     pub append: bool,
-    /// Push a leased net-tree proposal branch and open or update its draft PR with `gh`.
+    /// Push a leased net-tree proposal branch and open or update its draft PR
+    /// with `gh`.
     #[arg(long, group = "publish_mode", help_heading = "Mode")]
     pub propose: bool,
     /// Promote an exact proposal to the downstream branch.
@@ -363,7 +373,8 @@ pub(crate) struct PublishCliArgs {
     /// Proposal branch, tag, or URL used by --promote.
     #[arg(long, help_heading = "Mode")]
     pub proposal: Option<String>,
-    /// Persist this mode as the repository default, then publish unless --set-default is the only action.
+    /// Persist this mode as the repository default, then publish unless
+    /// --set-default is the only action.
     #[arg(long, value_enum, help_heading = "Mode")]
     pub set_default: Option<crate::manifest::PublishMode>,
     #[command(flatten)]

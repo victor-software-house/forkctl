@@ -1,3 +1,4 @@
+//! Product invariants that hold across commands.
 #![expect(
     clippy::unwrap_used,
     reason = "test setup helpers fail the test on the first unexpected error"
@@ -10,6 +11,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
 use support::{Fixture, isolated_command};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -224,7 +226,8 @@ fn snapshot(repo: &Path) -> RepoSnapshot {
     snapshot_files(repo, repo, Some(".git"), &mut worktree);
     let mut git_metadata = Vec::new();
     snapshot_files(&git_dir, &git_dir, Some("objects"), &mut git_metadata);
-    // git status may rewrite the index to refresh stat data; index_tree covers its content.
+    // git status may rewrite the index to refresh stat data; index_tree covers
+    // its content.
     git_metadata.retain(|(path, _)| path != "index");
     RepoSnapshot {
         head: capture_ok_bytes(repo, "git", &["rev-parse", "HEAD"]),
