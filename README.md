@@ -379,14 +379,15 @@ That package is future architecture only; the current release continues to imple
 
 ```sh
 mise install --locked
-mise exec -- lefthook install
 mise run verify
 mise run test:isolated
 mise run build
 ```
 
+`mise install` also arms the git hooks: local work loads the `dev` profile from `.miserc.toml`, whose `mise.dev.toml` runs `lefthook install` after every install. CI sets `MISE_ENV=ci` and never loads it.
+
 Pull requests and pushes to `main` run those gates on GitHub's free public-repository `ubuntu-latest` hosted runner. The same gates run on `macos-latest` when `publish.yml` publishes a release, or via `workflow_dispatch`. `publish.yml` also builds the macOS arm64 and static Linux x64 assets through verctl and runs the documented mounted `fork` task against the released binary. cargo-deny, cargo-machete, and nextest come from GitHub release tarballs; `mise-action` restores the toolchain, and `jdx/mr-boxington-action` restores the mr-boxington build cache. External actions are pinned to immutable commits; CI has read-only repository permissions.
 
-`mise run test` runs the suite with cargo-nextest, which gives every test its own process and runs them in parallel. `test:isolated` runs the same suite one test at a time (`--test-threads=1`). `test:doc` runs the doc-tests, which nextest does not run. Real Git/StGit lifecycle tests use a fresh `tempfile` sandbox with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment; they never read operator aliases, credential helpers, hooks, or global config. Mounted-task tests reuse only the caller's mise installation store for the repository's exact pinned tools. Containers are reserved for future scenarios that actually require another OS, daemon, network, or toolchain image.
+`mise run test` runs the suite with cargo-nextest, which gives every test its own process and runs them in parallel. `test:isolated` runs the same suite one test at a time (`--test-threads=1`). Real Git/StGit lifecycle tests use a fresh `tempfile` sandbox with private HOME/XDG/Git configuration/templates, deterministic identity/time/locale, and command-local environment; they never read operator aliases, credential helpers, hooks, or global config. Mounted-task tests reuse only the caller's mise installation store for the repository's exact pinned tools. Containers are reserved for future scenarios that actually require another OS, daemon, network, or toolchain image.
 
-`[workspace.package].version` is the sole forkctl release source, bumped by the verctl Version PR from `.changeset/` fragments; merging that PR runs `publish.yml`. Root `mise.toml` is the sole source for the minimum mise, Rust, StGit, Lefthook, Usage, and GitHub CLI versions. After changing it, run `mise run version:sync`; it regenerates `mise.lock` and every tool pin. The verification gate rejects drift and runs rustfmt, denied-warning workspace Clippy, API/schema/help/completion tests, and disposable real Git/StGit lifecycle tests.
+`[workspace.package].version` is the sole forkctl release source, bumped by the verctl Version PR from `.changeset/` fragments; merging that PR runs `publish.yml`. Root `mise.toml` is the sole source for the minimum mise, StGit, Usage, and GitHub CLI versions, `rust-toolchain.toml` for the stable Rust it pins with `mise.toml`, and `mise.dev.toml` for Lefthook. After changing one, run `mise run version:sync`; it regenerates the locks and every tool pin. The verification gate rejects drift and runs rustfmt, denied-warning workspace Clippy, API/schema/help/completion tests, and disposable real Git/StGit lifecycle tests.

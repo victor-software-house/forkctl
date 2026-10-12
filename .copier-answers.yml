@@ -1,0 +1,17 @@
+# Changes here will be overwritten by Copier; edit with `copier update --data`.
+_commit: v0.0.5
+_src_path: https://github.com/victor-software-house/templates.git
+clippy_disallowed_methods: []
+clippy_disallowed_types: []
+deny_bans: []
+deny_ignore: []
+deny_licenses:
+-   license: BSD-3-Clause
+    reason: encoding_rs, which serde-saphyr pulls in
+deny_skip: []
+feature_sets: []
+kind: rust-crate
+layout: workspace
+nightly_fmt: true
+published: false
+tokio: false

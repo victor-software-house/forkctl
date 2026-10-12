@@ -1,3 +1,4 @@
+//! Audited downstream patch stacks, delegated to `git` and `stg`.
 // Production code reports failures as errors; tests may still panic.
 #![cfg_attr(
     not(test),

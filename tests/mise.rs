@@ -1,3 +1,4 @@
+//! The mounted mise task: proxied output, exit codes, cwd, and completion.
 #![cfg(unix)]
 #![expect(
     clippy::unwrap_used,

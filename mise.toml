@@ -2,29 +2,34 @@
 min_version = "2026.10.3"
 
 [settings]
-# The qctl task include below is a git:: source, which mise treats as experimental.
+# mise loads git:: task includes only in experimental mode.
 experimental = true
 lockfile = true
+# The platforms CI and contributors use. Without it, mise install fills every
+# tool up to the platforms any tool already records, and rewrites the locks.
+lockfile_platforms = ["linux-x64", "macos-arm64"]
 
-# Every tool declared here must match mise.lock.
+# Every tool this root declares must match mise.lock or mise.<env>.lock.
 [tool_config]
 locked = true
 
-[task_config]
-# The qctl ref is the v0.4.4 tag's commit.
-includes = [
-  "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=8d69a9e5065038cedd6a4cca228c5ff62ef41500",
-]
-
+# The toolchain lives here, not in mise.dev.toml, because CI loads only
+# MISE_ENV=ci. The stable pin equals rust-toolchain.toml and rust-version.
 [tools]
-rust = { version = "1.97.1", components = "rustfmt,clippy", mr_boxington = true }
+rust = [
+  # Pinned stable: build, lint, test.
+  { version = "1.99.0", components = "clippy", mr_boxington = true },
+  # Formatting only, for rustfmt's unstable options.
+  { version = "nightly-2026-09-29", profile = "minimal", components = "rustfmt" },
+]
 mr-boxington = "1.20.0"
-"cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
-"github:nextest-rs/nextest" = "cargo-nextest-0.9.143"
 "github:EmbarkStudios/cargo-deny" = "0.20.2"
 "github:bnjbvr/cargo-machete" = "0.9.2"
-lefthook = "2.1.10"
-gitleaks = "8.30.0"
+jq = "1.8.2"
+# forkctl's own tools.
+"cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
+# test runs on nextest, and test:isolated runs it one test at a time.
+"github:nextest-rs/nextest" = "cargo-nextest-0.9.143"
 usage = "6.11.1"
 gh = "2.95.0"
 "github:victor-software-house/verctl" = "0.3.9"
@@ -32,79 +37,32 @@ gh = "2.95.0"
 # name their own tools in their own mise.toml; forkctl ships no check tooling.
 ast-grep = "0.45.0"
 
-[tasks."format:fix"]
-description = "Format Rust sources"
-run = "cargo fmt --all"
+# mise-tasks/ holds this repository's task fragments and file tasks. An
+# includes list replaces the default task dirs, so mise-tasks comes first; add
+# pinned git:: catalogs after it.
+[task_config]
+includes = [
+  "mise-tasks",
+  # The qctl ref is the v0.4.4 tag's commit.
+  "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=8d69a9e5065038cedd6a4cca228c5ff62ef41500",
+  # The standard Rust tasks (check:toolchain, format, lint, test, test:doc,
+  # deny, deny:advisories, deps, semver, verify).
+  "git::https://github.com/victor-software-house/ctl-core.git//tasks/rust.toml?ref=v0.6.15",
+]
 
-[tasks.format]
-description = "Check Rust formatting"
-run = "cargo fmt --all -- --check"
-
-[tasks."lint:fix"]
-description = "Apply machine-fixable Clippy suggestions"
-run = "cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets --all-features -- -D warnings"
-env.CARGO_TARGET_DIR = "target/lint"
-
-[tasks.lint]
-description = "Run Clippy with warnings denied"
-run = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
-env.CARGO_TARGET_DIR = "target/lint"
-
+# The one task here: the last include wins over mise-tasks/, so only an inline
+# task replaces the catalog's cargo test. nextest gives each test its own
+# process, which the lifecycle fixtures rely on.
 [tasks.test]
-description = "Parallel test suite via nextest"
+description = "Unit and integration tests on nextest"
 run = "cargo nextest run --workspace --all-features"
-env.CARGO_TARGET_DIR = "target/test"
+timeout = "30m"
 
+# forkctl has no library target, and cargo test --doc refuses a package without one,
+# so this replaces the catalog's doc-test task. A library target would bring it back.
 [tasks."test:doc"]
-description = "Doc-tests (nextest does not run these)"
-run = "cargo test --doc --workspace --all-features"
-env.CARGO_TARGET_DIR = "target/doc-test"
-
-[tasks."test:isolated"]
-description = "Same suite, one test at a time"
-run = "cargo nextest run --workspace --all-features --test-threads=1"
-env.CARGO_TARGET_DIR = "target/test-isolated"
-
-[tasks.deny]
-description = "License, ban, and source policy (offline)"
-run = "cargo-deny check licenses bans sources"
-
-[tasks."deny:advisories"]
-description = "RustSec advisories and yanked crates (network, CI only)"
-run = "cargo-deny check advisories"
-
-[tasks.deps]
-description = "Unused crate analysis"
-run = "cargo-machete"
-
-[tasks."hooks:secrets:staged"]
-description = "Scan staged blobs for secrets"
-run = "gitleaks git --staged --redact --no-banner"
-
-[tasks."hooks:secrets:history"]
-description = "Scan reachable history for secrets"
-run = "gitleaks git --redact --no-banner"
-
-[tasks."version:sync"]
-description = "Regenerate the lockfile and all tool pins from mise.toml"
-run = ["mise lock", "cargo run --quiet --package forkctl-xtask"]
-env.CARGO_TARGET_DIR = "target/xtask"
-
-[tasks."version:check"]
-description = "Verify generated tool pins match mise.toml"
-run = "cargo run --quiet --package forkctl-xtask -- --check"
-env.CARGO_TARGET_DIR = "target/xtask"
-
-[tasks.verify]
-description = "Offline gate: format, clippy, nextest, deny, unused-deps, version pins"
-# mbx shares one store and compiler pool; separate target dirs keep Cargo's
-# directory lock from serializing the parallel tasks.
-depends = ["format", "lint", "test", "deny", "deps", "version:check"]
-
-[tasks.build]
-description = "Build the release binary"
-run = "cargo build --release"
-env.CARGO_TARGET_DIR = "target/build"
+description = "No doc-tests: forkctl has no library target"
+run = "true"
 
 [tool_alias]
 # Same backend under every mise version, so the lock does not change with the

@@ -1,3 +1,4 @@
+//! Module boundaries: command and domain modules neither render nor print.
 #![expect(
     clippy::unwrap_used,
     reason = "test setup helpers fail the test on the first unexpected error"

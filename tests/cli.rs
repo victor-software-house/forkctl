@@ -1,3 +1,4 @@
+//! The command-line surface: arguments, output formats, and typed errors.
 #![expect(
     clippy::unwrap_used,
     reason = "test setup helpers fail the test on the first unexpected error"

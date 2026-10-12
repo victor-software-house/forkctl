@@ -1,3 +1,4 @@
+//! Real `git` and `stg` lifecycles in private sandboxes.
 #![expect(
     clippy::unwrap_used,
     reason = "test setup helpers fail the test on the first unexpected error"
@@ -2833,8 +2834,9 @@ fn bootstrap_and_rebase_accept_an_off_branch_release_tag() {
         "{refused}"
     );
     assert!(!fixture.repo.join("patches/fork.yaml").exists());
-    assert!(
-        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]).is_empty()
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        ""
     );
 
     args.extend(["--allow-base", "VERSION"]);
@@ -2970,8 +2972,9 @@ fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
         "operator notes\n"
     );
     assert!(!fixture.repo.join("patches/fork.yaml").exists());
-    assert!(
-        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]).is_empty()
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        ""
     );
     fs::remove_file(fixture.repo.join("notes.txt")).unwrap();
     fs::remove_file(fixture.repo.join("PATCHES.md")).unwrap();
@@ -2984,8 +2987,9 @@ fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
         serde_json::json!([format!("{base} -> origin refs/heads/main (create)")]),
         "{plan}"
     );
-    assert!(
-        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]).is_empty()
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["ls-remote", "origin", "refs/heads/main"]),
+        ""
     );
 
     fixture.forkctl_ok(&args);
@@ -3008,7 +3012,10 @@ fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
         "origin/main"
     );
     git_ok_dynamic(&fixture.repo, &["ls-files", "--error-unmatch", "mise.toml"]);
-    assert!(git_capture_dynamic(&fixture.repo, &["status", "--porcelain"]).is_empty());
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["status", "--porcelain"]),
+        ""
+    );
 
     create_source_patch(&fixture, "source-change", "source.txt", "first\n");
     let published = fixture.forkctl_ok(&["--format", "json", "publish"]);

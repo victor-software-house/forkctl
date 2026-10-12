@@ -1,3 +1,5 @@
+//! Keeps the tool pins in tracked files equal to mise.toml,
+//! rust-toolchain.toml, and mise.dev.toml.
 // Production code reports failures as errors; tests may still panic.
 #![cfg_attr(
     not(test),
@@ -16,7 +18,7 @@ use std::{env, fs};
 
 const MIN_MISE_MARKER: &str = "min_version = \"";
 const RUST_TOOL_MARKER: &str = "rust = \"";
-const RUST_ENTRY_MARKER: &str = "rust = { version = \"";
+const CHANNEL_MARKER: &str = "channel = \"";
 const STGIT_TOOL_MARKER: &str = "\"cargo:stgit\" = { version = \"";
 const NEXTEST_TOOL_MARKER: &str = "\"github:nextest-rs/nextest\" = \"";
 const LEFTHOOK_TOOL_MARKER: &str = "lefthook = \"";
@@ -53,7 +55,7 @@ fn run() -> Result<(), String> {
         .parent()
         .ok_or_else(|| "xtask manifest has no parent".to_string())?
         .to_owned();
-    let tool_versions = read_tool_versions(&root.join("mise.toml"))?;
+    let tool_versions = read_tool_versions(&root)?;
 
     sync_file(&root.join("Cargo.toml"), check, |contents| {
         replace_values(contents, RUST_VERSION_MARKER, &tool_versions.rust, 1)
@@ -76,19 +78,35 @@ fn run() -> Result<(), String> {
     sync_file(&root.join("README.md"), check, |contents| {
         replace_values(contents, MIN_MISE_MARKER, &tool_versions.minimum_mise, 1)
     })?;
-    check_lock(&root.join("mise.lock"), &tool_versions)?;
+    check_lock(
+        &root.join("mise.lock"),
+        &[
+            ("ast-grep", tool_versions.ast_grep.as_str()),
+            ("github:nextest-rs/nextest", tool_versions.nextest.as_str()),
+            ("cargo:stgit", tool_versions.stgit.as_str()),
+            ("gh", tool_versions.gh.as_str()),
+            ("usage", tool_versions.usage.as_str()),
+        ],
+    )?;
+    check_lock(
+        &root.join("mise.dev.lock"),
+        &[("lefthook", tool_versions.lefthook.as_str())],
+    )?;
     Ok(())
 }
 
-fn read_tool_versions(path: &Path) -> Result<ToolVersions, String> {
-    let contents =
-        fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
+fn read_tool_versions(root: &Path) -> Result<ToolVersions, String> {
+    let contents = read(&root.join("mise.toml"))?;
+    // The stable pin; mise.toml also pins the formatting nightly, and
+    // check:toolchain keeps mise.toml and rust-toolchain.toml equal.
+    let toolchain = read(&root.join("rust-toolchain.toml"))?;
+    let dev = read(&root.join("mise.dev.toml"))?;
     Ok(ToolVersions {
         minimum_mise: read_value(&contents, MIN_MISE_MARKER)?,
-        rust: read_value(&contents, RUST_ENTRY_MARKER)?,
+        rust: read_value(&toolchain, CHANNEL_MARKER)?,
         stgit: read_value(&contents, STGIT_TOOL_MARKER)?,
         nextest: read_value(&contents, NEXTEST_TOOL_MARKER)?,
-        lefthook: read_value(&contents, LEFTHOOK_TOOL_MARKER)?,
+        lefthook: read_value(&dev, LEFTHOOK_TOOL_MARKER)?,
         usage: read_value(&contents, USAGE_TOOL_MARKER)?,
         gh: read_value(&contents, GH_TOOL_MARKER)?,
         ast_grep: read_value(&contents, AST_GREP_TOOL_MARKER)?,
@@ -113,18 +131,13 @@ fn read_value(contents: &str, marker: &str) -> Result<String, String> {
     }
 }
 
-fn check_lock(path: &Path, versions: &ToolVersions) -> Result<(), String> {
-    let contents =
-        fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
-    for (tool, expected) in [
-        ("ast-grep", versions.ast_grep.as_str()),
-        ("github:nextest-rs/nextest", versions.nextest.as_str()),
-        ("cargo:stgit", versions.stgit.as_str()),
-        ("gh", versions.gh.as_str()),
-        ("lefthook", versions.lefthook.as_str()),
-        ("usage", versions.usage.as_str()),
-        ("rust", versions.rust.as_str()),
-    ] {
+fn read(path: &Path) -> Result<String, String> {
+    fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))
+}
+
+fn check_lock(path: &Path, tools: &[(&str, &str)]) -> Result<(), String> {
+    let contents = read(path)?;
+    for &(tool, expected) in tools {
         let section = if tool.contains(':') {
             format!("[[tools.\"{tool}\"]]")
         } else {

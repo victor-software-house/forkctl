@@ -16,6 +16,8 @@ env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
+  # The CI profile; local work loads dev from .miserc.toml, which CI never does.
+  MISE_ENV: ci
 
 concurrency:
   group: release-macos-${{ github.ref }}
