@@ -12,7 +12,8 @@ It lost because ctl-core asks for one stderr line per loosened limit on every ru
 
 ### 2. A malformed file blocks the manifest, not the process
 
-A `.ctl/input.yaml` that does not parse becomes the manifest error, so commands that need the manifest fail with `manifest_invalid` naming the file.
+A `.ctl/input.yaml` that does not parse becomes the manifest error when a YAML manifest exists, so commands that need it fail with `manifest_invalid` naming the file.
+A JSON manifest is not read through the limits, and an absent manifest has nothing to block, so bootstrap `init` still runs.
 `operation status`, `continue`, and `abort` read the Git-private snapshot instead, so a broken limits file never blocks recovery, as for an unreadable manifest.
 
 Alternative considered: fail `App::discover` outright.

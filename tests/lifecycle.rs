@@ -1429,6 +1429,22 @@ fn repository_input_limits_apply_and_warn_when_loosened() {
             .contains(".ctl/input.yaml"),
         "{check}"
     );
+    // An absent manifest is not blocked, so bootstrap does not blame the limits file.
+    let init = fixture.forkctl(&[
+        "--format",
+        "json",
+        "--manifest",
+        "patches/absent.yaml",
+        "init",
+    ]);
+    let init: serde_json::Value = serde_json::from_slice(&init.stdout).unwrap();
+    assert!(
+        !init["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(".ctl/input.yaml"),
+        "{init}"
+    );
 }
 
 #[test]
