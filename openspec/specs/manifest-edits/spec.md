@@ -11,7 +11,7 @@ operation's snapshotted text.
 ### Requirement: A YAML manifest is read through ctl-core
 
 forkctl SHALL parse a YAML manifest through ctl-core's input reader and SHALL report its problems as `manifest_invalid` with the line and column ctl-core gives.
-forkctl SHALL accept anchors, aliases, and any consistent indentation, and SHALL refuse duplicate keys and merge keys. forkctl SHALL set no reader limits of its own; the limits are those ctl-core applies.
+forkctl SHALL accept anchors, aliases, and any consistent indentation, and SHALL refuse duplicate keys and merge keys. forkctl SHALL set no reader limits of its own; the limits are ctl-core's defaults as overridden by the repository's `.ctl/input.yaml` (see "A repository's input limits apply, with a warning when loosened").
 
 #### Scenario: An anchored check is accepted
 
