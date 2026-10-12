@@ -56,7 +56,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 
 ## Repository setup
 
-The repository setup comes from the shared Copier template (kind `rust-crate`, layout `workspace`): `.copier-answers.yml` records its tag and answers. Take a new tag with `copier update --defaults` and check `git diff --check` before committing; the CI job `Template` fails when a newer tag exists. A rule forkctl needs goes into an answer; the one local edit to a rendered file is the `qctl-close` pre-push command in `lefthook.yml`.
+The repository setup comes from the shared Copier template (kind `rust-crate`, layout `workspace`): `.copier-answers.yml` records its tag and answers. Take a new tag with `copier update --defaults` and check `git diff --check` before committing; the CI job `Template` fails when the newest tag would change a file. A rule forkctl needs goes into an answer; the one local edit to a rendered file is the `qctl-close` pre-push command in `lefthook.yml`.
 
 `mise.toml` pins stable 1.99.0 for build, lint, and test, and a dated nightly only for `rustfmt.toml`'s unstable options. The standard tasks come from ctl-core's `tasks/rust.toml`, included by `git::` URL after qctl's. forkctl's own tasks live in `mise-tasks/forkctl.toml` (`check:features`, `check:repo`, `test:isolated`, `format:fix`, `lint:fix`, `version:sync`, `version:check`, `build`). `test` is the one task in `mise.toml`: it runs on nextest, and only an inline task replaces an included one. Local work loads the `dev` profile, whose `mise install` arms the git hooks; CI sets `MISE_ENV=ci`.
 
