@@ -1,16 +1,17 @@
 # manifest-edits Specification
 
 ## Purpose
-Defines how forkctl reads a YAML manifest through ctl-core, and how a command
-that changes the manifest rewrites only the nodes it changes, refuses an edit
-through an alias, and edits an operation's snapshotted text.
+Defines how forkctl reads a YAML manifest through ctl-core under the
+repository's input limits, and how a command that changes the manifest rewrites
+only the nodes it changes, refuses an edit through an alias, and edits an
+operation's snapshotted text.
 
 ## Requirements
 
 ### Requirement: A YAML manifest is read through ctl-core
 
 forkctl SHALL parse a YAML manifest through ctl-core's input reader and SHALL report its problems as `manifest_invalid` with the line and column ctl-core gives.
-forkctl SHALL accept anchors, aliases, and any consistent indentation, and SHALL refuse duplicate keys and merge keys. forkctl SHALL set no reader limits of its own; the limits are those ctl-core applies.
+forkctl SHALL accept anchors, aliases, and any consistent indentation, and SHALL refuse duplicate keys and merge keys. forkctl SHALL set no reader limits of its own; the limits are ctl-core's defaults as overridden by the repository's `.ctl/input.yaml` (see "A repository's input limits apply, with a warning when loosened").
 
 #### Scenario: An anchored check is accepted
 
@@ -75,3 +76,28 @@ forkctl SHALL fail with `manifest_invalid`, and SHALL NOT write the manifest, wh
 
 - **WHEN** the operator runs `forkctl init --bootstrap` on a repository with no manifest
 - **THEN** `patches/fork.yaml` exists and `forkctl check` reads it without `manifest_invalid`
+
+### Requirement: A repository's input limits apply, with a warning when loosened
+
+forkctl SHALL apply the limits a repository sets under `limits:` in `.ctl/input.yaml` to every manifest parse, and SHALL print one `forkctl: warning:` line to stderr on every run for each limit set above serde-saphyr's default.
+A `.ctl/input.yaml` that cannot be read SHALL make commands that need an existing YAML manifest fail with `manifest_invalid`, naming the file, and SHALL NOT block a JSON manifest or bootstrap with an absent manifest.
+
+#### Scenario: A loosened limit warns on every run
+
+- **WHEN** `.ctl/input.yaml` holds `limits: { max_depth: 128 }` and the operator runs `forkctl --format json status` twice
+- **THEN** each run succeeds and writes `forkctl: warning: .ctl/input.yaml raises max_depth to 128, above the default 64` to stderr
+
+#### Scenario: A tightened limit applies to the manifest
+
+- **WHEN** `.ctl/input.yaml` holds `limits: { max_depth: 2 }` and the operator runs `forkctl --format json check`
+- **THEN** it fails with `error.code` equal to `manifest_invalid`, naming `max_depth`, and writes nothing to stderr
+
+#### Scenario: An unknown limit is refused
+
+- **WHEN** `.ctl/input.yaml` holds `limits: { max_widgets: 1 }` and the operator runs `forkctl --format json check`
+- **THEN** it fails with `error.code` equal to `manifest_invalid`, naming `.ctl/input.yaml`
+
+#### Scenario: An absent manifest is not blocked
+
+- **WHEN** `.ctl/input.yaml` holds `limits: { max_widgets: 1 }` and the operator runs `forkctl --format json --manifest patches/absent.yaml init`
+- **THEN** no error it reports names `.ctl/input.yaml`

@@ -33,6 +33,6 @@ None.
 - [`README.md`][readme], `AGENTS.md`, and the operator instructions template.
 
 [ctl-core]: https://github.com/victor-software-house/ctl-core
-[mod]: ../../../src/app/mod.rs
-[main]: ../../../src/main.rs
-[readme]: ../../../README.md
+[mod]: ../../../../src/app/mod.rs
+[main]: ../../../../src/main.rs
+[readme]: ../../../../README.md
