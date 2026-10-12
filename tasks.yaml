@@ -6,17 +6,7 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue:
-  - id: FRK-019
-    title: Honor repository input limits
-    scope: manifest
-    outcome: forkctl applies the limits in .ctl/input.yaml to every manifest parse and warns on stderr, on every run, for each limit raised above the default.
-    blocked_by: []
-    acceptance:
-      - A loosened limit prints its warning on every run.
-      - A tightened limit refuses a manifest that exceeds it.
-      - A malformed .ctl/input.yaml fails manifest commands with manifest_invalid.
-    plan: openspec/changes/honor-repo-input-limits/proposal.md
+queue: []
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -47,6 +37,16 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-019
+    title: Honor repository input limits
+    scope: manifest
+    outcome: forkctl applies the limits in .ctl/input.yaml to every manifest parse and warns on stderr, on every run, for each limit raised above the default.
+    plan: openspec/changes/honor-repo-input-limits/proposal.md
+    completed: 2026-10-11T21:23:50
+    evidence:
+      - f12786ff2b49f5122ba52575814e3366df0ec964
+    disposition: completed
+
   - id: FRK-018
     title: Edit the manifest in place through yamled
     scope: manifest
