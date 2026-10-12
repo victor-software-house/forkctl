@@ -36,6 +36,8 @@ pub(crate) struct App {
     pub(super) manifest_text: Option<String>,
     /// Changes applied to `manifest` and not yet written.
     pub(super) manifest_edits: Vec<ManifestEdit>,
+    /// Each input limit the repository raises above the library default.
+    pub(crate) input_warnings: Vec<String>,
 }
 
 impl App {
@@ -48,6 +50,12 @@ impl App {
         // refresh pops them. Restore the last snapshot so `mise run fork`
         // and operation continue/abort stay usable.
         restore_workspace_bootstrap(&repo);
+        // A malformed .ctl/input.yaml blocks a YAML manifest like an unreadable one, so
+        // operation status, continue, and abort still run from the snapshot.
+        let (input_warnings, input_error) = match ctl_core::input::use_repo_limits(&repo) {
+            Ok(loosened) => (loosened.iter().map(ToString::to_string).collect(), None),
+            Err(error) => (Vec::new(), Some(error.to_string())),
+        };
         let manifest_path = if manifest_arg.is_absolute() {
             manifest_arg.to_owned()
         } else {
@@ -55,6 +63,10 @@ impl App {
         };
         let manifest_format = ManifestFormat::from_path(&manifest_path)?;
         let (manifest, manifest_error, manifest_text) = match fs::read(&manifest_path) {
+            // The limits govern only YAML parsing, and an absent manifest is not blocked.
+            Ok(_) if manifest_format == ManifestFormat::Yaml && input_error.is_some() => {
+                (None, input_error, None)
+            }
             Ok(bytes) => {
                 let parsed = manifest_format.parse(&bytes, &manifest_path);
                 let text = String::from_utf8(bytes).ok();
@@ -82,6 +94,7 @@ impl App {
             manifest_error,
             manifest_text,
             manifest_edits: Vec::new(),
+            input_warnings,
         })
     }
 

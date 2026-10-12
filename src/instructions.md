@@ -58,6 +58,7 @@ edit path.
 
 - Git commits and refs are canonical repository history.
 - The manifest selected by `FORK_MANIFEST` or `--manifest` is canonical policy, target provenance, patch metadata, and recovery-bound history.
+- `.ctl/input.yaml` may set `limits:` to change the YAML reader's size and nesting limits for this repository. Each limit it raises above the default prints `forkctl: warning: …` to stderr on every run; a malformed file blocks the manifest with `manifest_invalid` until fixed.
 - `PATCHES.md` and source exports are generated evidence; edit metadata with forkctl, not generated files.
 - Active patch and current operation are typed Git-private clone state.
 
