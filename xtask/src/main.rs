@@ -19,6 +19,7 @@ use std::{env, fs};
 const MIN_MISE_MARKER: &str = "min_version = \"";
 const RUST_TOOL_MARKER: &str = "rust = \"";
 const CHANNEL_MARKER: &str = "channel = \"";
+const NIGHTLY_ENTRY_MARKER: &str = "{ version = \"nightly-";
 const STGIT_TOOL_MARKER: &str = "\"cargo:stgit\" = { version = \"";
 const NEXTEST_TOOL_MARKER: &str = "\"github:nextest-rs/nextest\" = \"";
 const LEFTHOOK_TOOL_MARKER: &str = "lefthook = \"";
@@ -30,6 +31,7 @@ const RUST_VERSION_MARKER: &str = "rust-version = \"";
 struct ToolVersions {
     minimum_mise: String,
     rust: String,
+    nightly: String,
     stgit: String,
     nextest: String,
     lefthook: String,
@@ -71,6 +73,14 @@ fn run() -> Result<(), String> {
         sync_file(&path, check, |contents| {
             replace_values(contents, LEFTHOOK_TOOL_MARKER, &tool_versions.lefthook, 1)
         })?;
+    }
+    // format:fix must format on the same nightly as the catalog's format check.
+    let tasks = read(&root.join("mise-tasks/forkctl.toml"))?;
+    if !tasks.contains(&format!("cargo +nightly-{} fmt", tool_versions.nightly)) {
+        return Err(format!(
+            "mise-tasks/forkctl.toml format:fix does not use mise.toml's nightly-{}",
+            tool_versions.nightly
+        ));
     }
     sync_file(&root.join("examples/mise.toml"), check, |contents| {
         replace_values(contents, MIN_MISE_MARKER, &tool_versions.minimum_mise, 1)
@@ -114,6 +124,7 @@ fn read_tool_versions(root: &Path) -> Result<ToolVersions, String> {
     Ok(ToolVersions {
         minimum_mise: read_value(&contents, MIN_MISE_MARKER)?,
         rust: read_value(&toolchain, CHANNEL_MARKER)?,
+        nightly: read_value(&contents, NIGHTLY_ENTRY_MARKER)?,
         stgit: read_value(&contents, STGIT_TOOL_MARKER)?,
         nextest: read_value(&contents, NEXTEST_TOOL_MARKER)?,
         lefthook,
