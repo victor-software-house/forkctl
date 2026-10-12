@@ -6,7 +6,17 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-019
+    title: Honor repository input limits
+    scope: manifest
+    outcome: forkctl applies the limits in .ctl/input.yaml to every manifest parse and warns on stderr, on every run, for each limit raised above the default.
+    blocked_by: []
+    acceptance:
+      - A loosened limit prints its warning on every run.
+      - A tightened limit refuses a manifest that exceeds it.
+      - A malformed .ctl/input.yaml fails manifest commands with manifest_invalid.
+    plan: openspec/changes/honor-repo-input-limits/proposal.md
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

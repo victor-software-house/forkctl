@@ -1381,6 +1381,57 @@ fn recovery_commands_survive_an_unreadable_tracked_manifest() {
 }
 
 #[test]
+fn repository_input_limits_apply_and_warn_when_loosened() {
+    let fixture = Fixture::new();
+    fs::create_dir_all(fixture.repo.join(".ctl")).unwrap();
+    let limits = fixture.repo.join(".ctl/input.yaml");
+    // Keep the file out of the worktree check, which runs before the manifest is read.
+    let exclude = git_capture_dynamic(&fixture.repo, &["rev-parse", "--git-path", "info/exclude"]);
+    let exclude = fixture.repo.join(exclude);
+    fs::create_dir_all(exclude.parent().unwrap()).unwrap();
+    let mut excluded = fs::read_to_string(&exclude).unwrap_or_default();
+    excluded.push_str(".ctl/input.yaml\n");
+    fs::write(&exclude, excluded).unwrap();
+
+    fs::write(&limits, "limits:\n  max_depth: 128\n").unwrap();
+    for _ in 0..2 {
+        let output = fixture.forkctl(&["--format", "json", "status"]);
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "forkctl: warning: .ctl/input.yaml raises max_depth to 128, above the default 64\n"
+        );
+    }
+
+    fs::write(&limits, "limits:\n  max_depth: 2\n").unwrap();
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    assert_eq!(check.stderr, &[] as &[u8]);
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check["error"]["code"], "manifest_invalid");
+    assert!(
+        check["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("max_depth"),
+        "{check}"
+    );
+
+    fs::write(&limits, "limits:\n  max_widgets: 1\n").unwrap();
+    let check = fixture.forkctl(&["--format", "json", "check"]);
+    assert!(!check.status.success());
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check["error"]["code"], "manifest_invalid");
+    assert!(
+        check["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(".ctl/input.yaml"),
+        "{check}"
+    );
+}
+
+#[test]
 fn invalid_tracked_manifest_never_bootstraps_a_replacement() {
     let fixture = Fixture::new();
     fs::write(fixture.repo.join("patches/fork.yaml"), "not: [valid\n").unwrap();

@@ -36,6 +36,8 @@ pub(crate) struct App {
     pub(super) manifest_text: Option<String>,
     /// Changes applied to `manifest` and not yet written.
     pub(super) manifest_edits: Vec<ManifestEdit>,
+    /// Each input limit the repository raises above the library default.
+    pub(crate) input_warnings: Vec<String>,
 }
 
 impl App {
@@ -48,30 +50,40 @@ impl App {
         // refresh pops them. Restore the last snapshot so `mise run fork`
         // and operation continue/abort stay usable.
         restore_workspace_bootstrap(&repo);
+        // A malformed .ctl/input.yaml blocks the manifest like an unreadable one, so
+        // operation status, continue, and abort still run from the snapshot.
+        let (input_warnings, input_error) = match ctl_core::input::use_repo_limits(&repo) {
+            Ok(loosened) => (loosened.iter().map(ToString::to_string).collect(), None),
+            Err(error) => (Vec::new(), Some(error.to_string())),
+        };
         let manifest_path = if manifest_arg.is_absolute() {
             manifest_arg.to_owned()
         } else {
             repo.join(manifest_arg)
         };
         let manifest_format = ManifestFormat::from_path(&manifest_path)?;
-        let (manifest, manifest_error, manifest_text) = match fs::read(&manifest_path) {
-            Ok(bytes) => {
-                let parsed = manifest_format.parse(&bytes, &manifest_path);
-                let text = String::from_utf8(bytes).ok();
-                match parsed {
-                    Ok(manifest) => match manifest.validate(&repo, &manifest_path) {
-                        Ok(()) => (Some(manifest), None, text),
+        let (manifest, manifest_error, manifest_text) = if let Some(error) = input_error {
+            (None, Some(error), None)
+        } else {
+            match fs::read(&manifest_path) {
+                Ok(bytes) => {
+                    let parsed = manifest_format.parse(&bytes, &manifest_path);
+                    let text = String::from_utf8(bytes).ok();
+                    match parsed {
+                        Ok(manifest) => match manifest.validate(&repo, &manifest_path) {
+                            Ok(()) => (Some(manifest), None, text),
+                            Err(error) => (None, Some(error.to_string()), None),
+                        },
                         Err(error) => (None, Some(error.to_string()), None),
-                    },
-                    Err(error) => (None, Some(error.to_string()), None),
+                    }
                 }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None, None),
-            Err(error) => {
-                return Err(AppError::internal(
-                    error,
-                    format!("read {}", manifest_path.display()),
-                ));
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None, None),
+                Err(error) => {
+                    return Err(AppError::internal(
+                        error,
+                        format!("read {}", manifest_path.display()),
+                    ));
+                }
             }
         };
         Ok(Self {
@@ -82,6 +94,7 @@ impl App {
             manifest_error,
             manifest_text,
             manifest_edits: Vec::new(),
+            input_warnings,
         })
     }
 
