@@ -36,6 +36,9 @@ gh = "2.95.0"
 # Test-only: the declared-check lifecycle test exercises a real ast-grep command. Consumers
 # name their own tools in their own mise.toml; forkctl ships no check tooling.
 ast-grep = "0.45.0"
+# Test-only: the hook-composition test runs a real lefthook, and CI loads no dev profile.
+# version:check keeps it equal to mise.dev.toml's, which arms the hooks.
+lefthook = "2.2.1"
 
 # mise-tasks/ holds this repository's task fragments and file tasks. An
 # includes list replaces the default task dirs, so mise-tasks comes first; add

@@ -86,6 +86,7 @@ fn run() -> Result<(), String> {
             ("cargo:stgit", tool_versions.stgit.as_str()),
             ("gh", tool_versions.gh.as_str()),
             ("usage", tool_versions.usage.as_str()),
+            ("lefthook", tool_versions.lefthook.as_str()),
         ],
     )?;
     check_lock(
@@ -101,12 +102,21 @@ fn read_tool_versions(root: &Path) -> Result<ToolVersions, String> {
     // check:toolchain keeps mise.toml and rust-toolchain.toml equal.
     let toolchain = read(&root.join("rust-toolchain.toml"))?;
     let dev = read(&root.join("mise.dev.toml"))?;
+    // mise.toml pins lefthook for the hook test and mise.dev.toml for the
+    // hooks; they must agree.
+    let dev_lefthook = read_value(&dev, LEFTHOOK_TOOL_MARKER)?;
+    let lefthook = read_value(&contents, LEFTHOOK_TOOL_MARKER)?;
+    if dev_lefthook != lefthook {
+        return Err(format!(
+            "mise.toml pins lefthook {lefthook} but mise.dev.toml pins {dev_lefthook}"
+        ));
+    }
     Ok(ToolVersions {
         minimum_mise: read_value(&contents, MIN_MISE_MARKER)?,
         rust: read_value(&toolchain, CHANNEL_MARKER)?,
         stgit: read_value(&contents, STGIT_TOOL_MARKER)?,
         nextest: read_value(&contents, NEXTEST_TOOL_MARKER)?,
-        lefthook: read_value(&dev, LEFTHOOK_TOOL_MARKER)?,
+        lefthook,
         usage: read_value(&contents, USAGE_TOOL_MARKER)?,
         gh: read_value(&contents, GH_TOOL_MARKER)?,
         ast_grep: read_value(&contents, AST_GREP_TOOL_MARKER)?,
