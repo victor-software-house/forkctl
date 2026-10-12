@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.34
+
+- Raise `rust-version` to 1.99.0. forkctl now builds, lints, and tests on the pinned stable 1.99.0, and the mounted `fork` task builds StGit with it. Installing forkctl from source needs Rust 1.99.0 or later.
+
 ## forkctl 0.0.33
 
 - forkctl now applies a repository's YAML reader limits from `limits:` in `.ctl/input.yaml`, and prints `forkctl: warning: .ctl/input.yaml raises … above the default …` to stderr on every run for each limit raised above serde-saphyr's default. A malformed `.ctl/input.yaml` fails commands that need a YAML manifest with `manifest_invalid`; `operation status`, `continue`, and `abort` still work.
