@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.33
+
+- forkctl now applies a repository's YAML reader limits from `limits:` in `.ctl/input.yaml`, and prints `forkctl: warning: .ctl/input.yaml raises … above the default …` to stderr on every run for each limit raised above serde-saphyr's default. A malformed `.ctl/input.yaml` fails commands that need a YAML manifest with `manifest_invalid`; `operation status`, `continue`, and `abort` still work.
+
 ## forkctl 0.0.32
 
 - Commands that change a YAML manifest now edit only the nodes they change, so comments, key order, and formatting elsewhere in `patches/fork.yaml` survive `patch refresh`, `patch edit`, `patch disable`, `patch enable`, `patch remove`, `contract edit`, `publish --set-default`, and `rebase`.
