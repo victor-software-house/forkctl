@@ -34,3 +34,10 @@ assets:
   darwin-arm64: {}
   linux-x64:
     triple: x86_64-unknown-linux-musl
+
+# Maintainers and Apps a changelog never credits (verctl 0.4.0).
+changelog:
+  internal_authors:
+    - any-victor
+    - "github-actions[bot]"
+    - "vsh-changeset-version[bot]"
