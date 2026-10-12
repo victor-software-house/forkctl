@@ -41,7 +41,7 @@ archive:
     title: Honor repository input limits
     scope: manifest
     outcome: forkctl applies the limits in .ctl/input.yaml to every manifest parse and warns on stderr, on every run, for each limit raised above the default.
-    plan: openspec/changes/honor-repo-input-limits/proposal.md
+    plan: openspec/changes/archive/2026-10-11-honor-repo-input-limits/proposal.md
     completed: 2026-10-11T21:23:50
     evidence:
       - f12786ff2b49f5122ba52575814e3366df0ec964
