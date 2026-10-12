@@ -6,6 +6,7 @@
 mod support;
 
 use std::fs;
+
 use support::{Fixture, git_ok, isolated_command};
 
 #[test]
@@ -462,7 +463,8 @@ fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
     assert!(!first_continue.status.success());
     fs::write(fixture.repo.join("shared.txt"), "lower updated\nupper\n").unwrap();
     git_ok(&fixture.repo, ["add", "shared.txt"]);
-    // The bookkeeping patch is popped, so continue edits the snapshotted manifest text.
+    // The bookkeeping patch is popped, so continue edits the snapshotted
+    // manifest text.
     assert!(!fixture.repo.join("patches/fork.yaml").exists());
     fixture.forkctl_ok(&["operation", "continue"]);
     fixture.forkctl_ok(&["patch", "finish"]);
@@ -484,7 +486,8 @@ fn continue_without_a_manifest_source_snapshot_names_its_recovery() {
             .status
             .success()
     );
-    // An operation that an earlier forkctl started has no manifest.source snapshot.
+    // An operation that an earlier forkctl started has no manifest.source
+    // snapshot.
     let source = git_capture_dynamic(
         &fixture.repo,
         &["rev-parse", "--git-path", "forkctl/manifest.source"],
@@ -1385,7 +1388,8 @@ fn repository_input_limits_apply_and_warn_when_loosened() {
     let fixture = Fixture::new();
     fs::create_dir_all(fixture.repo.join(".ctl")).unwrap();
     let limits = fixture.repo.join(".ctl/input.yaml");
-    // Keep the file out of the worktree check, which runs before the manifest is read.
+    // Keep the file out of the worktree check, which runs before the manifest
+    // is read.
     let exclude = git_capture_dynamic(&fixture.repo, &["rev-parse", "--git-path", "info/exclude"]);
     let exclude = fixture.repo.join(exclude);
     fs::create_dir_all(exclude.parent().unwrap()).unwrap();
@@ -1429,7 +1433,8 @@ fn repository_input_limits_apply_and_warn_when_loosened() {
             .contains(".ctl/input.yaml"),
         "{check}"
     );
-    // An absent manifest is not blocked, so bootstrap does not blame the limits file.
+    // An absent manifest is not blocked, so bootstrap does not blame the limits
+    // file.
     let init = fixture.forkctl(&[
         "--format",
         "json",
@@ -1762,8 +1767,9 @@ rule:
     let check: serde_json::Value = serde_json::from_str(&check).unwrap();
     assert_eq!(check["result"]["declared_checks"], 1);
 
-    // Upstream later adds a caller in a crate the patch does not own and that did not exist
-    // when the patch was written. The declared check must still notice.
+    // Upstream later adds a caller in a crate the patch does not own and that
+    // did not exist when the patch was written. The declared check must
+    // still notice.
     let upstream = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "upstream"]);
     let work = fixture.repo.parent().unwrap().join("upstream-new-case");
     git_ok(
@@ -1880,8 +1886,9 @@ fn declared_checks_never_run_in_the_operator_worktree() {
 #[test]
 fn layer_check_observes_only_its_own_patch_commit() {
     let fixture = Fixture::new();
-    // The lower patch asserts that the higher patch's file is absent, which is only true at its
-    // own layer. The same command would fail against the fully applied stack.
+    // The lower patch asserts that the higher patch's file is absent, which is
+    // only true at its own layer. The same command would fail against the
+    // fully applied stack.
     fixture.forkctl_ok(&[
         "patch",
         "create",
@@ -1908,8 +1915,9 @@ fn layer_check_observes_only_its_own_patch_commit() {
     create_source_patch(&fixture, "higher", "higher.txt", "higher\n");
     fixture.forkctl_ok(&["check"]);
 
-    // The same command evaluated against the applied stack fails, and because `patch edit`
-    // runs the full check, the invalid declaration is rejected at declaration time.
+    // The same command evaluated against the applied stack fails, and because
+    // `patch edit` runs the full check, the invalid declaration is rejected
+    // at declaration time.
     let failed = fixture.forkctl(&[
         "--format",
         "json",
@@ -2403,8 +2411,9 @@ const GITHUB_REPO: &str = "github.com/example/downstream";
 const PROPOSAL_REF: &str = "refs/heads/forkctl/proposal/main";
 const PROPOSAL_URL: &str = "https://github.com/example/downstream/pull/1";
 
-/// A recording `gh` on `PATH`. `pr list` prints the open pull request, `pr create` opens one,
-/// and a `fail-<verb>` file makes that verb exit non-zero with a GitHub-style error.
+/// A recording `gh` on `PATH`. `pr list` prints the open pull request, `pr
+/// create` opens one, and a `fail-<verb>` file makes that verb exit non-zero
+/// with a GitHub-style error.
 const GH_STUB: &str = r#"#!/bin/sh
 dir='@DIR@'
 { for arg in "$@"; do printf '%s\n' "$arg"; done; printf '%s\n' '--end--'; } >> "$dir/calls"
@@ -2515,7 +2524,8 @@ fn change_source_patch(fixture: &Fixture, contents: &str) {
     fixture.forkctl_ok(&["patch", "finish"]);
 }
 
-/// A published stack with one pending change to `source-change` and a stubbed GitHub origin.
+/// A published stack with one pending change to `source-change` and a stubbed
+/// GitHub origin.
 fn proposal_fixture() -> (Fixture, GhStub) {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "source-change", "source.txt", "first\n");
@@ -2628,7 +2638,8 @@ fn publish_propose_lease_keeps_a_concurrent_proposal_update() {
     let wrapper_dir = root.join("racing-push-bin");
     fs::create_dir_all(&wrapper_dir).unwrap();
     let wrapper = wrapper_dir.join("git");
-    // Another writer moves the proposal branch after forkctl read it and before its push.
+    // Another writer moves the proposal branch after forkctl read it and before
+    // its push.
     fs::write(
         &wrapper,
         format!(
@@ -2648,7 +2659,8 @@ fn publish_propose_lease_keeps_a_concurrent_proposal_update() {
     assert!(!raced.status.success());
     let other_writer = git_capture(&fixture.repo, ["rev-parse", "origin/main"]);
     assert_eq!(remote_proposal_tip(&fixture), Some(other_writer));
-    // The rejected proposal never reached the local proposal ref that `--promote` reads first.
+    // The rejected proposal never reached the local proposal ref that
+    // `--promote` reads first.
     assert!(
         git_capture_dynamic(&fixture.repo, &["for-each-ref", PROPOSAL_REF]).is_empty(),
         "a rejected proposal left a local proposal ref"
@@ -2807,7 +2819,8 @@ fn bootstrap_and_rebase_accept_an_off_branch_release_tag() {
     let mut args = args.iter().map(String::as_str).collect::<Vec<_>>();
     args[base] = "refs/tags/v1.0.0";
 
-    // The release commit is drift below the stack, and nothing is written until it is allowed.
+    // The release commit is drift below the stack, and nothing is written until
+    // it is allowed.
     let refused = fixture.forkctl(&[&["--format", "json"], args.as_slice()].concat());
     assert!(!refused.status.success());
     let refused = json_output(&refused);
@@ -2893,8 +2906,8 @@ fn bootstrap_refuses_a_base_without_upstream_history() {
     assert!(!fixture.repo.join("patches/fork.yaml").exists());
 }
 
-/// Commits a version bump on a detached head above upstream main and pushes only its tag,
-/// the way a release tag sits off the branch it was cut from.
+/// Commits a version bump on a detached head above upstream main and pushes
+/// only its tag, the way a release tag sits off the branch it was cut from.
 fn tag_off_branch_release(upstream_work: &std::path::Path, tag: &str) -> String {
     git_ok(upstream_work, ["checkout", "--quiet", "--detach", "main"]);
     fs::write(upstream_work.join("VERSION"), format!("{tag}\n")).unwrap();
@@ -2927,8 +2940,8 @@ fn bootstrap_from_a_fresh_upstream_clone_needs_no_manual_step() {
     )
     .unwrap();
     fs::write(fixture.repo.join("notes.txt"), "unrelated\n").unwrap();
-    // The ledger is inside the bookkeeping scope, but bootstrap writes it, so an existing
-    // untracked ledger refuses rather than being overwritten.
+    // The ledger is inside the bookkeeping scope, but bootstrap writes it, so
+    // an existing untracked ledger refuses rather than being overwritten.
     fs::write(fixture.repo.join("PATCHES.md"), "operator notes\n").unwrap();
     // A stray export from an earlier attempt is generated territory too.
     fs::create_dir_all(fixture.repo.join("patches/downstream")).unwrap();

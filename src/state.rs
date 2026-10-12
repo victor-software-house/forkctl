@@ -3,10 +3,11 @@
     reason = "schemars' JsonSchema derive expands concat!"
 )]
 
-use crate::manifest::{BaseTarget, Patch, RecoveryEvidence};
-use crate::protocol::CaptureSource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use crate::manifest::{BaseTarget, Patch, RecoveryEvidence};
+use crate::protocol::CaptureSource;
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]

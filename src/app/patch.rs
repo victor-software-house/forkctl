@@ -1,3 +1,8 @@
+use std::collections::HashSet;
+use std::ffi::OsString;
+use std::io::Write;
+use std::path::PathBuf;
+
 use super::App;
 use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
@@ -9,12 +14,7 @@ use crate::protocol::{
     PatchRefreshArgs, PatchRefreshResult, PatchSelectResult, PatchShowResult, PatchSummary,
     PatchTarget, PatchTransitionArgs, PatchTransitionResult, ScopeEdit,
 };
-
 use crate::state::{ActivePatchState, OperationIntent, OperationKind, OperationState};
-use std::collections::HashSet;
-use std::ffi::OsString;
-use std::io::Write;
-use std::path::PathBuf;
 
 impl App {
     pub(crate) fn patch_list(&self) -> Result<PatchListResult> {
@@ -269,7 +269,8 @@ impl App {
         operation: &OperationState,
         patch: Patch,
     ) -> Result<CommandResult> {
-        // The manifest still holds the pre-edit entry, so its kind is the old kind.
+        // The manifest still holds the pre-edit entry, so its kind is the old
+        // kind.
         let old_kind = self
             .manifest()?
             .patch(&patch.name)
@@ -366,8 +367,9 @@ impl App {
                     .map(|active| active.name().to_string()),
             )
         })?;
-        // Only a kind change repositions a patch; an in-place edit must not move it, or the
-        // declared order would diverge from the series StGit still holds.
+        // Only a kind change repositions a patch; an in-place edit must not
+        // move it, or the declared order would diverge from the series
+        // StGit still holds.
         let edits = if old_kind == patch.kind {
             vec![ManifestEdit::ReplacePatch(patch)]
         } else {
@@ -605,7 +607,8 @@ impl App {
         let check = match self.check_repository(true) {
             Ok(check) => check,
             Err(error) => {
-                // The commit and bookkeeping are already written, so the check failure stays resumable.
+                // The commit and bookkeeping are already written, so the check
+                // failure stays resumable.
                 let mut operation = operation.clone();
                 operation.phase = "checking".into();
                 operation.next_actions = vec![

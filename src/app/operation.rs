@@ -1,6 +1,5 @@
 use super::App;
-use crate::error::AppResult as Result;
-use crate::error::DomainError;
+use crate::error::{AppResult as Result, DomainError};
 use crate::process::{capture, run};
 use crate::protocol::{
     CommandResult, ExecutionMode, MutationPlan, OperationAbortResult, OperationContinueResult,

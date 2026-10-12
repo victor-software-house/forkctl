@@ -1,3 +1,6 @@
+use std::fs;
+use std::path::PathBuf;
+
 use super::{App, write_atomic};
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent, ReplayPathChange};
@@ -6,8 +9,6 @@ use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, RebaseResult};
 use crate::report::{self, ExportEvidence, RebaseReport};
 use crate::state::{OperationKind, OperationState, ReportEvidence};
-use std::fs;
-use std::path::PathBuf;
 
 impl App {
     pub(crate) fn rebase(&mut self, selector: &str, mode: ExecutionMode) -> Result<CommandResult> {
@@ -187,8 +188,9 @@ impl App {
 
     /// Records paths a surviving patch no longer touches after replay.
     ///
-    /// This is factual path-delta evidence only. It does not claim that upstream caused the
-    /// disappearance; conflict resolution or patch edits may produce the same result.
+    /// This is factual path-delta evidence only. It does not claim that
+    /// upstream caused the disappearance; conflict resolution or patch
+    /// edits may produce the same result.
     fn replay_path_changes(&self, operation: &OperationState) -> Result<Vec<ReplayPathChange>> {
         let manifest = self.manifest()?;
         let mut path_changes = Vec::new();

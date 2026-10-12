@@ -1,8 +1,9 @@
 //! Committed operator documents rendered from Clap and consumer-owned prose.
 
-use crate::cli::Cli;
 use std::fs;
 use std::path::Path;
+
+use crate::cli::Cli;
 
 const SKILL_TEMPLATE: &str = ".ctl/operator/SKILL.md.jinja";
 const INSTRUCTIONS_TEMPLATE: &str = ".ctl/operator/instructions.md.jinja";

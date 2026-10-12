@@ -1,12 +1,14 @@
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+
 use super::App;
 use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{Check, CheckStage, Patch, scope_matches};
 use crate::process::{capture, command, run};
 use crate::protocol::CheckFinding;
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 
-/// Longest command line forkctl will hand to the shell after expanding `{files}`.
+/// Longest command line forkctl will hand to the shell after expanding
+/// `{files}`.
 const MAX_COMMAND_BYTES: usize = 96 * 1024;
 
 const FILES_TEMPLATE: &str = "{files}";
@@ -14,9 +16,10 @@ const FILES_TEMPLATE: &str = "{files}";
 impl App {
     /// Runs every declared patch check against the tree it observes.
     ///
-    /// Stack checks run in a disposable clone with the complete series applied. Patch checks run
-    /// in a disposable clone checked out at the declaring patch's own commit, so an invariant can
-    /// be verified for that layer alone. Checks never touch the operator's worktree.
+    /// Stack checks run in a disposable clone with the complete series applied.
+    /// Patch checks run in a disposable clone checked out at the declaring
+    /// patch's own commit, so an invariant can be verified for that layer
+    /// alone. Checks never touch the operator's worktree.
     pub(super) fn run_declared_checks(&self) -> Result<Vec<CheckFinding>> {
         let manifest = self.manifest()?;
         if manifest.check_count() == 0 {

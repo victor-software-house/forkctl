@@ -1,7 +1,8 @@
-use crate::ledger::patch_kind;
-use crate::manifest::Manifest;
 use anyhow::{Context, Result};
 use askama::Template;
+
+use crate::ledger::patch_kind;
+use crate::manifest::Manifest;
 
 const SHORT_COMMIT: usize = 12;
 
@@ -65,7 +66,8 @@ pub(crate) fn render(
 /// `HOST/OWNER/REPO` for `gh --repo`, parsed from a remote URL.
 ///
 /// Accepts `https://`, `http://`, and `ssh://` URLs and scp-style `[USER@]HOST:OWNER/REPO`, each
-/// with an optional `.git` suffix. Anything else, such as a local path, names no repository.
+/// with an optional `.git` suffix. Anything else, such as a local path, names
+/// no repository.
 pub(crate) fn github_repo(url: &str) -> Option<String> {
     let (host, path) = if let Some((scheme, rest)) = url.split_once("://") {
         let (authority, path) = rest.split_once('/')?;
@@ -94,10 +96,12 @@ pub(crate) fn github_repo(url: &str) -> Option<String> {
         .then(|| format!("{host}/{owner}/{repo}"))
 }
 
-/// The URL without the user information of a `scheme://` authority, which can carry a token.
+/// The URL without the user information of a `scheme://` authority, which can
+/// carry a token.
 ///
-/// Everything up to the last `@` is dropped, because an unencoded password may itself contain
-/// `/` or `@`. An `@` later in the path over-redacts, which is safe for a message.
+/// Everything up to the last `@` is dropped, because an unencoded password may
+/// itself contain `/` or `@`. An `@` later in the path over-redacts, which is
+/// safe for a message.
 pub(crate) fn redact_userinfo(url: &str) -> String {
     let Some((scheme, rest)) = url.split_once("://") else {
         return url.to_string();

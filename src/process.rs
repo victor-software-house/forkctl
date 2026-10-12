@@ -1,4 +1,3 @@
-use crate::error::{AppError, AppResult, DomainError, InternalResultExt as _};
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -6,6 +5,8 @@ use std::process::{Command, Output, Stdio};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+
+use crate::error::{AppError, AppResult, DomainError, InternalResultExt as _};
 
 static GIT_LOCAL_ENV: OnceLock<Vec<OsString>> = OnceLock::new();
 static STREAM_OPERATOR: AtomicBool = AtomicBool::new(false);
@@ -198,9 +199,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{run, run_operator, set_stream_operator_output};
     use std::env;
     use std::sync::Mutex;
+
+    use super::{run, run_operator, set_stream_operator_output};
 
     static STREAM_LOCK: Mutex<()> = Mutex::new(());
 

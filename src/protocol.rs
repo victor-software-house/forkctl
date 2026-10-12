@@ -3,11 +3,12 @@
     reason = "schemars' JsonSchema derive expands concat!"
 )]
 
-use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchKind, RequiredText};
-use crate::state::{ActivePatchState, OperationState};
 use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchKind, RequiredText};
+use crate::state::{ActivePatchState, OperationState};
 
 pub(crate) const PROTOCOL_VERSION: u32 = 1;
 
@@ -280,7 +281,8 @@ pub(crate) struct PatchRefreshArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
     pub capture: CaptureSource,
-    /// Unapply patches above this one. Default is false: create a new top patch instead.
+    /// Unapply patches above this one. Default is false: create a new top patch
+    /// instead.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub rewrite_below: bool,
 }

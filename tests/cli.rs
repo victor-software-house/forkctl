@@ -7,6 +7,7 @@ mod support;
 
 use std::io::Write;
 use std::process::{Command, Stdio};
+
 use support::Fixture;
 
 fn forkctl() -> Command {

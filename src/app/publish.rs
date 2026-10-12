@@ -219,7 +219,8 @@ impl App {
         }
         let remote = self.manifest()?.downstream.remote.clone();
         let branch = self.manifest()?.downstream.branch.clone();
-        // Every pull-request failure that needs no push is caught here, before the push.
+        // Every pull-request failure that needs no push is caught here, before
+        // the push.
         let github_repo = self.downstream_github_repo(&remote)?;
         let open_pull_request = self.open_proposal_pr(&github_repo, &proposal_branch, &branch)?;
         let tree = capture(&self.repo, "git", ["rev-parse", "HEAD^{tree}"])?;
@@ -236,8 +237,9 @@ impl App {
             ],
         )?;
         let local_ref = format!("refs/heads/{proposal_branch}");
-        // Each proposal is a new commit on the downstream tip, so an update replaces the
-        // previous proposal. The lease names the tip read here; an empty lease requires absence.
+        // Each proposal is a new commit on the downstream tip, so an update
+        // replaces the previous proposal. The lease names the tip read
+        // here; an empty lease requires absence.
         let proposal_tip = self.remote_ref_sha_if_present(&remote, &local_ref)?;
         let pushed_ref = format!("{review}:{local_ref}");
         run_operator(
@@ -254,9 +256,10 @@ impl App {
                 &pushed_ref,
             ],
         )?;
-        // The local proposal ref moves only after the remote accepted the proposal, so a
-        // rejected push never leaves an unreviewed commit where `--promote` looks first.
-        // Every step after the accepted push reports that the branch was pushed.
+        // The local proposal ref moves only after the remote accepted the
+        // proposal, so a rejected push never leaves an unreviewed
+        // commit where `--promote` looks first. Every step after the
+        // accepted push reports that the branch was pushed.
         let after_push = || -> Result<String> {
             run(&self.repo, "git", ["update-ref", &local_ref, &review])?;
             let text =

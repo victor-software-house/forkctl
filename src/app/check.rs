@@ -1,3 +1,5 @@
+use std::fs;
+
 use super::App;
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::ledger;
@@ -5,7 +7,6 @@ use crate::manifest::{HistoryEvent, Patch};
 use crate::process::{capture, run};
 use crate::protocol::{CheckArgs, CheckResult, CheckScope};
 use crate::state::ActivePatchState;
-use std::fs;
 
 macro_rules! ensure_check {
     ($condition:expr, $($message:tt)*) => {
@@ -26,7 +27,8 @@ impl App {
             }
             CheckScope::Staged => self.check_staged(args.patch.as_deref()),
         };
-        // A check that cannot read what it inspects is a failed check, not an internal crash.
+        // A check that cannot read what it inspects is a failed check, not an
+        // internal crash.
         result.map_err(|error| match error {
             AppError::Domain { .. } => error,
             AppError::Internal(internal) => DomainError::check_failed(internal.to_string()).into(),

@@ -2,14 +2,16 @@
 //! to the typed [`Manifest`] and once to the YAML text, so the file keeps
 //! every byte the command did not change.
 
+use std::path::Path;
+
+use serde::Serialize;
+use yamled::{Document, Path as YamlPath, Position};
+
 use crate::error::{AppError, AppResult as Result, DomainError};
 use crate::manifest::{
     BaseTarget, Contracts, DisabledPatch, HistoryEvent, Manifest, Patch, PublishMode,
 };
 use crate::manifest_codec::ManifestFormat;
-use serde::Serialize;
-use std::path::Path;
-use yamled::{Document, Path as YamlPath, Position};
 
 #[derive(Debug, Clone)]
 pub(crate) enum ManifestEdit {

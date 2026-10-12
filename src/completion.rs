@@ -1,8 +1,11 @@
-use crate::process::{capture, command};
-use clap::ValueEnum;
-use clap_complete::{CompletionCandidate, engine::ArgValueCompleter};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+
+use clap::ValueEnum;
+use clap_complete::CompletionCandidate;
+use clap_complete::engine::ArgValueCompleter;
+
+use crate::process::{capture, command};
 
 pub(crate) fn patch_completer() -> ArgValueCompleter {
     ArgValueCompleter::new(patch_candidates)
