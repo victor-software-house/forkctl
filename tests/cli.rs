@@ -319,13 +319,16 @@ fn direct_completion_includes_local_refs_and_remotes() {
 #[test]
 fn json_output_holds_no_escape_byte_under_forced_colour() {
     let fixture = Fixture::new();
-    let cases: [&[&str]; 4] = [
-        &["status", "--format", "json"],
-        &["patch", "select", "missing-patch", "--format", "json"],
-        &["status", "--bogus", "--format", "json"],
-        &["--format=json", "nosuchverb"],
+    let cases: [(&[&str], bool); 4] = [
+        (&["status", "--format", "json"], true),
+        (
+            &["patch", "select", "missing-patch", "--format", "json"],
+            false,
+        ),
+        (&["status", "--bogus", "--format", "json"], false),
+        (&["--format=json", "nosuchverb"], false),
     ];
-    for args in cases {
+    for (args, succeeds) in cases {
         let output = support::forkctl_command(&fixture.repo)
             .args(args)
             .env("CLICOLOR_FORCE", "1")
@@ -340,8 +343,10 @@ fn json_output_holds_no_escape_byte_under_forced_colour() {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
             .unwrap_or_else(|error| panic!("{args:?}: stdout is not JSON: {error}"));
+        assert_eq!(output.status.success(), succeeds, "{args:?}: {value}");
+        assert_eq!(value["error"].is_object(), !succeeds, "{args:?}: {value}");
     }
 }
 
