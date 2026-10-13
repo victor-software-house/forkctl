@@ -201,7 +201,7 @@ printf '%s' '{"protocol_version":1,"mode":"execute","request":{"command":"check"
   | mise run fork api call
 ```
 
-Keep stdout as exactly one JSON document and treat schema-derived command names, arguments, results, notices, error codes, and details as authoritative. Do not parse pretty tables or error prose.
+JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say, and a parse error under `--format json` is a JSON error even when the bad argument comes first. Keep stdout as exactly one JSON document and treat schema-derived command names, arguments, results, notices, error codes, and details as authoritative. Do not parse pretty tables or error prose.
 
 Use API `mode: "plan"` or CLI `--dry-run` / `--preview` for mutation planning; read-only commands reject plan mode. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
 

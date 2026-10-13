@@ -6,7 +6,16 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-021
+    title: Keep JSON output plain under forced colour
+    scope: output
+    outcome: A caller that pipes forkctl JSON to jq never receives an ESC byte, whatever the colour environment says.
+    blocked_by: []
+    acceptance:
+      - With CLICOLOR_FORCE=1, FORCE_COLOR=3, and COLORTERM=truecolor, a JSON success, a JSON domain error, a parse error before --format json, and an unknown verb hold no ESC byte on stdout or stderr, and stdout is JSON.
+    notes:
+      - The parse-error case needs ctl-core 0.6.16, which reads a --format json after the bad argument.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

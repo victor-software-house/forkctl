@@ -313,6 +313,38 @@ fn direct_completion_includes_local_refs_and_remotes() {
     );
 }
 
+/// Agent shells force colour through `CLICOLOR_FORCE`, `FORCE_COLOR`, and
+/// `COLORTERM`. JSON output, a JSON error, and a parse error under
+/// `--format json` stay plain whatever they say, so `jq` never sees an ESC.
+#[test]
+fn json_output_holds_no_escape_byte_under_forced_colour() {
+    let fixture = Fixture::new();
+    let cases: [&[&str]; 4] = [
+        &["status", "--format", "json"],
+        &["patch", "select", "missing-patch", "--format", "json"],
+        &["status", "--bogus", "--format", "json"],
+        &["--format=json", "nosuchverb"],
+    ];
+    for args in cases {
+        let output = support::forkctl_command(&fixture.repo)
+            .args(args)
+            .env("CLICOLOR_FORCE", "1")
+            .env("FORCE_COLOR", "3")
+            .env("COLORTERM", "truecolor")
+            .env_remove("NO_COLOR")
+            .output()
+            .unwrap();
+        assert!(
+            !output.stdout.contains(&0x1b) && !output.stderr.contains(&0x1b),
+            "{args:?}: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice::<serde_json::Value>(&output.stdout)
+            .unwrap_or_else(|error| panic!("{args:?}: stdout is not JSON: {error}"));
+    }
+}
+
 #[test]
 fn api_domain_errors_are_typed_at_the_boundary() {
     let fixture = Fixture::new();

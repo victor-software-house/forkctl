@@ -270,7 +270,7 @@ printf '%s' '{"protocol_version":1,"manifest":"patches/fork.yaml","mode":"execut
 
 The API already accepts complete typed command arguments from JSON on stdin; `manifest` selects either a YAML or JSON manifest path. This is the generic programmatic interface — no second stdin argument grammar exists.
 
-Requests use dotted command names such as `patch.refresh` and `operation.abort`, command-specific typed arguments, and `mode: execute|plan`. Success, plan, notice, error, and error-detail types are schema-derived. JSON stdout is exactly one response and stderr is empty.
+Requests use dotted command names such as `patch.refresh` and `operation.abort`, command-specific typed arguments, and `mode: execute|plan`. Success, plan, notice, error, and error-detail types are schema-derived. JSON stdout is exactly one response and stderr is empty. JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say, and a parse error under `--format json` is a JSON error even when the bad argument comes first.
 
 Schema kinds: `bundle`, `manifest`, `invocation`, `response`, `active-state`, `operation`.
 
