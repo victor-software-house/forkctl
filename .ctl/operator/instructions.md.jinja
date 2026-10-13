@@ -100,7 +100,7 @@ Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit h
 - `api schema -k bundle|manifest|invocation|response|active-state|operation` emits JSON Schema 2020-12.
 - `--usage-spec=fork` emits the mounted mise grammar from the Clap tree.
 - `completion SHELL` supports bash, elvish, fish, Nushell, PowerShell, and zsh.
-- JSON stdout never contains subprocess or human output.
+- JSON stdout never contains subprocess or human output, and JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say. A parse error under `--format json` is a JSON error even when the bad argument comes first.
 
 ## Safety
 
