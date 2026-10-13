@@ -6,16 +6,7 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue:
-  - id: FRK-021
-    title: Keep JSON output plain under forced colour
-    scope: output
-    outcome: A caller that pipes forkctl JSON to jq never receives an ESC byte, whatever the colour environment says.
-    blocked_by: []
-    acceptance:
-      - With CLICOLOR_FORCE=1, FORCE_COLOR=3, and COLORTERM=truecolor, a JSON success, a JSON domain error, a parse error before --format json, and an unknown verb hold no ESC byte on stdout or stderr, and stdout is JSON.
-    notes:
-      - The parse-error case needs ctl-core 0.6.16, which reads a --format json after the bad argument.
+queue: []
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -46,6 +37,17 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-021
+    title: Keep JSON output plain under forced colour
+    scope: output
+    outcome: A caller that pipes forkctl JSON to jq never receives an ESC byte, whatever the colour environment says.
+    notes:
+      - The parse-error case needs ctl-core 0.6.16, which reads a --format json after the bad argument.
+    completed: 2026-10-13T07:19:46
+    evidence:
+      - ac07e845b9101bc813e26427594575f25e755972
+    disposition: completed
+
   - id: FRK-020
     title: Take the shared Rust setup from the Copier template
     scope: repository setup
