@@ -43,6 +43,42 @@ fn mounted_mise_proxy_preserves_help_output_exit_and_cwd() {
     assert_eq!(mounted.stderr, direct.stderr);
 }
 
+/// Without `raw`, mise relays each task output line itself in `prefix` output
+/// mode, which it uses for several tasks or when the caller sets it, and wraps
+/// the line in colour whenever its own colour is on, as `CLICOLOR_FORCE=1`
+/// turns it on even into a pipe. The raw task hands the caller exactly what
+/// forkctl wrote.
+#[test]
+fn mounted_task_pipes_json_without_an_escape_byte() {
+    let fixture = Fixture::new();
+    let catalog = MountedCatalog::new(&fixture.repo);
+    let direct = support::forkctl_command(&fixture.repo)
+        .args(["--format", "json", "status"])
+        .output()
+        .unwrap();
+    let mounted = support::isolated_command(&catalog.repo, "mise")
+        .args(["run", "fork", "--format", "json", "status"])
+        .env("MISE_TRUSTED_CONFIG_PATHS", &catalog.repo)
+        .env("MISE_TASK_OUTPUT", "prefix")
+        .env("CLICOLOR_FORCE", "1")
+        .env("FORCE_COLOR", "3")
+        .env("COLORTERM", "truecolor")
+        .env_remove("NO_COLOR")
+        .output()
+        .unwrap();
+    assert!(
+        mounted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&mounted.stderr)
+    );
+    assert!(
+        !mounted.stdout.contains(&0x1b),
+        "{}",
+        String::from_utf8_lossy(&mounted.stdout)
+    );
+    assert_eq!(mounted.stdout, direct.stdout);
+}
+
 #[test]
 fn mounted_mise_completion_covers_supported_shells_and_live_values() {
     let fixture = Fixture::new();

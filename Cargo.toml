@@ -75,7 +75,7 @@ anyhow = "=1.0.104"
 askama = { version = "=0.16.0", default-features = false, features = ["config", "derive", "std"] }
 clap = { version = "=4.6.6", features = ["derive", "env", "string"] }
 clap_complete = { version = "=4.6.8", features = ["unstable-dynamic"] }
-ctl-core = { version = "=0.6.16", default-features = false, features = ["app", "input", "usage"] }
+ctl-core = { version = "=0.6.17", default-features = false, features = ["app", "input", "usage"] }
 globset = { version = "=0.4.19", default-features = false }
 schemars = "=1.2.2"
 serde = { version = "=1.0.229", features = ["derive"] }
@@ -88,6 +88,6 @@ serde-saphyr = { version = "=1.3.0", default-features = false, features = ["seri
 yamled = "=0.0.5"
 
 [dev-dependencies]
-ctl-core = { version = "=0.6.16", default-features = false, features = ["surface"] }
+ctl-core = { version = "=0.6.17", default-features = false, features = ["surface"] }
 insta = { version = "=1.48.0", features = ["json", "filters"] }
 minijinja = { version = "=2.24.0", features = ["serde"] }
