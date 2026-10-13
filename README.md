@@ -39,7 +39,7 @@ mise run fork check
 mise run fork patch refresh
 ```
 
-The task uses `dir = "{{cwd}}"`, exact task-local tools, `exec forkctl "$@"`, and a Usage spec generated directly from Clap. `task_config.includes` replaces mise's default task directories, so retain `mise-tasks` only when the repository has local file tasks.
+The task uses `dir = "{{cwd}}"`, exact task-local tools, `exec forkctl "$@"`, and a Usage spec generated directly from Clap. The task is `raw`, so piped output such as `mise run fork --format json status | jq` is exactly what forkctl wrote, with no line prefix or colour that mise would otherwise add in `prefix` output mode. `task_config.includes` replaces mise's default task directories, so retain `mise-tasks` only when the repository has local file tasks.
 
 ## Patch workflow
 

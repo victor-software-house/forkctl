@@ -6,7 +6,17 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-022
+    title: Pipe the mounted fork task's output unchanged
+    scope: mise
+    outcome: mise run fork … --format json | jq receives exactly the bytes forkctl wrote, whatever the colour environment says.
+    blocked_by: []
+    acceptance:
+      - tasks/fork/fork contains ctl_core::mount_directives("fork"), which sets raw=true.
+      - With CLICOLOR_FORCE=1 and FORCE_COLOR=3, mise run fork --format json status into a pipe prints the same stdout as forkctl, with no ESC byte.
+    notes:
+      - Without raw, mise relays task output and appends ESC[0m to every line whenever its own colour is on; CLICOLOR_FORCE=1 turns that on into a pipe. Needs ctl-core 0.6.17.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

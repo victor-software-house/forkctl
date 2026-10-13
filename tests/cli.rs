@@ -200,16 +200,15 @@ fn usage_spec_bare_defaults_to_fork() {
 }
 
 #[test]
-fn task_mount_line_is_ctl_core() {
+fn task_mount_directives_are_ctl_core() {
     let task = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tasks/fork/fork"),
     )
     .unwrap();
-    let line = task
-        .lines()
-        .find(|line| line.starts_with("#USAGE mount"))
-        .unwrap_or_else(|| panic!("no #USAGE mount in task:\n{task}"));
-    assert_eq!(line, ctl_core::mount_line("fork"));
+    assert!(
+        task.contains(&ctl_core::mount_directives("fork")),
+        "task lacks ctl-core's mount directives:\n{task}"
+    );
 }
 
 #[test]
