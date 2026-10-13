@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.35
+
+- A parse error under `--format json` is now a JSON error even when the bad argument comes before the flag, as in `forkctl status --bogus --format json`. It printed as text, coloured when `CLICOLOR_FORCE` or `FORCE_COLOR` was set, to a caller that asked for JSON. JSON output stays plain whatever the colour environment says ([#96](https://github.com/victor-software-house/forkctl/pull/96)).
+
 ## forkctl 0.0.34
 
 - Raise `rust-version` to 1.99.0. forkctl now builds, lints, and tests on the pinned stable 1.99.0, and the mounted `fork` task builds StGit with it. Installing forkctl from source needs Rust 1.99.0 or later.
