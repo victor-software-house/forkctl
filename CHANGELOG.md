@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.36
+
+- The mounted `fork` task is now `raw`, so `mise run fork --format json status | jq` receives exactly what forkctl wrote. Before, in `prefix` output mode (several tasks, or `MISE_TASK_OUTPUT=prefix`), mise relayed each output line with a `[fork]` prefix and wrapped it in colour whenever its own colour was on, which `CLICOLOR_FORCE=1` turns on even into a pipe ([#99](https://github.com/victor-software-house/forkctl/pull/99)).
+
 ## forkctl 0.0.35
 
 - A parse error under `--format json` is now a JSON error even when the bad argument comes before the flag, as in `forkctl status --bogus --format json`. It printed as text, coloured when `CLICOLOR_FORCE` or `FORCE_COLOR` was set, to a caller that asked for JSON. JSON output stays plain whatever the colour environment says ([#96](https://github.com/victor-software-house/forkctl/pull/96)).
