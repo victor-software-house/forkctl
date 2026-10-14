@@ -1,6 +1,7 @@
 # presentation Specification
 
 ## Purpose
+
 How forkctl presents patch-stack reports on top of the ctl-core presentation kernel: which values take the identifier role.
 
 ## Requirements

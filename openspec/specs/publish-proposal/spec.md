@@ -1,6 +1,7 @@
 # publish-proposal Specification
 
 ## Purpose
+
 Defines how `forkctl publish --propose` pushes a reviewable proposal branch
 for the current stack and keeps that branch current across repeated proposals.
 
@@ -158,7 +159,7 @@ selector and commit, each patch with its kind and purpose, and the command
 - **WHEN** the stack has the source patch `source-change` and the operator runs
   `forkctl publish --propose` with no open pull request
 - **THEN** `gh pr create` receives `--draft`
-- **AND** the title starts with `forkctl: propose main at `
+- **AND** the title starts with `forkctl: propose main at` and a space
 - **AND** the body contains `source-change` and
   `mise run fork publish --promote`
 

@@ -1,6 +1,7 @@
 # patch-refresh Specification
 
 ## Purpose
+
 Defines how a `patch refresh` that fails after writing its commit stays
 recoverable through the operation journal, and when `patch finish` may run.
 

@@ -1,6 +1,7 @@
 # bootstrap Specification
 
 ## Purpose
+
 Defines how `forkctl init` without a manifest turns a clone at its upstream
 base into a downstream stack with a bookkeeping patch, tracking, and a
 downstream branch.
