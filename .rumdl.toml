@@ -1,0 +1,20 @@
+# Markdown lint, checked by `mise run lint:md`.
+[global]
+# A release tool writes CHANGELOG.md; nobody edits it by hand. templates/ holds
+# Askama templates and src/instructions.md is rendered from .ctl/operator/, so
+# their layout is generated output, not a document.
+exclude = ["target/**", "CHANGELOG.md", "templates/**", "src/instructions.md"]
+# Prose uses semantic line breaks, so line length is not linted.
+disable = ["MD013"]
+
+[per-file-ignores]
+# A one-line import of AGENTS.md.
+"CLAUDE.md" = ["MD041"]
+# OpenSpec delta specs start with their operation heading, not a title.
+"openspec/changes/*/specs/**/spec.md" = ["MD041"]
+# The banner is a <picture> that follows the color scheme.
+"README.md" = ["MD033"]
+# Plan steps label their Change and Proof lists in bold.
+"goals/**/plan.md" = ["MD036"]
+# An archived spec keeps the trailing space its code span records.
+"openspec/changes/archive/**" = ["MD038"]
