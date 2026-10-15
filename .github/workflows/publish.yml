@@ -17,11 +17,15 @@ env:
 
 # One group for the runs that can publish, so a manual run and a release never
 # run at the same time. Every other run gets a group of its own: a group keeps
-# one pending run, and a no-op run would replace a waiting release.
+# one pending run, and a no-op run would replace a waiting release. A newer
+# publishing run still replaces a waiting one; re-run the replaced run to
+# publish the version it carried.
 concurrency:
   group: >-
     ${{ ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-         (github.event.pull_request.merged && github.event.pull_request.head.ref == 'version-packages'))
+         (github.event.pull_request.merged &&
+          github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.head.ref == 'version-packages'))
         && 'publish' || format('publish-noop-{0}', github.run_id) }}
   cancel-in-progress: false
 
@@ -31,6 +35,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.pull_request.merged &&
+       github.event.pull_request.base.ref == 'main' &&
        github.event.pull_request.head.ref == 'version-packages')
     runs-on: ubuntu-latest
     permissions:
