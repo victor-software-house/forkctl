@@ -119,6 +119,7 @@ fn repository_and_manifest() -> Option<(PathBuf, PathBuf)> {
     let cwd = std::env::current_dir().ok()?;
     let repo = PathBuf::from(capture(&cwd, "git", ["rev-parse", "--show-toplevel"]).ok()?);
     let manifest = std::env::var_os("FORKCTL_MANIFEST")
+        .filter(|value| !value.is_empty())
         .map_or_else(|| PathBuf::from("patches/fork.yaml"), PathBuf::from);
     let manifest = if manifest.is_absolute() {
         manifest

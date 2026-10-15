@@ -8,8 +8,8 @@ Compile, format, lint, and test tasks run on the build host with `mise run verif
   - 2026-10-15 (UTC): reported on the build host.
 - [x] 1.2 Put `env_prefix = "FORKCTL"` on the root parser; proof: `variables_set_flags_under_the_command_line` passes
   - 2026-10-15 (UTC): passes on the build host, in `mise run verify`.
-- [x] 1.3 Remove the `FORK_MANIFEST` fallback and read `FORKCTL_MANIFEST` in completion; proof: `manifest_variable_selects_the_manifest` passes, and a search of the repository finds `FORK_MANIFEST` only in `CHANGELOG.md` history
-  - 2026-10-15 (UTC): the test passes on the build host; `rg FORK_MANIFEST` matches only `CHANGELOG.md`.
+- [x] 1.3 Remove the `FORK_MANIFEST` fallback and read `FORKCTL_MANIFEST` in completion; proof: `manifest_variable_selects_the_manifest` passes, and a search of the repository finds no `FORK_MANIFEST` reader or writer
+  - 2026-10-15 (UTC): the test passes on the build host; `git grep FORK_MANIFEST` matches only prose that describes the rename: the changeset, this change, and the queue row.
 - [x] 1.4 Remove every `FORKCTL_*` variable from test children; proof: `support::clear_forkctl_env` runs in `forkctl()` and `sandboxed_command`
   - 2026-10-15 (UTC): both helpers call it; the suite passes.
 - [x] 1.5 Update the help snapshot and both operator renders; proof: `cli__usage_spec_is_the_mounted_fork_grammar` and both `operator_docs` tests pass
