@@ -9,7 +9,7 @@ unknown_flags error
 arg_required_else_help #true
 args_override_self #false
 usage "Usage: fork [OPTIONS] [COMMAND]"
-flag "-m --manifest" help="Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.yaml`" global=#true help_heading=Output {
+flag "-m --manifest" help="Manifest path; defaults to `patches/fork.yaml`" global=#true help_heading=Output {
     arg <MANIFEST>
 }
 flag "-f --format" help="Output representation" global=#true help_heading=Output default=pretty {

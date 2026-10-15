@@ -37,7 +37,7 @@ edit path.
 ## Sources of truth
 
 - Git commits and refs are canonical repository history.
-- The manifest selected by `FORK_MANIFEST` or `--manifest` is canonical policy, target provenance, patch metadata, and recovery-bound history.
+- The manifest selected by `--manifest` or `FORKCTL_MANIFEST` is canonical policy, target provenance, patch metadata, and recovery-bound history.
 - `.ctl/input.yaml` may set `limits:` to change the YAML reader's size and nesting limits for this repository. Each limit it raises above the default prints `forkctl: warning: …` to stderr on every run; a malformed file blocks the manifest with `manifest_invalid` until fixed.
 - `PATCHES.md` and source exports are generated evidence; edit metadata with forkctl, not generated files.
 - Active patch and current operation are typed Git-private clone state.
@@ -96,6 +96,7 @@ Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit h
 
 - ctl-core owns help, pretty/JSON/colorless rendering, streams, terminal width, styling, and tables; the versioned forkctl response remains the one data model.
 - `--format pretty|json` selects human or complete versioned output. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
+- Every long option reads `FORKCTL_<LONG>`, such as `FORKCTL_FORMAT=json` or `FORKCTL_MANIFEST`. A flag on the command line wins over its variable, and an empty variable counts as unset.
 - `api call` reads one typed invocation and emits one JSON response.
 - `api schema -k bundle|manifest|invocation|response|active-state|operation` emits JSON Schema 2020-12.
 - `--usage-spec=fork` emits the mounted mise grammar from the Clap tree.

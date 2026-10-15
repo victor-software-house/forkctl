@@ -21,7 +21,7 @@ experimental = true
 lockfile = true
 
 [env]
-FORK_MANIFEST = "patches/fork.yaml"
+FORKCTL_MANIFEST = "patches/fork.yaml"
 
 [task_config]
 includes = [
@@ -256,6 +256,8 @@ forkctl --usage-spec=fork
 ```
 
 Most long options have collision-audited mnemonic shorts. Leaf parameters are grouped by subject, metadata/scope, capture, execution, and output. Help is generated from Clap metadata through ctl-core; no second parameter specification exists. Pretty help, result tables, notices, and errors wrap to the detected terminal width; captured non-TTY output may provide the standard `COLUMNS` fallback. JSON, schemas, Usage KDL, and completion scripts never reflow.
+
+Every long option also reads `FORKCTL_<LONG>`, such as `FORKCTL_FORMAT=json` or `FORKCTL_MANIFEST=patches/fork.yaml`. A flag on the command line wins over its variable, and an empty variable counts as unset. Help shows each variable beside its flag.
 
 Completion supports bash, elvish, fish, Nushell, PowerShell, and zsh, including commands, flags, enum values, files, local Git remotes/refs, live patch names, and current operation values. Candidate lookup is local and fail-silent.
 

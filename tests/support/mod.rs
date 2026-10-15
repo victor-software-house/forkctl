@@ -202,6 +202,7 @@ fn sandboxed_command(dir: &Path, program: impl AsRef<OsStr>, clear_git_context: 
         PathBuf::from,
     );
     let mut command = Command::new(program);
+    clear_forkctl_env(&mut command);
     if clear_git_context {
         for (key, _) in std::env::vars_os() {
             if key.to_string_lossy().starts_with("GIT_") {
@@ -267,4 +268,14 @@ pub(crate) fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+/// Every long option reads `FORKCTL_<LONG>`, so a caller's variable would
+/// change what a test runs. A test sets the ones it needs back on top.
+pub(crate) fn clear_forkctl_env(command: &mut Command) {
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("FORKCTL_") {
+            command.env_remove(key);
+        }
+    }
 }

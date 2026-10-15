@@ -74,7 +74,7 @@ No aliases remain.
 
 | Option | Contract |
 |:--|:--|
-| `-m`, `--manifest PATH` | Explicit manifest path; environment fallback remains `FORK_MANIFEST` |
+| `-m`, `--manifest PATH` | Explicit manifest path; environment fallback is `FORKCTL_MANIFEST` |
 | `-f`, `--format pretty|json` | Complete human view or complete versioned envelope; default `pretty` |
 | `-c`, `--color auto|always|never` | Pretty output only; default `auto`; respects `NO_COLOR` |
 | `-q`, `--quiet` | Suppress successful pretty output; errors remain; rejected with JSON because JSON is already a complete contract |
@@ -192,7 +192,7 @@ diagram:
     body:
       - table:
           rows:
-            - ["-m", "--manifest", "PATH", "Manifest [env: FORK_MANIFEST]"]
+            - ["-m", "--manifest", "PATH", "Manifest [env: FORKCTL_MANIFEST]"]
             - ["-f", "--format", "[pretty|json]", "Output format [default: pretty]"]
             - ["-c", "--color", "[auto|always|never]", "Color policy [default: auto]"]
             - ["-q", "--quiet", "", "Suppress successful pretty output"]
@@ -215,7 +215,7 @@ Capture staged or explicitly selected changes into a declared patch.
 │ -n  --dry-run    Validate and show the mutation plan                   │
 └────────────────────────────────────────────────────────────────────────┘
 ┌─ Output ───────────────────────────────────────────────────────────────┐
-│ -m  --manifest  PATH                 Manifest [env: FORK_MANIFEST]     │
+│ -m  --manifest  PATH                 Manifest [env: FORKCTL_MANIFEST]     │
 │ -f  --format    [pretty|json]        Output format [default: pretty]   │
 │ -c  --color     [auto|always|never]  Color policy [default: auto]      │
 │ -q  --quiet                          Suppress successful pretty output │

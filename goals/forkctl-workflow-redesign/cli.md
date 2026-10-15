@@ -10,7 +10,7 @@ forkctl [GLOBAL OPTIONS] <COMMAND>
 
 | Short | Long | Value | Default | Meaning |
 |:--|:--|:--|:--|:--|
-| `-m` | `--manifest` | `PATH` | `FORK_MANIFEST`, then `patches/fork.yaml` | Manifest selection |
+| `-m` | `--manifest` | `PATH` | `FORKCTL_MANIFEST`, then `patches/fork.yaml` | Manifest selection |
 | `-f` | `--format` | `pretty|json` | `pretty` | Complete output representation |
 | `-c` | `--color` | `auto|always|never` | `auto` | Pretty-output color policy |
 | `-q` | `--quiet` | — | false | Suppress successful pretty output |
