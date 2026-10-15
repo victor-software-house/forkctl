@@ -16,13 +16,16 @@ env:
   MISE_ENV: ci
 
 concurrency:
-  group: publish-${{ github.ref }}
+  # One group for every run, so a manual run and a merged Version PR never
+  # publish at the same time.
+  group: publish
   cancel-in-progress: false
 
 jobs:
   crate:
+    # A manual run publishes only from main, never from an unmerged branch.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.pull_request.merged &&
        github.event.pull_request.head.ref == 'version-packages')
     runs-on: ubuntu-latest
