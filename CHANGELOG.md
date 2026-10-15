@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.37
+
+- Every long option now reads `FORKCTL_<LONG>`, such as `FORKCTL_FORMAT=json`, and a flag on the command line wins over its variable. `FORK_MANIFEST` is renamed to `FORKCTL_MANIFEST`, with no alias: set `FORKCTL_MANIFEST` in place of `FORK_MANIFEST`, for example under `[env]` in `mise.toml`. `api call` falls back to `--manifest` or `FORKCTL_MANIFEST` when the invocation names no manifest ([#105](https://github.com/victor-software-house/forkctl/pull/105)).
+
 ## forkctl 0.0.36
 
 - The mounted `fork` task is now `raw`, so `mise run fork --format json status | jq` receives exactly what forkctl wrote. Before, in `prefix` output mode (several tasks, or `MISE_TASK_OUTPUT=prefix`), mise relayed each output line with a `[fork]` prefix and wrapped it in colour whenever its own colour was on, which `CLICOLOR_FORCE=1` turns on even into a pipe ([#99](https://github.com/victor-software-house/forkctl/pull/99)).
