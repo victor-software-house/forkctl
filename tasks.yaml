@@ -6,7 +6,16 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-023
+    title: Bind every flag to a FORKCTL variable
+    scope: cli
+    outcome: Every long option reads FORKCTL_<LONG> under the command line, and FORKCTL_MANIFEST replaces FORK_MANIFEST with no alias.
+    blocked_by: []
+    acceptance:
+      - forkctl instructions with FORKCTL_FORMAT=json prints JSON, and --format pretty wins over it.
+      - FORKCTL_MANIFEST selects the manifest; no FORK_MANIFEST reader or writer remains outside CHANGELOG.md history.
+    plan: openspec/changes/bind-flags-to-environment/proposal.md
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

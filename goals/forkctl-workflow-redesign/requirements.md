@@ -23,7 +23,7 @@ Deliver a from-scratch forkctl contract that makes explicit downstream patch wor
 
 ### Global behavior
 
-- `--manifest PATH`/`-m PATH` selects the manifest; `FORK_MANIFEST` remains the environment alternative.
+- `--manifest PATH`/`-m PATH` selects the manifest; `FORKCTL_MANIFEST` is the environment alternative.
 - `--format pretty|json`/`-f pretty|json` selects one output representation. There is no `--json` alias.
 - `--color auto|always|never`/`-c ...` controls pretty output only and respects `NO_COLOR`.
 - `--quiet`/`-q` suppresses non-error pretty output; JSON remains complete.

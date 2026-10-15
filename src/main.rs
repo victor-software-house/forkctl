@@ -93,7 +93,7 @@ fn execute_cli(cli: Cli) -> Result<Report> {
     let action = cli.into_action();
     Ok(match action {
         Ok(CliAction::ApiSchema(kind)) => Report::json(protocol::schema_document(kind)?),
-        Ok(CliAction::ApiCall) => Report::response(run_api_call(), None),
+        Ok(CliAction::ApiCall) => Report::response(run_api_call(manifest.as_deref()), None),
         Ok(CliAction::Completion(shell)) => Report::text(completion_text(shell)?),
         Ok(CliAction::Candidates(kind)) => {
             Report::text(completion::candidate_lines(kind).join("\n"))
@@ -135,10 +135,7 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
     if matches!(request, ApiRequest::Instructions(_)) {
         return Ok(Outcome::new(instructions()));
     }
-    let manifest = manifest
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("FORK_MANIFEST").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_MANIFEST));
+    let manifest = manifest.map_or_else(|| PathBuf::from(DEFAULT_MANIFEST), PathBuf::from);
     let mut app = App::discover(&manifest)?;
     // Every run names each limit the repository loosens; it is the operator's
     // only signal.
@@ -179,7 +176,7 @@ fn instructions() -> CommandResult {
     })
 }
 
-fn run_api_call() -> ApiResponse {
+fn run_api_call(manifest: Option<&str>) -> ApiResponse {
     match read_invocation() {
         Err(error) => ApiResponse::error("api.call", ExecutionMode::Execute, request_error(&error)),
         Ok(invocation) if invocation.protocol_version != PROTOCOL_VERSION => ApiResponse::error(
@@ -203,7 +200,7 @@ fn run_api_call() -> ApiResponse {
         Ok(invocation) => {
             let command = invocation.request.command();
             execute(
-                invocation.manifest.as_deref(),
+                invocation.manifest.as_deref().or(manifest),
                 invocation.request,
                 invocation.mode,
             )

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
-use ctl_core::{DryRunArgs, OutputArgs};
+use ctl_core::{DryRunArgs, EnvPrefix, OutputArgs};
 
 use crate::manifest::{Check, CheckStage, PatchKind, RequiredText};
 use crate::protocol::{
@@ -16,10 +16,11 @@ use crate::protocol::{
 #[command(
     version,
     about = "Maintain an explicit audited StGit downstream patch stack",
-    arg_required_else_help = true
+    arg_required_else_help = true,
+    env_prefix = "FORKCTL"
 )]
 pub(crate) struct Cli {
-    /// Manifest path; defaults to `FORK_MANIFEST` then `patches/fork.yaml`.
+    /// Manifest path; defaults to `patches/fork.yaml`.
     #[arg(short = 'm', long, global = true, value_hint = clap::ValueHint::FilePath, help_heading = "Output")]
     pub manifest: Option<PathBuf>,
 

@@ -13,6 +13,7 @@ use support::Fixture;
 
 fn forkctl() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_forkctl"));
+    support::clear_forkctl_env(&mut command);
     command.env("FORKCTL_NO_UPDATE_CHECK", "1");
     command
 }
@@ -71,7 +72,7 @@ fn narrow_help_preserves_complete_tokens() {
             .unwrap();
         assert!(root.status.success());
         let root = String::from_utf8(root.stdout).unwrap();
-        for token in ["--manifest", "FORK_MANIFEST", "patches/fork.yaml"] {
+        for token in ["--manifest", "FORKCTL_MANIFEST", "patches/fork.yaml"] {
             assert!(root.contains(token), "{width}-column help split {token:?}");
         }
 
@@ -123,6 +124,52 @@ fn instructions_work_outside_a_repository() {
         std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/instructions.md"))
             .unwrap();
     assert_eq!(output.stdout, expected);
+}
+
+/// Every long option reads `FORKCTL_<LONG>`, and the command line wins over
+/// the variable.
+#[test]
+fn variables_set_flags_under_the_command_line() {
+    let directory = tempfile::tempdir().unwrap();
+    let json = forkctl()
+        .arg("instructions")
+        .env("FORKCTL_FORMAT", "json")
+        .current_dir(directory.path())
+        .output()
+        .unwrap();
+    assert!(json.status.success());
+    let response: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(response["command"], "instructions");
+
+    let pretty = forkctl()
+        .args(["--format", "pretty", "--color", "never", "instructions"])
+        .env("FORKCTL_FORMAT", "json")
+        .current_dir(directory.path())
+        .output()
+        .unwrap();
+    assert!(pretty.status.success());
+    assert!(serde_json::from_slice::<serde_json::Value>(&pretty.stdout).is_err());
+}
+
+#[test]
+fn manifest_variable_selects_the_manifest() {
+    let fixture = Fixture::new_with_manifest("patches/other.yaml");
+    let selected = support::forkctl_command(&fixture.repo)
+        .args(["--format", "json", "status"])
+        .env("FORKCTL_MANIFEST", "patches/other.yaml")
+        .output()
+        .unwrap();
+    assert!(
+        selected.status.success(),
+        "{}",
+        String::from_utf8_lossy(&selected.stdout)
+    );
+
+    let default = support::forkctl_command(&fixture.repo)
+        .args(["--format", "json", "status"])
+        .output()
+        .unwrap();
+    assert!(!default.status.success());
 }
 
 #[test]

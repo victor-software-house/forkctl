@@ -4,7 +4,7 @@ description: >-
   Operate forkctl audited Git/StGit downstream patch stacks: inspect status,
   create/select/edit/refresh/finish patches, run staged or repository checks,
   recover interrupted operations, rebase onto upstream, and publish under an
-  exact lease. Use when a repository has a forkctl manifest, FORK_MANIFEST,
+  exact lease. Use when a repository has a forkctl manifest, FORKCTL_MANIFEST,
   generated patch exports/ledger, or the user mentions forkctl, downstream
   patches, StGit fork maintenance, rebase recovery, or atomic fork publication.
 license: MIT
@@ -57,7 +57,7 @@ completion bootstrap.
    - Repository publish default is `downstream.publish` (`status` shows it).
      Set with `init --publish append` or `contract edit --publish-mode append`.
      One-shot: `publish --rewrite` / `--append` / `--propose` / `--promote`.
-3. Respect an explicit `--manifest PATH` or `FORK_MANIFEST`. Do not guess a different manifest when discovery fails.
+3. Respect an explicit `--manifest PATH` or `FORKCTL_MANIFEST`. Do not guess a different manifest when discovery fails.
 4. Run `status`, then the complete read-only `check`, before mutation.
 5. Use `<invocation> --help` and `<invocation> instructions` as the authoritative installed-version contract. Do not invent aliases for rejected commands or fields. `completion SHELL` emits registration.
 

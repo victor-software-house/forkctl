@@ -14,7 +14,7 @@ experimental = true
 lockfile = true
 
 [env]
-FORK_MANIFEST = "patches/fork.yaml"
+FORKCTL_MANIFEST = "patches/fork.yaml"
 
 [task_config]
 includes = [
@@ -25,7 +25,7 @@ includes = [
 
 - The release tag is immutable.
 - `mise-tasks` remains only when the consumer has local file tasks; declaring `task_config.includes` disables mise's automatic task-directory inclusion.
-- `FORK_MANIFEST` is the sole consumer-local manifest pointer.
+- `FORKCTL_MANIFEST` is the sole consumer-local manifest pointer.
 
 ## Remote Catalog
 
