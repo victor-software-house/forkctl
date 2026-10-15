@@ -16,6 +16,15 @@ queue:
       - forkctl instructions with FORKCTL_FORMAT=json prints JSON, and --format pretty wins over it.
       - FORKCTL_MANIFEST selects the manifest; no FORK_MANIFEST reader or writer remains outside CHANGELOG.md history.
     plan: openspec/changes/bind-flags-to-environment/proposal.md
+
+  - id: FRK-024
+    title: Align the forkctl skill and help with 0.0.37 behaviour
+    scope: docs
+    outcome: The bundled skill and help describe the flags and workflows forkctl has.
+    blocked_by: []
+    acceptance:
+      - The skill covers declared checks, the rewrite, append, propose, and promote publish modes, --set-default, and FORKCTL_<LONG> variables.
+      - Help for --check-at names stack|patch.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

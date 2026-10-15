@@ -124,7 +124,7 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         flag "-g --check-glob" help="Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable" var=#true help_heading=Checks {
             arg <CHECK_GLOBS>… var=#true
         }
-        flag --check-at help="Evaluate a declared check at its own patch commit as NAME=patch; repeatable" var=#true help_heading=Checks {
+        flag --check-at help="Tree a declared check observes as NAME=stack|patch: the applied stack (the default) or its own patch commit; repeatable" var=#true help_heading=Checks {
             arg <CHECK_STAGES>… var=#true
         }
         flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
@@ -167,7 +167,7 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         flag "-g --check-glob" help="Restrict a declared check as NAME=GLOB, defaulting to the patch scope; repeatable" var=#true help_heading=Checks {
             arg <CHECK_GLOBS>… var=#true
         }
-        flag --check-at help="Evaluate a declared check at its own patch commit as NAME=patch; repeatable" var=#true help_heading=Checks {
+        flag --check-at help="Tree a declared check observes as NAME=stack|patch: the applied stack (the default) or its own patch commit; repeatable" var=#true help_heading=Checks {
             arg <CHECK_STAGES>… var=#true
         }
         flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution

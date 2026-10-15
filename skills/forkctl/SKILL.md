@@ -113,6 +113,20 @@ Rules:
 
 Inspect or update declared intent with `patch show`, `patch list`, and `patch edit`; consult command help for exact metadata and scope flags.
 
+A patch may declare checks that `check` runs after its structural validation, so they gate refresh, finish, rebase, and both hooks:
+
+```sh
+mise run fork patch edit PATCH \
+  -C 'lint=ast-grep scan --rule rules/lint.yml {files}' \
+  -g 'lint=src/**/*.ts' \
+  --check-at lint=patch
+```
+
+- `-C NAME=COMMAND` runs through `sh -c` and must exit 0; `{files}` expands to the matched tracked files, shell-quoted.
+- `-g NAME=GLOB` is repeatable and defaults to the declaring patch's scope. A check whose globs match no tracked file fails as stale.
+- `--check-at NAME=stack|patch` observes the applied stack (the default) or the patch's own commit, in a disposable clone with no origin remote.
+- `patch edit --clear-checks` replaces the whole check set before adding the supplied checks.
+
 ## Remove or disable a patch
 
 Use forkctl transitions, never raw `stg delete`, `stg pop`, or manual manifest edits:
@@ -180,7 +194,13 @@ mise run fork publish
 
 Rebase requires a clean declared branch, no active patch, no other operation, and a complete passing check. It creates immutable recovery evidence, captures the downstream lease, delegates replay to StGit, records dropped upstream-merged patches, regenerates evidence, and stops before publication.
 
-Publish only when the user explicitly requests remote mutation and the generated report has been reviewed. Publication atomically pushes the declared branch and recovery tag under the captured exact lease.
+Publish only when the user explicitly requests remote mutation and the generated report has been reviewed. `publish` uses the repository default mode (`downstream.publish`, shown by `status`):
+
+- `rewrite`, the default, atomically pushes the declared branch and a recovery tag at the overwritten tip under the captured exact lease.
+- `append` keeps the previous tip as an ancestor and fast-forwards.
+- `propose` pushes `forkctl/proposal/<branch>` under a lease and opens or updates its draft pull request with `gh`; a repeat updates that branch and pull request in place. Do not merge a proposal pull request: from a clone whose `HEAD` is the reviewed candidate, run `publish --promote`. It refuses unless the proposal tree matches `HEAD`. `--proposal` names a branch, tag, or URL other than `forkctl/proposal/<branch>`.
+
+`publish --set-default MODE` persists a mode as the repository default, and publishes too unless it is the only action.
 
 If the remote advanced, rejects atomic push, rejects the tag, or enforces branch policy:
 
@@ -203,7 +223,9 @@ printf '%s' '{"protocol_version":1,"mode":"execute","request":{"command":"check"
 
 JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say, and a parse error under `--format json` is a JSON error even when the bad argument comes first. Keep stdout as exactly one JSON document and treat schema-derived command names, arguments, results, notices, error codes, and details as authoritative. Do not parse pretty tables or error prose.
 
-Use API `mode: "plan"` or CLI `--dry-run` / `--preview` for mutation planning; read-only commands reject plan mode. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
+Use API `mode: "plan"` or CLI `-n` / `--dry-run` / `--preview` for mutation planning; read-only commands reject plan mode. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
+
+Every long option also reads `FORKCTL_<LONG>`, such as `FORKCTL_FORMAT=json` or `FORKCTL_MANIFEST`. A flag on the command line wins over its variable, and an empty variable counts as unset. Help shows each variable beside its flag.
 
 ## Stop conditions
 
