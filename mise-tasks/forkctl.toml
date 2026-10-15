@@ -1,9 +1,14 @@
-# forkctl's own tasks. The shared verify from ctl-core depends on check:features and check:repo by name.
-"check:features" = { description = "Type-check every crate, alone and with all features", run = ["cargo check --workspace --all-targets", "cargo check --workspace --all-targets --all-features"] }
-"check:repo" = { description = "forkctl's own checks", depends = ["version:check"] }
-"test:isolated" = { description = "Same suite, one test at a time", run = "cargo nextest run --workspace --all-features --test-threads=1", env = { CARGO_TARGET_DIR = "target/test-isolated" } }
+# forkctl's own tasks. The shared verify from ctl-core depends on check:features and check:repo by name; check:repo is the template's and ends with check:local.
+"check:features" = { description = "Type-check every crate, alone and with all features", run = [
+  "cargo check --locked --workspace --all-targets",
+  "cargo check --locked --workspace --all-targets --all-features",
+] }
+"test:isolated" = { description = "Same suite, one test at a time", run = "cargo nextest run --locked --workspace --all-features --test-threads=1", env = { CARGO_TARGET_DIR = "target/test-isolated" } }
 "format:fix" = { description = "Format Rust sources on the formatting nightly", run = "cargo +nightly-2026-09-29 fmt --all" }
 "lint:fix" = { description = "Apply machine-fixable Clippy suggestions", run = "cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets --all-features -- -D warnings" }
-"version:sync" = { description = "Regenerate the locks and all tool pins from mise.toml", run = ["mise lock", "cargo run --quiet --package forkctl-xtask"], env = { CARGO_TARGET_DIR = "target/xtask" } }
-"version:check" = { description = "Verify generated tool pins match mise.toml", run = "cargo run --quiet --package forkctl-xtask -- --check", env = { CARGO_TARGET_DIR = "target/xtask" } }
-"build" = { description = "Build the release binary", run = "cargo build --release", env = { CARGO_TARGET_DIR = "target/build" } }
+"version:sync" = { description = "Regenerate the locks and all tool pins from mise.toml", run = [
+  "mise lock",
+  "cargo run --quiet --package forkctl-xtask",
+], env = { CARGO_TARGET_DIR = "target/xtask" } }
+"version:check" = { description = "Verify generated tool pins match mise.toml", run = "cargo run --locked --quiet --package forkctl-xtask -- --check", env = { CARGO_TARGET_DIR = "target/xtask" } }
+"build" = { description = "Build the release binary", run = "cargo build --locked --release", env = { CARGO_TARGET_DIR = "target/build" } }

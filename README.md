@@ -165,7 +165,7 @@ Declared commands remain trusted repository code running with the operator's use
 
 A check whose globs match **no tracked file fails as stale**. A command over an empty file list usually succeeds, so a moved or deleted subject would otherwise disarm the very check that was watching it:
 
-```
+```text
 check_glob_stale · guarded-spawn: unguarded-spawn
 crates/**/*.rs matches no tracked file, so the check would pass over nothing;
 its subject moved or was removed

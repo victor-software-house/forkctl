@@ -7,6 +7,6 @@
 - `tests/lifecycle.rs` is 1,671 lines and mixes bootstrap, patch capture, operation recovery, publication, declared checks, manifest codecs, and shared helpers.
 - A targeted Clippy run reports no function exceeding `clippy::too_many_lines` and no cognitive-complexity warning; the problem is responsibility density at module level, not giant individual functions.
 - A targeted production panic audit reports nine `unwrap` or `expect` sites. Some are replaceable runtime assumptions; a smaller number describe construction or compile-time invariants and require explicit local justification if retained.
-- Blanket `clippy::nursery` produces both useful findings and subjective churn. Rust Clippy recommends selecting restriction/nursery lints individually rather than enabling opinionated groups wholesale: https://doc.rust-lang.org/clippy/lint_configuration.html
-- Cargo supports centrally inherited workspace lint policy through `[workspace.lints]`: https://doc.rust-lang.org/cargo/reference/workspaces.html#the-lints-table
-- Rust modules and restricted visibility provide the native mechanism for cohesive internal boundaries; file-length ceilings are project policy, not a Rust language rule: https://doc.rust-lang.org/book/ch07-05-separating-modules-into-different-files.html
+- Blanket `clippy::nursery` produces both useful findings and subjective churn. Rust Clippy recommends selecting restriction/nursery lints individually rather than enabling opinionated groups wholesale: <https://doc.rust-lang.org/clippy/lint_configuration.html>
+- Cargo supports centrally inherited workspace lint policy through `[workspace.lints]`: <https://doc.rust-lang.org/cargo/reference/workspaces.html#the-lints-table>
+- Rust modules and restricted visibility provide the native mechanism for cohesive internal boundaries; file-length ceilings are project policy, not a Rust language rule: <https://doc.rust-lang.org/book/ch07-05-separating-modules-into-different-files.html>

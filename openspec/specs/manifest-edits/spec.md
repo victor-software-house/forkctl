@@ -1,6 +1,7 @@
 # manifest-edits Specification
 
 ## Purpose
+
 Defines how forkctl reads a YAML manifest through ctl-core under the
 repository's input limits, and how a command that changes the manifest rewrites
 only the nodes it changes, refuses an edit through an alias, and edits an
