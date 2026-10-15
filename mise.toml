@@ -59,7 +59,7 @@ includes = [
   "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=8d69a9e5065038cedd6a4cca228c5ff62ef41500",
   # The standard Rust tasks (check:toolchain, format, lint, test, test:doc,
   # deny, deny:advisories, deps, semver, verify).
-  "git::https://github.com/victor-software-house/ctl-core.git//tasks/rust.toml?ref=v0.6.15",
+  "git::https://github.com/victor-software-house/ctl-core.git//tasks/rust.toml?ref=v0.6.20",
 ]
 
 # The one task here: the last include wins over mise-tasks/, so only an inline
@@ -67,7 +67,7 @@ includes = [
 # process, which the lifecycle fixtures rely on.
 [tasks.test]
 description = "Unit and integration tests on nextest"
-run = "cargo nextest run --workspace --all-features"
+run = "cargo nextest run --locked --workspace --all-features"
 timeout = "30m"
 
 # forkctl has no library target, and cargo test --doc refuses a package without one,
