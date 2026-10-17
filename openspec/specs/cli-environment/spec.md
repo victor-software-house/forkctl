@@ -1,6 +1,7 @@
 # cli-environment Specification
 
 ## Purpose
+
 How forkctl reads its options from the environment: every long option under the `FORKCTL_` prefix, with the command line winning, and `FORKCTL_MANIFEST` as the one manifest variable.
 
 ## Requirements
