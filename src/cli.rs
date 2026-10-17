@@ -218,8 +218,8 @@ pub(crate) struct PatchCreateCliArgs {
     /// repeatable.
     #[arg(short = 'g', long = "check-glob", help_heading = "Checks", value_parser = parse_named_value)]
     pub check_globs: Vec<(String, String)>,
-    /// Evaluate a declared check at its own patch commit as NAME=patch;
-    /// repeatable.
+    /// Tree a declared check observes as NAME=stack|patch: the applied stack
+    /// (the default) or its own patch commit; repeatable.
     #[arg(long = "check-at", help_heading = "Checks", value_parser = parse_check_stage)]
     pub check_stages: Vec<(String, CheckStage)>,
     #[command(flatten)]
@@ -278,8 +278,8 @@ pub(crate) struct PatchEditCliArgs {
     /// repeatable.
     #[arg(short = 'g', long = "check-glob", help_heading = "Checks", value_parser = parse_named_value)]
     pub check_globs: Vec<(String, String)>,
-    /// Evaluate a declared check at its own patch commit as NAME=patch;
-    /// repeatable.
+    /// Tree a declared check observes as NAME=stack|patch: the applied stack
+    /// (the default) or its own patch commit; repeatable.
     #[arg(long = "check-at", help_heading = "Checks", value_parser = parse_check_stage)]
     pub check_stages: Vec<(String, CheckStage)>,
     #[command(flatten)]
