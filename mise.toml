@@ -56,7 +56,7 @@ includes = [
   # Pinned git:: catalogs follow mise-tasks.
   "mise-tasks",
   # The qctl ref is the v0.4.4 tag's commit.
-  "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=8d69a9e5065038cedd6a4cca228c5ff62ef41500",
+  "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=v0.5.9",
   # The standard Rust tasks (check:toolchain, format, lint, test, test:doc,
   # deny, deny:advisories, deps, semver, verify).
   "git::https://github.com/victor-software-house/ctl-core.git//tasks/rust.toml?ref=v0.6.20",
