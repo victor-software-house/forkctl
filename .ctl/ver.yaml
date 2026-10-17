@@ -18,6 +18,9 @@ patterns:
   task:
     match: '"github:victor-software-house/forkctl" = "{version}"'
     occurrences: once
+  skill:
+    match: "version: {version}"
+    occurrences: once
 
 pins:
   - file: examples/mise.toml
@@ -26,6 +29,9 @@ pins:
   - file: tasks/fork/fork
     package: forkctl
     patterns: [task]
+  - file: skills/forkctl/SKILL.md
+    package: forkctl
+    patterns: [skill]
 
 # One key per host binary; the name is the job, the tarball, and the platform.
 # Both are built-in records; linux-x64 overrides only the triple, because the

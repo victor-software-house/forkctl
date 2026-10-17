@@ -24,6 +24,7 @@ fn render_template(relative: &str) -> String {
         .unwrap_or_else(|error| panic!("parse {relative}: {error}"))
         .render(minijinja::context! {
             surface => ctl_core::Surface::new::<Cli>("fork"),
+            version => env!("CARGO_PKG_VERSION"),
         })
         .unwrap_or_else(|error| panic!("render {relative}: {error}"))
 }

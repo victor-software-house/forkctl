@@ -25,6 +25,15 @@ queue:
     acceptance:
       - The skill covers declared checks, the rewrite, append, propose, and promote publish modes, --set-default, and FORKCTL_<LONG> variables.
       - Help for --check-at names stack|patch.
+
+  - id: FRK-025
+    title: Date the bundled skill with its release
+    scope: docs
+    outcome: The bundled skill names the forkctl release its text describes, and the Version PR moves it.
+    blocked_by: []
+    acceptance:
+      - 'skills/forkctl/SKILL.md carries version: equal to the crate version, rendered by operator_docs.'
+      - The skill pin in .ctl/ver.yaml matches it exactly once.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
