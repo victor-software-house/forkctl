@@ -78,7 +78,7 @@ askama = { version = "=0.16.0", default-features = false, features = [
 ] }
 clap = { version = "=4.6.6", features = ["derive", "env", "string"] }
 clap_complete = { version = "=4.6.8", features = ["unstable-dynamic"] }
-ctl-core = { version = "=0.6.21", default-features = false, features = [
+ctl-core = { version = "=0.6.23", default-features = false, features = [
   "app",
   "input",
   "usage",
@@ -93,13 +93,13 @@ tempfile = "=3.27.0"
 usage-lib = { version = "=6.1.1", default-features = false, features = [
   "clap",
 ] }
-serde-saphyr = { version = "=1.3.0", default-features = false, features = [
+serde-saphyr = { version = "=2.0.0", default-features = false, features = [
   "serialize",
 ] }
-yamled = "=0.0.5"
+yamled = "=0.0.7"
 
 [dev-dependencies]
-ctl-core = { version = "=0.6.21", default-features = false, features = [
+ctl-core = { version = "=0.6.23", default-features = false, features = [
   "surface",
 ] }
 insta = { version = "=1.48.0", features = ["json", "filters"] }

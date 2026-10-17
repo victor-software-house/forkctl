@@ -6,7 +6,15 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-026
+    title: Take ctl-core 0.6.23 with serde-saphyr 2.0
+    scope: Cargo.toml, Cargo.lock
+    outcome: forkctl builds on ctl-core 0.6.23, serde-saphyr 2.0.0, and yamled 0.0.7, one copy of each in the lock
+    blocked_by: []
+    acceptance:
+      - Cargo.toml pins ctl-core =0.6.23 in both entries, serde-saphyr =2.0.0, and yamled =0.0.7
+      - PR CI Verify, test:isolated, and build pass on the bump
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
