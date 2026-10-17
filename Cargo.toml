@@ -6,7 +6,6 @@ rust-version.workspace = true
 description = "Control audited StGit downstream patch stacks"
 license = "MIT"
 repository = "https://github.com/victor-software-house/forkctl"
-homepage = "https://github.com/victor-software-house/forkctl"
 readme = "README.md"
 keywords = ["git", "stgit", "fork", "patches", "cli"]
 categories = ["command-line-utilities", "development-tools"]
