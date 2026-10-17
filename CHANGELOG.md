@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.39
+
+- forkctl now builds on ctl-core 0.6.23, serde-saphyr 2.0.0, and yamled 0.0.7 ([#114](https://github.com/victor-software-house/forkctl/pull/114)).
+
 ## forkctl 0.0.38
 
 - `--check-at` help now names both values, `NAME=stack|patch`, where it named only `patch`. The bundled skill now covers declared patch checks, the `append`, `propose`, and `promote` publish modes, `publish --set-default`, and the `FORKCTL_<LONG>` variables ([#107](https://github.com/victor-software-house/forkctl/pull/107)).
