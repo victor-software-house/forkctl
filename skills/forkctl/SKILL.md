@@ -8,6 +8,7 @@ description: >-
   generated patch exports/ledger, or the user mentions forkctl, downstream
   patches, StGit fork maintenance, rebase recovery, or atomic fork publication.
 license: MIT
+version: 0.0.38
 compatibility: Requires forkctl plus supported git and stg executables; a repository-mounted mise `fork` task may provision exact versions.
 ---
 
