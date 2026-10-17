@@ -38,10 +38,10 @@ None.
 - Each consumer repository that sets `FORK_MANIFEST` in its `mise.toml` renames it when it takes this release.
 
 [ctl-core]: https://github.com/victor-software-house/ctl-core
-[cli]: ../../../src/cli.rs
-[main]: ../../../src/main.rs
-[completion]: ../../../src/completion.rs
-[support]: ../../../tests/support/mod.rs
-[tests]: ../../../tests/cli.rs
-[readme]: ../../../README.md
-[example]: ../../../examples/mise.toml
+[cli]: ../../../../src/cli.rs
+[main]: ../../../../src/main.rs
+[completion]: ../../../../src/completion.rs
+[support]: ../../../../tests/support/mod.rs
+[tests]: ../../../../tests/cli.rs
+[readme]: ../../../../README.md
+[example]: ../../../../examples/mise.toml

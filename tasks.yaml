@@ -6,34 +6,7 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue:
-  - id: FRK-023
-    title: Bind every flag to a FORKCTL variable
-    scope: cli
-    outcome: Every long option reads FORKCTL_<LONG> under the command line, and FORKCTL_MANIFEST replaces FORK_MANIFEST with no alias.
-    blocked_by: []
-    acceptance:
-      - forkctl instructions with FORKCTL_FORMAT=json prints JSON, and --format pretty wins over it.
-      - FORKCTL_MANIFEST selects the manifest; no FORK_MANIFEST reader or writer remains outside CHANGELOG.md history.
-    plan: openspec/changes/bind-flags-to-environment/proposal.md
-
-  - id: FRK-024
-    title: Align the forkctl skill and help with 0.0.37 behaviour
-    scope: docs
-    outcome: The bundled skill and help describe the flags and workflows forkctl has.
-    blocked_by: []
-    acceptance:
-      - The skill covers declared checks, the rewrite, append, propose, and promote publish modes, --set-default, and FORKCTL_<LONG> variables.
-      - Help for --check-at names stack|patch.
-
-  - id: FRK-025
-    title: Date the bundled skill with its release
-    scope: docs
-    outcome: The bundled skill names the forkctl release its text describes, and the Version PR moves it.
-    blocked_by: []
-    acceptance:
-      - 'skills/forkctl/SKILL.md carries version: equal to the crate version, rendered by operator_docs.'
-      - The skill pin in .ctl/ver.yaml matches it exactly once.
+queue: []
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -64,6 +37,34 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-023
+    title: Bind every flag to a FORKCTL variable
+    scope: cli
+    outcome: Every long option reads FORKCTL_<LONG> under the command line, and FORKCTL_MANIFEST replaces FORK_MANIFEST with no alias.
+    plan: openspec/changes/archive/2026-10-17-bind-flags-to-environment/proposal.md
+    completed: 2026-10-17T16:58:59
+    evidence:
+      - 663fca1b619f9cb733c07df9a45b93af18e3c03e
+    disposition: completed
+
+  - id: FRK-024
+    title: Align the forkctl skill and help with 0.0.37 behaviour
+    scope: docs
+    outcome: The bundled skill and help describe the flags and workflows forkctl has.
+    completed: 2026-10-17T16:58:59
+    evidence:
+      - 6345263951f34ad976d42fe966cbc786177ac9a4
+    disposition: completed
+
+  - id: FRK-025
+    title: Date the bundled skill with its release
+    scope: docs
+    outcome: The bundled skill names the forkctl release its text describes, and the Version PR moves it.
+    completed: 2026-10-17T16:58:59
+    evidence:
+      - 8d3716c03791b9f80dd42d8869c279b74b463edf
+    disposition: completed
+
   - id: FRK-022
     title: Pipe the mounted fork task's output unchanged
     scope: mise
