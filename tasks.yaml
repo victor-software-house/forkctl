@@ -5,18 +5,20 @@ prefix: FRK
 style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
-active: FRK-027
+active: FRK-028
 queue:
-  - id: FRK-027
-    title: Take qctl 0.5.9
-    scope: mise.toml, mise locks, tasks.yaml
+  - id: FRK-028
+    title: Restore full patch names on operation abort
+    scope: operation
     outcome: >-
-      forkctl's served q task, locks, and ledger schema follow qctl 0.5.9, and the
-      ledger is in its line-item format
+      operation abort restores every patch under its journal name, whatever
+      stgit.namelength is set to.
     blocked_by: []
     acceptance:
-      - The q include, the tasks.yaml schema URL, and every mise lock name qctl 0.5.9
-      - tasks.yaml is the output of one q fmt run
+      - A lifecycle test with a patch name longer than 30 characters aborts a conflicted refresh with stgit.namelength unset, and abort succeeds with the original series.
+      - restore_operation_stack passes the journal's patch names to stg uncommit, as init hydration already does.
+    notes:
+      - 'Seen downstream on 0.0.20 and 0.0.38: abort rebuilt a stack with stg uncommit --to, which names patches from commit subjects cut to 30 characters, so the restored series did not match the journal and abort failed. Setting stgit.namelength to 0 works around it.'
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -46,6 +48,17 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-027
+    title: Take qctl 0.5.9
+    scope: mise.toml, mise locks, tasks.yaml
+    outcome: >-
+      forkctl's served q task, locks, and ledger schema follow qctl 0.5.9, and the
+      ledger is in its line-item format
+    completed: 2026-10-17T19:29:58
+    evidence:
+      - 439f1455a4610caac9e47f9bc3c14bee2cdfd2ea
+    disposition: completed
+
   - id: FRK-026
     title: Take ctl-core 0.6.23 with serde-saphyr 2.0
     scope: Cargo.toml, Cargo.lock
