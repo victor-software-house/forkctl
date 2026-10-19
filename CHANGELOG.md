@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.41
+
+- The shared verify runs verctl's version guard: ctl-core's Rust tasks at 0.6.27 and verctl at 0.5.1, so a manifest version changes only on the Version PR ([#122](https://github.com/victor-software-house/forkctl/pull/122)).
+
 ## forkctl 0.0.40
 
 - Releases run through verctl's reusable release workflow at 0.5.0: each push to `main` publishes any version commit not yet fully released, builds its tarballs, and opens or updates the Version PR on `verctl/release/main`. The macOS gates and the mounted task still run against each new release tag ([#120](https://github.com/victor-software-house/forkctl/pull/120)).
