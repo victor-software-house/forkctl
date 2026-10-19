@@ -32,9 +32,12 @@ jobs:
 
   # The reusable workflow exposes no outputs, so the tag is read back from
   # the repository: the release tag that names the pushed commit, if any.
+  # It runs even when a later release job failed, such as the docs.rs wait,
+  # so a published tag still gets its gates.
   tag:
     name: Find the release tag
     needs: release
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,14 +51,16 @@ jobs:
           fetch-depth: 0
       - name: Find the tag on the pushed commit
         id: tag
-        run: echo "tag=$(git tag --points-at "${GITHUB_SHA}" --list 'v*')" >> "${GITHUB_OUTPUT}"
+        # One line only: the highest version, should more than one tag match.
+        run: echo "tag=$(git tag --points-at "${GITHUB_SHA}" --list 'v*' --sort=-v:refname | head -n 1)" >> "${GITHUB_OUTPUT}"
 
   # A release created with GITHUB_TOKEN triggers no `release` workflow, so the
   # macOS gates are called here.
   macos:
     name: macOS gates
     needs: tag
-    if: needs.tag.outputs.tag != ''
+    # !cancelled(): a failed release job would otherwise skip this too.
+    if: ${{ !cancelled() && needs.tag.result == 'success' && needs.tag.outputs.tag != '' }}
     permissions:
       contents: read
     uses: ./.github/workflows/release-macos.yml
@@ -65,7 +70,8 @@ jobs:
   mounted-task:
     name: Mounted task
     needs: tag
-    if: needs.tag.outputs.tag != ''
+    # !cancelled(): a failed release job would otherwise skip this too.
+    if: ${{ !cancelled() && needs.tag.result == 'success' && needs.tag.outputs.tag != '' }}
     permissions:
       contents: read
     uses: ./.github/workflows/mounted-task.yml
