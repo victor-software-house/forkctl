@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.40
+
+- Releases run through verctl's reusable release workflow at 0.5.0: each push to `main` publishes any version commit not yet fully released, builds its tarballs, and opens or updates the Version PR on `verctl/release/main`. The macOS gates and the mounted task still run against each new release tag ([#120](https://github.com/victor-software-house/forkctl/pull/120)).
+
 ## forkctl 0.0.39
 
 - forkctl now builds on ctl-core 0.6.23, serde-saphyr 2.0.0, and yamled 0.0.7 ([#114](https://github.com/victor-software-house/forkctl/pull/114)).
