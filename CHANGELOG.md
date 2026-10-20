@@ -1,5 +1,9 @@
 # Changelog
 
+## forkctl 0.0.42
+
+- `publish --promote --proposal` takes the proposal pull request's URL, as its help says: forkctl reads the pull request's head with `gh`, fetches it from the downstream remote, and refuses a URL of another repository or a proposal that moved after `gh` read it ([#125](https://github.com/victor-software-house/forkctl/pull/125)).
+
 ## forkctl 0.0.41
 
 - The shared verify runs verctl's version guard: ctl-core's Rust tasks at 0.6.27 and verctl at 0.5.1, so a manifest version changes only on the Version PR ([#122](https://github.com/victor-software-house/forkctl/pull/122)).
