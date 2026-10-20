@@ -1,11 +1,15 @@
 # Changes here will be overwritten by Copier; edit with `copier update --data`.
-_commit: v0.0.31
+_commit: v0.0.33
 _src_path: https://github.com/victor-software-house/templates.git
 clippy_disallowed_methods: []
 clippy_disallowed_types: []
 default_branch: main
 deny_bans: []
-deny_ignore: []
+deny_ignore:
+-   id: RUSTSEC-2026-0374
+    reason: basic-toml is unmaintained, with no safe upgrade. askama 0.16 reaches
+        it only through its config feature, the one way to load templates from files.
+        Remove when askama drops basic-toml or forkctl inlines its templates.
 deny_licenses:
 -   license: BSD-3-Clause
     reason: encoding_rs, which serde-saphyr pulls in

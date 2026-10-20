@@ -5,7 +5,9 @@ all-features = true
 yanked = "deny"
 unmaintained = "all"
 # RUSTSEC ids and yanked crates that cannot be upgraded yet. Not a lint-level downgrade.
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained, with no safe upgrade. askama 0.16 reaches it only through its config feature, the one way to load templates from files. Remove when askama drops basic-toml or forkctl inlines its templates." },
+]
 
 [licenses]
 allow = [
