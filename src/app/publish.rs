@@ -397,27 +397,33 @@ impl App {
         mode: ExecutionMode,
     ) -> Result<CommandResult> {
         let publication = self.preflight_publication(PublishMode::Rewrite)?;
-        let proposal_branch = proposal
-            .map(ToOwned::to_owned)
-            .unwrap_or(self.proposal_branch()?);
-        let review = capture(
-            &self.repo,
-            "git",
-            ["rev-parse", &format!("{proposal_branch}^{{commit}}")],
-        )
-        .or_else(|_| {
-            capture(
-                &self.repo,
-                "git",
-                [
-                    "rev-parse",
-                    &format!(
-                        "refs/remotes/{}/{proposal_branch}",
-                        self.manifest()?.downstream.remote
-                    ),
-                ],
-            )
-        })?;
+        let (proposal_branch, review) = match proposal {
+            Some(url) if url.contains("://") => self.proposal_pr_head(url)?,
+            proposal => {
+                let proposal_branch = proposal
+                    .map(ToOwned::to_owned)
+                    .unwrap_or(self.proposal_branch()?);
+                let review = capture(
+                    &self.repo,
+                    "git",
+                    ["rev-parse", &format!("{proposal_branch}^{{commit}}")],
+                )
+                .or_else(|_| {
+                    capture(
+                        &self.repo,
+                        "git",
+                        [
+                            "rev-parse",
+                            &format!(
+                                "refs/remotes/{}/{proposal_branch}",
+                                self.manifest()?.downstream.remote
+                            ),
+                        ],
+                    )
+                })?;
+                (proposal_branch, review)
+            }
+        };
         let review_tree = capture(
             &self.repo,
             "git",
@@ -440,6 +446,63 @@ impl App {
             .into());
         }
         self.publish_rewrite(mode)
+    }
+
+    /// The head branch and commit of a proposal pull request in the
+    /// downstream repository, fetched from the downstream remote. The commit
+    /// `gh` reports must be the one fetched, so a proposal updated in between
+    /// is never promoted unread.
+    fn proposal_pr_head(&self, url: &str) -> Result<(String, String)> {
+        let remote = self.manifest()?.downstream.remote.clone();
+        let github_repo = self.downstream_github_repo(&remote)?;
+        let number = url
+            .strip_prefix("https://")
+            // GitHub ignores the case of hosts, owners, and repository names.
+            .and_then(|rest| {
+                let (repo, rest) = rest.split_at_checked(github_repo.len())?;
+                repo.eq_ignore_ascii_case(&github_repo).then_some(rest)
+            })
+            .and_then(|rest| rest.strip_prefix("/pull/"))
+            .filter(|number| !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()))
+            .ok_or_else(|| {
+                DomainError::invalid_request(format!(
+                    "--proposal {url} is not a pull request URL of the downstream repository https://{github_repo}"
+                ))
+            })?;
+        let head = self.gh(&[
+            "pr",
+            "view",
+            number,
+            "--repo",
+            &github_repo,
+            "--json",
+            "headRefOid,headRefName,isCrossRepository",
+            "--jq",
+            r#"select(.isCrossRepository | not) | "\(.headRefOid) \(.headRefName)""#,
+        ])?;
+        let (oid, branch) = head.split_once(' ').ok_or_else(|| {
+            DomainError::invalid_request(format!(
+                "pull request {url} comes from another repository; promote only a proposal pushed to {remote}"
+            ))
+        })?;
+        run(
+            &self.repo,
+            "git",
+            [
+                "fetch",
+                "--no-tags",
+                &remote,
+                &format!("refs/heads/{branch}"),
+            ],
+        )?;
+        let fetched = capture(&self.repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
+        if fetched != oid {
+            return Err(DomainError::invalid_request(format!(
+                "proposal {branch} moved to {fetched} after pull request {url} reported {oid}; review it, then promote again"
+            ))
+            .into());
+        }
+        Ok((branch.to_string(), fetched))
     }
 
     fn preflight_publication(&self, publish_mode: PublishMode) -> Result<Publication> {

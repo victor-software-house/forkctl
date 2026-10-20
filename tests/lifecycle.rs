@@ -2413,8 +2413,9 @@ const PROPOSAL_REF: &str = "refs/heads/forkctl/proposal/main";
 const PROPOSAL_URL: &str = "https://github.com/example/downstream/pull/1";
 
 /// A recording `gh` on `PATH`. `pr list` prints the open pull request, `pr
-/// create` opens one, and a `fail-<verb>` file makes that verb exit non-zero
-/// with a GitHub-style error.
+/// create` opens one, `pr view` prints the remote proposal's head commit and
+/// branch, and a `fail-<verb>` file makes that verb exit non-zero with a
+/// GitHub-style error.
 const GH_STUB: &str = r#"#!/bin/sh
 dir='@DIR@'
 { for arg in "$@"; do printf '%s\n' "$arg"; done; printf '%s\n' '--end--'; } >> "$dir/calls"
@@ -2427,6 +2428,7 @@ case "$verb" in
   pr-list) if [ -e "$dir/open" ]; then cat "$dir/open"; fi ;;
   pr-create) printf '%s\n' '@URL@' > "$dir/open"; printf '%s\n' '@URL@' ;;
   pr-edit) printf '%s\n' "$3" ;;
+  pr-view) printf '%s forkctl/proposal/main\n' "$(git ls-remote origin refs/heads/forkctl/proposal/main | cut -f1)" ;;
   *) echo "unexpected gh $*" >&2; exit 2 ;;
 esac
 "#;
@@ -2601,6 +2603,68 @@ fn publish_propose_updates_the_open_proposal_then_promotes() {
     assert_eq!(
         git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
         git_capture(&fixture.repo, ["rev-parse", "HEAD"])
+    );
+}
+
+#[test]
+fn publish_promote_takes_the_proposal_pull_request_url() {
+    let (fixture, stub) = proposal_fixture();
+    let proposed = stub.forkctl(&fixture, &["--format", "json", "publish", "--propose"]);
+    assert!(proposed.status.success());
+    let review = json_output(&proposed)["result"]["head"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // Only the pull request leads to the proposal: the clone has no ref for it.
+    git_ok(&fixture.repo, ["update-ref", "-d", PROPOSAL_REF]);
+
+    let elsewhere = stub.forkctl(
+        &fixture,
+        &[
+            "--format",
+            "json",
+            "publish",
+            "--promote",
+            "--proposal",
+            "https://github.com/example/other/pull/1",
+        ],
+    );
+    assert!(!elsewhere.status.success());
+    assert_eq!(json_output(&elsewhere)["error"]["code"], "invalid_request");
+
+    // GitHub links an owner and repository in any case.
+    let promoted = stub.forkctl(
+        &fixture,
+        &[
+            "--format",
+            "json",
+            "publish",
+            "--promote",
+            "--proposal",
+            "https://github.com/Example/Downstream/pull/1",
+        ],
+    );
+    assert!(
+        promoted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&promoted.stdout)
+    );
+    assert_eq!(json_output(&promoted)["result"]["mode"], "rewrite");
+    assert_eq!(
+        git_capture(&fixture.repo, ["rev-parse", "origin/main"]),
+        git_capture(&fixture.repo, ["rev-parse", "HEAD"])
+    );
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["rev-parse", &format!("{review}^{{tree}}")]),
+        git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD^{tree}"])
+    );
+    let calls = stub.calls();
+    assert!(
+        calls
+            .last()
+            .unwrap()
+            .starts_with(&format!("pr\nview\n1\n--repo\n{GITHUB_REPO}\n")),
+        "{calls:?}"
     );
 }
 
