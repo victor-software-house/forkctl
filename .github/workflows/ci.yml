@@ -7,25 +7,35 @@ on:
 
 permissions:
   contents: read
-  # ctl-core's check:versions reads a pull request that changes a manifest
+  # A check:versions task reads a pull request that changes a manifest
   # version, to tell the Version PR apart from a hand edit.
   pull-requests: read
-
-env:
-  GIT_CONFIG_COUNT: "1"
-  GIT_CONFIG_KEY_0: init.defaultBranch
-  GIT_CONFIG_VALUE_0: main
-  # The CI profile; local work loads dev from .miserc.toml, which CI never does.
-  MISE_ENV: ci
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ github.event.pull_request.base.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
+  # The shared workflow runs verify, picks the runner from this repository's
+  # visibility, and caches builds with mbx.
   verify:
-    name: Verify
+    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@066f0ddf09b4610db12d2ca08d985f9d0ee5e157 # main, 2026-10-19
+    with:
+      mise-version: 2026.10.9
+      advisories: true
+      semver: false
+
+  # What the shared workflow does not run: the suite one test at a time, which
+  # catches tests that share process state, and the release binary build.
+  isolated:
+    name: Isolated tests and release build
     runs-on: ubuntu-latest
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: init.defaultBranch
+      GIT_CONFIG_VALUE_0: main
+      # The CI profile; local work loads dev from .miserc.toml, which CI never does.
+      MISE_ENV: ci
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,33 +48,10 @@ jobs:
           cache: true
       - name: Cache builds with mbx
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
-      - name: Verify
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: mise run verify
-      - name: Advisories
-        run: mise run deny:advisories
+        with:
+          github-cache-mode: objects
+          isolate-objects-cache: true
       - name: Test process isolation
         run: mise run test:isolated
       - name: Build release binary
         run: mise run build
-
-  template:
-    name: Template
-    # A pull request from a fork gets no secrets and cannot read the private
-    # template, so the check is skipped there instead of failing.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Mints a token from the vsh-templates-reader App, installs only uv and
-      # python from mise.template.toml, and fails when the newest template tag
-      # would change the repository.
-      - name: Check the template version
-        uses: victor-software-house/ctl-core/.github/actions/copier-check@1fc4bc9acf3e8ec64eb8433837da5f720c295e93 # main, 2026-10-15
-        with:
-          client-id: ${{ secrets.TEMPLATES_APP_CLIENT_ID }}
-          private-key: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
