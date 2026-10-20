@@ -457,7 +457,11 @@ impl App {
         let github_repo = self.downstream_github_repo(&remote)?;
         let number = url
             .strip_prefix("https://")
-            .and_then(|rest| rest.strip_prefix(github_repo.as_str()))
+            // GitHub ignores the case of hosts, owners, and repository names.
+            .and_then(|rest| {
+                let (repo, rest) = rest.split_at_checked(github_repo.len())?;
+                repo.eq_ignore_ascii_case(&github_repo).then_some(rest)
+            })
             .and_then(|rest| rest.strip_prefix("/pull/"))
             .filter(|number| !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()))
             .ok_or_else(|| {

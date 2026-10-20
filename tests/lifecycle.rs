@@ -2632,6 +2632,7 @@ fn publish_promote_takes_the_proposal_pull_request_url() {
     assert!(!elsewhere.status.success());
     assert_eq!(json_output(&elsewhere)["error"]["code"], "invalid_request");
 
+    // GitHub links an owner and repository in any case.
     let promoted = stub.forkctl(
         &fixture,
         &[
@@ -2640,7 +2641,7 @@ fn publish_promote_takes_the_proposal_pull_request_url() {
             "publish",
             "--promote",
             "--proposal",
-            PROPOSAL_URL,
+            "https://github.com/Example/Downstream/pull/1",
         ],
     );
     assert!(
