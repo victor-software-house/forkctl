@@ -19,9 +19,9 @@ jobs:
   # The shared workflow runs verify, picks the runner from this repository's
   # visibility, and caches builds with mbx.
   verify:
-    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@a04de3586cc377e1c7d98972f10ae7e8fb4c0631 # main, 2026-10-21
+    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@139ef87290aa73f99f37d486e94baca96bad5a36 # main, 2026-10-22
     with:
-      mise-version: 2026.10.9
+      mise-version: 2026.10.17
       advisories: true
       semver: false
       timeout-minutes: 8
@@ -45,7 +45,7 @@ jobs:
       - name: Install locked toolchain
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.9
+          version: 2026.10.17
           cache: true
       - name: Cache builds with mbx
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2

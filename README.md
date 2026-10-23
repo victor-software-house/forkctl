@@ -14,7 +14,7 @@ Clap and the local JSON API execute the same typed handlers. Domain modules neve
 ## Consumer setup
 
 ```toml
-min_version = "2026.10.9"
+min_version = "2026.10.17"
 
 [settings]
 experimental = true
