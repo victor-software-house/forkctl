@@ -1,5 +1,5 @@
-# yaml-language-server: $schema=https://github.com/victor-software-house/qctl/releases/download/v0.5.9/tasks.schema.json
-schema_version: 4
+# yaml-language-server: $schema=https://github.com/victor-software-house/qctl/releases/download/v0.6.0/tasks.schema.json
+schema_version: 5
 prefix: FRK
 
 style:
