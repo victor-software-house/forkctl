@@ -32,7 +32,7 @@ jq = "1.8.2"
 "github:nextest-rs/nextest" = "cargo-nextest-0.9.143"
 usage = "6.11.1"
 gh = "2.95.0"
-"github:victor-software-house/verctl" = "0.5.1"
+"github:victor-software-house/verctl" = "0.7.0"
 # Test-only: the declared-check lifecycle test exercises a real ast-grep command. Consumers
 # name their own tools in their own mise.toml; forkctl ships no check tooling.
 ast-grep = "0.45.0"
@@ -83,7 +83,7 @@ includes = [
   "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=5927d79c3689854aaef93a55d94df6ec8bd6a584",
   # The ver task the release workflow and check:versions run; it pins the
   # verctl above.
-  "git::https://github.com/victor-software-house/verctl.git//tasks/ver?ref=v0.5.1",
+  "git::https://github.com/victor-software-house/verctl.git//tasks/ver?ref=v0.7.0",
   # The shared Rust tasks, at actions main, 2026-10-24.
   "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=19aa1c59bc8001e5df50ad52745b8c678474cdf7",
   # template:check, template:off, and template:on, at actions main, 2026-10-24.
