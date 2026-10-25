@@ -59,7 +59,7 @@ jobs:
   # What the shared workflow does not run: the suite one test at a time, which
   # catches tests that share process state, and the release binary build.
   isolated:
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft && github.event_name != 'schedule' }}
     name: Isolated tests and release build
     runs-on: ubuntu-latest
     env:
