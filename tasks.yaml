@@ -19,6 +19,20 @@ queue:
       - restore_operation_stack passes the journal's patch names to stg uncommit, as init hydration already does.
     notes:
       - 'Seen downstream on 0.0.20 and 0.0.38: abort rebuilt a stack with stg uncommit --to, which names patches from commit subjects cut to 30 characters, so the restored series did not match the journal and abort failed. Setting stgit.namelength to 0 works around it.'
+
+  - id: FRK-029
+    title: Write the same patch exports in every clone
+    scope: export
+    outcome: >-
+      A source patch export carries full object ids and ignores stgit.diff-opts, so
+      check passes in every clone of the same stack.
+    blocked_by: []
+    acceptance:
+      - patch_exports_do_not_depend_on_clone_configuration passes, with forkctl check succeeding after core.abbrev=12 and stgit.diff-opts=--no-prefix.
+      - mise run verify passes in CI.
+    plan: openspec/changes/deterministic-patch-exports/proposal.md
+    notes:
+      - 'Seen downstream on 0.0.38: a fresh clone with 105,851 objects abbreviated ids to 9 characters where the committed exports had 8, and check failed with export differs.'
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

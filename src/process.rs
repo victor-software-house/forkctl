@@ -41,8 +41,33 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    output_with_config(dir, program, args, &[])
+}
+
+/// Runs `program` like [`output`], with `config` as Git configuration that
+/// outranks every configuration file. `command` already removed any inherited
+/// `GIT_CONFIG_COUNT`, so only these entries apply.
+pub(crate) fn output_with_config<I, S>(
+    dir: &Path,
+    program: &str,
+    args: I,
+    config: &[(&str, &str)],
+) -> AppResult<Output>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let args = owned_args(args);
-    let output = command(dir, program)
+    let mut command = command(dir, program);
+    if !config.is_empty() {
+        command.env("GIT_CONFIG_COUNT", config.len().to_string());
+        for (index, (key, value)) in config.iter().enumerate() {
+            command
+                .env(format!("GIT_CONFIG_KEY_{index}"), key)
+                .env(format!("GIT_CONFIG_VALUE_{index}"), value);
+        }
+    }
+    let output = command
         .args(&args)
         .output()
         .internal(format!("run {program}"))?;

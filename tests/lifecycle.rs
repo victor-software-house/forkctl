@@ -110,6 +110,29 @@ fn refresh_below_the_top_is_refused_without_rewrite_below() {
 }
 
 #[test]
+fn patch_exports_do_not_depend_on_clone_configuration() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let export = fs::read_to_string(
+        fixture
+            .repo
+            .join("patches/downstream/0001-source-change.patch"),
+    )
+    .unwrap();
+    let index = export
+        .lines()
+        .find_map(|line| line.strip_prefix("index "))
+        .unwrap();
+    let (old, new) = index.split_once("..").unwrap();
+    let new = new.split_once(' ').map_or(new, |(id, _mode)| id);
+    assert_eq!((old.len(), new.len()), (40, 40), "{index}");
+
+    git_ok(&fixture.repo, ["config", "core.abbrev", "12"]);
+    git_ok(&fixture.repo, ["config", "stgit.diff-opts", "--no-prefix"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
 fn complete_check_rejects_unexpected_tracked_patch_export() {
     let fixture = Fixture::new();
     let stale = fixture.repo.join("patches/downstream/9999-stale.patch");
