@@ -2,7 +2,7 @@
 # Tool pins are generated from root mise.toml by `mise run version:sync`; the forkctl pin is rewritten by the verctl Version PR.
 #MISE description="Run the complete forkctl CLI with exact Git/StGit tools and mounted shell completion"
 #MISE dir="{{cwd}}"
-#MISE tools = { rust = "1.99.0", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.42" }
+#MISE tools = { rust = "1.99.0", "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }, "github:victor-software-house/forkctl" = "0.0.43" }
 #MISE raw=true
 #MISE raw_args=true
 #USAGE mount "mise run --quiet fork -- --usage-spec=fork"

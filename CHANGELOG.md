@@ -1,5 +1,11 @@
 # Changelog
 
+## forkctl 0.0.43
+
+### Fixed
+
+- Source patch exports are now the same in every clone. Their `index` lines carry full blob ids, where git's automatic abbreviation grew from 8 to 9 characters once a clone held more objects, so `check` failed with `export differs` on a clone that had fetched more of upstream. A `stgit.diff-opts` setting in the clone's or the user's Git configuration no longer changes an export either. The first `patch refresh` after the upgrade rewrites the `index` lines of every export, so make it the refresh that moves the forkctl pin ([#143](https://github.com/victor-software-house/forkctl/pull/143)).
+
 ## forkctl 0.0.42
 
 - `publish --promote --proposal` takes the proposal pull request's URL, as its help says: forkctl reads the pull request's head with `gh`, fetches it from the downstream remote, and refuses a URL of another repository or a proposal that moved after `gh` read it ([#125](https://github.com/victor-software-house/forkctl/pull/125)).
