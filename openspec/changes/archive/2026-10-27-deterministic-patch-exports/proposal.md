@@ -50,6 +50,6 @@ None.
 - [`src/process.rs`][process]: `output_with_config`.
 - [`tests/lifecycle.rs`][lifecycle]: `patch_exports_do_not_depend_on_clone_configuration`.
 
-[mod]: ../../../src/app/mod.rs
-[process]: ../../../src/process.rs
-[lifecycle]: ../../../tests/lifecycle.rs
+[mod]: ../../../../src/app/mod.rs
+[process]: ../../../../src/process.rs
+[lifecycle]: ../../../../tests/lifecycle.rs

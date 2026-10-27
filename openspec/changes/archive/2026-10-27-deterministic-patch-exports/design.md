@@ -35,4 +35,4 @@ The project keeps no compatibility reader for older forkctl contracts, so `check
 No automatic behaviour is added.
 Exports are generated evidence and have no override or disable path by design.
 
-[mod]: ../../../src/app/mod.rs
+[mod]: ../../../../src/app/mod.rs
