@@ -21,7 +21,7 @@ use crate::ledger;
 use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind, Upstream};
 use crate::manifest_codec::ManifestFormat;
 use crate::manifest_edit::{ManifestEdit, edit_yaml};
-use crate::process::{capture, output, run, succeeds};
+use crate::process::{capture, output, output_with_config, run, succeeds};
 use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
 
 const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
@@ -376,7 +376,10 @@ impl App {
         let template_path = directory.path().join("patchexport.tmpl");
         fs::write(&template_path, EXPORT_TEMPLATE)
             .internal(format!("write {}", template_path.display()))?;
-        Ok(output(
+        // An export is byte-identical in every clone: full blob ids do not
+        // depend on how many objects a clone holds, and an empty
+        // `stgit.diff-opts` keeps clone and user configuration out of the diff.
+        Ok(output_with_config(
             &self.repo,
             "stg",
             [
@@ -384,8 +387,11 @@ impl App {
                 OsStr::new("--stdout"),
                 OsStr::new("--template"),
                 template_path.as_os_str(),
+                OsStr::new("--diff-opt"),
+                OsStr::new("--full-index"),
                 OsStr::new(&patch.name),
             ],
+            &[("stgit.diff-opts", "")],
         )?
         .stdout)
     }

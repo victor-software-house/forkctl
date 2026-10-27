@@ -48,6 +48,20 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-029
+    title: Write the same patch exports in every clone
+    scope: export
+    outcome: >-
+      A source patch export carries full object ids and ignores stgit.diff-opts, so
+      check passes in every clone of the same stack.
+    plan: openspec/changes/archive/2026-10-27-deterministic-patch-exports/proposal.md
+    notes:
+      - 'Seen downstream on 0.0.38: a fresh clone with 105,851 objects abbreviated ids to 9 characters where the committed exports had 8, and check failed with export differs.'
+    completed: 2026-10-27T07:20:31
+    evidence:
+      - openspec/changes/archive/2026-10-27-deterministic-patch-exports/
+    disposition: completed
+
   - id: FRK-027
     title: Take qctl 0.5.9
     scope: mise.toml, mise locks, tasks.yaml
