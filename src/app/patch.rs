@@ -523,6 +523,7 @@ impl App {
         patch: Patch,
         capture_source: CaptureSource,
         captured_paths: Vec<String>,
+        normalized_append_bridge: bool,
     ) -> Result<CommandResult> {
         let conflicts = capture(
             &self.repo,
@@ -539,14 +540,21 @@ impl App {
             )
             .into());
         }
-        // Staged paths belong to the refreshed patch, which is not the top of
-        // the stack once the refresh has written its bookkeeping.
         if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
-            run(
-                &self.repo,
-                "stg",
-                ["refresh", "--patch", &patch.name, "--index"],
-            )?;
+            if operation.phase == "checking" || normalized_append_bridge {
+                // The refresh wrote its commit and bookkeeping, or the append
+                // bridge was set aside, so the staged paths belong to the
+                // refreshed patch, which need not be the top.
+                run(
+                    &self.repo,
+                    "stg",
+                    ["refresh", "--patch", &patch.name, "--index"],
+                )?;
+            } else {
+                // A conflict stopped StGit at the top patch it was pushing,
+                // which owns the resolution.
+                run(&self.repo, "stg", ["refresh", "--index"])?;
+            }
         }
         let series = self.stg_series()?;
         let temporary = series
