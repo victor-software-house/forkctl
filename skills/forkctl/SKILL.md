@@ -118,7 +118,7 @@ A patch may declare checks that `check` runs after its structural validation, so
 
 ```sh
 mise run fork patch edit PATCH \
-  -C 'lint=ast-grep scan --rule rules/lint.yml {files}' \
+  -C 'lint=ast-grep scan --rule .ast-grep/rules/lint.yml {files}' \
   -g 'lint=src/**/*.ts' \
   --check-at lint=patch
 ```

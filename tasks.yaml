@@ -48,6 +48,19 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-032
+    title: Use a consumer path in the skill check example
+    scope: skill
+    outcome: >-
+      The skill example for declared checks names a rule file under .ast-grep/, so it
+      does not read as a file the skill ships.
+    notes:
+      - skills:check in the dotfiles flagged rules/lint.yml in the forkctl 0.0.45 skill as a broken bare reference.
+    completed: 2026-10-28T05:46:28
+    evidence:
+      - f65a55d9824776d0e8ab9dbb520d8ebca18d1ac2
+    disposition: completed
+
   - id: FRK-031
     title: Abort over tracked files a hook rewrote
     scope: operation
