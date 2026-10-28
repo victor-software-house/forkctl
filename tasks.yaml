@@ -19,6 +19,20 @@ queue:
       - restore_operation_stack passes the journal's patch names to stg uncommit, as init hydration already does.
     notes:
       - 'Seen downstream on 0.0.20 and 0.0.38: abort rebuilt a stack with stg uncommit --to, which names patches from commit subjects cut to 30 characters, so the restored series did not match the journal and abort failed. Setting stgit.namelength to 0 works around it.'
+
+  - id: FRK-031
+    title: Abort over tracked files a hook rewrote
+    scope: operation
+    outcome: >-
+      operation abort succeeds when a hook rewrote a tracked file, and a stopped
+      operation names staging owned paths as the fix.
+    blocked_by: []
+    acceptance:
+      - abort_discards_a_tracked_file_a_hook_rewrote and refresh_with_a_hook_rewriting_an_owned_file_continues_once_staged pass.
+      - mise run verify passes in CI.
+    plan: openspec/changes/abort-over-rewritten-files/proposal.md
+    notes:
+      - 'Seen downstream on the 0.0.43 to 0.0.44 pin bump: mise rewrote mise.lock, the refresh stopped in checking, and abort failed in stg delete with mise.lock not uptodate.'
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it

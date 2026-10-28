@@ -90,7 +90,7 @@ Forkctl exposes commands; it does not own a hook manager:
 - pre-commit: `mise run fork check -s`
 - pre-push: `mise run fork check -q`
 
-Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit hook and consumes its final index. A hook that leaves files dirty, such as a regenerated lockfile, fails the final check after the commit is written. A refresh or edit then stays an operation in phase `checking`: restore or remove those paths and run `mise run fork operation continue`, or run `operation abort -y`. A remove, disable, enable, or rebase stays in `ready_to_publish`: restore those paths and run `mise run fork publish`, which checks again, or abort. `patch finish` refuses while any operation is in flight.
+Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit hook and consumes its final index. A hook that leaves files dirty, such as a regenerated lockfile, fails the final check after the commit is written. A refresh or edit then stays an operation in phase `checking`: stage the paths the patch owns, such as a `mise.lock` the new pin rewrote, restore or remove the others, and run `mise run fork operation continue`; or run `operation abort -y`, which discards them. A remove, disable, enable, or rebase stays in `ready_to_publish`: restore those paths and run `mise run fork publish`, which checks again, or abort. `patch finish` refuses while any operation is in flight.
 
 ## Protocol
 

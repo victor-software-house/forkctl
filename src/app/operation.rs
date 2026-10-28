@@ -188,6 +188,9 @@ impl App {
         {
             run(&self.repo, "stg", ["undo", "--hard"])?;
         }
+        // Discard the tracked changes the plan lists, such as a lockfile a hook
+        // rewrote; StGit refuses to delete patches over them.
+        run(&self.repo, "git", ["reset", "--hard", "HEAD"])?;
         run(&self.repo, "stg", ["delete", "--all", "--conflicts=allow"])?;
         run(&self.repo, "git", ["reset", "--hard", restored_tip])?;
         run(

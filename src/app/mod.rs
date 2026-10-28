@@ -571,7 +571,7 @@ impl App {
         let mut operation = operation.clone();
         operation.phase = phase.into();
         operation.next_actions = vec![
-            "fix what the check reported, such as paths a hook left dirty".into(),
+            "fix what the check reported: stage paths a hook rewrote that the patch owns, and restore the others".into(),
             resume.into(),
             "or discard the operation: mise run fork operation abort --yes".into(),
         ];
