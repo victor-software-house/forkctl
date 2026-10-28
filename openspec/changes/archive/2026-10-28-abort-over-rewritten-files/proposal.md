@@ -18,7 +18,8 @@ Protocol version 1 is unchanged.
 
 - `operation abort` resets tracked changes to `HEAD` before StGit deletes the stack, so a tracked file a hook rewrote no longer blocks it.
   The plan already lists those paths and the command already requires `--yes`.
-- `operation continue` refreshes staged paths into the refreshed patch with `stg refresh --patch <patch> --index`, wherever it sits in the stack.
+- When a refresh stopped in its final check, `operation continue` refreshes staged paths into the refreshed patch with `stg refresh --patch <patch> --index`, wherever it sits in the stack.
+  A conflict still refreshes the top patch, where StGit stopped, which owns the resolution.
 - The first next action of an operation stopped by its final check reads: stage paths a hook rewrote that the patch owns, and restore the others.
 
 ## Capabilities
@@ -38,7 +39,7 @@ None.
 - [`src/app/mod.rs`][mod]: `check_written_operation`.
 - [`tests/lifecycle.rs`][lifecycle]: two tests.
 
-[operation]: ../../../src/app/operation.rs
-[mod]: ../../../src/app/mod.rs
-[patch]: ../../../src/app/patch.rs
-[lifecycle]: ../../../tests/lifecycle.rs
+[operation]: ../../../../src/app/operation.rs
+[mod]: ../../../../src/app/mod.rs
+[patch]: ../../../../src/app/patch.rs
+[lifecycle]: ../../../../tests/lifecycle.rs
