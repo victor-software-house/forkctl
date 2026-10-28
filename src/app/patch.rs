@@ -265,11 +265,20 @@ impl App {
         self.finish_patch_edit(&operation, edits, patch, old_commit)
     }
 
-    /// Runs a StGit step of `operation continue`. A failure, such as a conflict
-    /// while StGit pushes the patches above, records phase `conflict`, so the
-    /// next continue refreshes the top patch, which owns the resolution.
+    /// Runs an `stg` step of `operation continue`. When the step stops on a
+    /// conflict, such as while `stg` pushes the patches above, it records phase
+    /// `conflict`, so the next continue refreshes the top patch, which owns the
+    /// resolution. Any other failure keeps the phase.
     fn continue_stg(&self, operation: &OperationState, args: &[&str]) -> Result<()> {
-        run(&self.repo, "stg", args).or_else(|error| {
+        let Err(error) = run(&self.repo, "stg", args) else {
+            return Ok(());
+        };
+        let unmerged = capture(
+            &self.repo,
+            "git",
+            ["diff", "--name-only", "--diff-filter=U"],
+        )?;
+        if !unmerged.is_empty() {
             let mut operation = operation.clone();
             operation.phase = "conflict".into();
             operation.next_actions = vec![
@@ -278,8 +287,8 @@ impl App {
                 "mise run fork operation continue".into(),
             ];
             self.write_operation(&operation)?;
-            Err(error)
-        })
+        }
+        Err(error)
     }
 
     /// Refuses a scope that no longer owns every path `commit` changes, before
