@@ -148,15 +148,25 @@ impl App {
         self.manifest_error = rediscovered.manifest_error;
         self.manifest_text = rediscovered.manifest_text;
         self.manifest_edits.clear();
-        let check = self.check_restored_repository(matches!(
-            operation.kind,
-            OperationKind::PatchRefresh
-                | OperationKind::PatchEdit
-                | OperationKind::PatchRemove
-                | OperationKind::PatchDisable
-                | OperationKind::PatchEnable
-        ))?;
+        // The restored stack is verified commit by commit above, so the
+        // operation ends here. The check then reports on the state the
+        // operation started from, which it may never have passed.
         self.complete_local_operation(&operation)?;
+        let check = self
+            .check_restored_repository(matches!(
+                operation.kind,
+                OperationKind::PatchRefresh
+                    | OperationKind::PatchEdit
+                    | OperationKind::PatchRemove
+                    | OperationKind::PatchDisable
+                    | OperationKind::PatchEnable
+            ))
+            .map_err(|error| {
+                error.context(format!(
+                    "operation {} was aborted and HEAD restored to {restored_tip}, but the restored stack fails check",
+                    operation.id
+                ))
+            })?;
         Ok(CommandResult::OperationAbort(OperationAbortResult {
             operation_id: operation.id,
             restored_tip,

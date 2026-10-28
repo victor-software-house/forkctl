@@ -62,6 +62,7 @@ impl App {
             writes: vec![
                 self.manifest_path.display().to_string(),
                 self.manifest()?.documents.ledger.clone(),
+                self.manifest()?.documents.exports.clone(),
             ],
             hooks: vec!["pre-commit via bookkeeping refresh".into()],
             ref_updates: Vec::new(),
@@ -77,9 +78,7 @@ impl App {
         }
 
         self.edit_manifest(edits)?;
-        self.write_manifest()?;
-        let ledger = self.write_ledger()?;
-        let generated = vec![self.manifest_path.clone(), ledger];
+        let generated = self.write_generated()?;
         self.refresh_bookkeeping(&generated)?;
         let check = self.check_repository(false)?;
         Ok(CommandResult::ContractEdit(ContractEditResult {

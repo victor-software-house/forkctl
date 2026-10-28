@@ -93,12 +93,9 @@ impl App {
             }));
         }
         self.edit_manifest(edits)?;
-        self.write_manifest()?;
-        let exports = self.write_exports()?;
-        let ledger = self.write_ledger()?;
-        let generated = std::iter::once(self.manifest_path.clone())
-            .chain(std::iter::once(ledger))
-            .chain(exports)
+        let generated = self
+            .write_generated()?
+            .into_iter()
             .chain(dropped.removed_exports)
             .collect::<Vec<PathBuf>>();
         self.refresh_bookkeeping(&generated)?;
@@ -108,7 +105,6 @@ impl App {
         operation.new_tip = Some(new_tip.clone());
         operation.next_actions = vec!["review range-diff report".into(), "forkctl publish".into()];
         self.write_operation(&operation)?;
-        let check = self.check_repository(false)?;
         let range = capture(
             &self.repo,
             "git",
@@ -129,6 +125,14 @@ impl App {
         });
         operation.phase = "ready_to_publish".into();
         self.write_operation(&operation)?;
+        // The replayed stack and its report are written, so a failing check
+        // leaves a reviewable candidate that publish checks again.
+        let check = self.check_written_operation(
+            &operation,
+            false,
+            "ready_to_publish",
+            "review the range-diff report, then mise run fork publish, which checks again",
+        )?;
         self.check_operation(&operation)?;
         Ok(RebaseResult {
             selected_target: target.selector,

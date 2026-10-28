@@ -22,6 +22,7 @@ use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind,
 use crate::manifest_codec::ManifestFormat;
 use crate::manifest_edit::{ManifestEdit, edit_yaml};
 use crate::process::{capture, output, output_with_config, run, succeeds};
+use crate::protocol::CheckResult;
 use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
 
 const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
@@ -536,6 +537,50 @@ impl App {
         let rendered = ledger::render(manifest).internal("render patch ledger")?;
         write_atomic(&path, rendered.as_bytes())?;
         Ok(path)
+    }
+
+    /// Writes the manifest and regenerates every generated document: the
+    /// ledger and each source patch export. Every command that changes the
+    /// bookkeeping patch writes all of them, so no generated file is left in
+    /// the form an older forkctl wrote.
+    pub(super) fn write_generated(&mut self) -> Result<Vec<PathBuf>> {
+        self.write_manifest()?;
+        let exports = self.write_exports()?;
+        let ledger = self.write_ledger()?;
+        Ok(std::iter::once(self.manifest_path.clone())
+            .chain(std::iter::once(ledger))
+            .chain(exports)
+            .collect())
+    }
+
+    /// Runs the full check that ends an operation whose commits are already
+    /// written. A failure records `phase` and next actions that name the fix,
+    /// `resume`, and `operation abort --yes`, so the operation never stops
+    /// without a way forward.
+    pub(super) fn check_written_operation(
+        &self,
+        operation: &OperationState,
+        allow_active: bool,
+        phase: &str,
+        resume: &str,
+    ) -> Result<CheckResult> {
+        let error = match self.check_repository(allow_active) {
+            Ok(check) => return Ok(check),
+            Err(error) => error,
+        };
+        let mut operation = operation.clone();
+        operation.phase = phase.into();
+        operation.next_actions = vec![
+            "fix what the check reported, such as paths a hook left dirty".into(),
+            resume.into(),
+            "or discard the operation: mise run fork operation abort --yes".into(),
+        ];
+        if let Err(write_error) = self.write_operation(&operation) {
+            return Err(error.context(format!(
+                "could not record the recovery: {write_error}; fix that write failure and what the check reported, then run {resume}, or mise run fork operation abort --yes"
+            )));
+        }
+        Err(error)
     }
 
     pub(super) fn refresh_bookkeeping(&self, paths: &[PathBuf]) -> Result<()> {
