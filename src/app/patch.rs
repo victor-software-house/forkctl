@@ -312,7 +312,18 @@ impl App {
             .into());
         }
         if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
-            run(&self.repo, "stg", ["refresh", "--index"])?;
+            if operation.phase == "conflict" {
+                // A conflict stopped StGit at the top patch it was pushing.
+                run(&self.repo, "stg", ["refresh", "--index"])?;
+            } else {
+                // After the final check, the top is the bookkeeping patch, so
+                // staged paths go to the edited patch by name.
+                run(
+                    &self.repo,
+                    "stg",
+                    ["refresh", "--patch", &patch.name, "--index"],
+                )?;
+            }
         }
         if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0"
             && let Err(error) = run(&self.repo, "stg", ["push", "--all"])
