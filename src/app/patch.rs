@@ -541,19 +541,18 @@ impl App {
             .into());
         }
         if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
-            if operation.phase == "checking" || normalized_append_bridge {
-                // The refresh wrote its commit and bookkeeping, or the append
-                // bridge was set aside, so the staged paths belong to the
-                // refreshed patch, which need not be the top.
+            if operation.phase == "conflict" && !normalized_append_bridge {
+                // A conflict stopped StGit at the top patch it was pushing,
+                // which owns the resolution.
+                run(&self.repo, "stg", ["refresh", "--index"])?;
+            } else {
+                // Otherwise the staged paths belong to the refreshed patch,
+                // which is below the top once the bookkeeping is written.
                 run(
                     &self.repo,
                     "stg",
                     ["refresh", "--patch", &patch.name, "--index"],
                 )?;
-            } else {
-                // A conflict stopped StGit at the top patch it was pushing,
-                // which owns the resolution.
-                run(&self.repo, "stg", ["refresh", "--index"])?;
             }
         }
         let series = self.stg_series()?;

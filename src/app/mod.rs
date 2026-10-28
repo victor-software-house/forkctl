@@ -570,8 +570,13 @@ impl App {
         };
         let mut operation = operation.clone();
         operation.phase = phase.into();
+        let fix = if phase == "checking" {
+            "fix what the check reported: stage paths a hook rewrote that the patch owns, and restore the others"
+        } else {
+            "fix what the check reported: restore or remove paths a hook left dirty; the commits are already written"
+        };
         operation.next_actions = vec![
-            "fix what the check reported: stage paths a hook rewrote that the patch owns, and restore the others".into(),
+            fix.into(),
             resume.into(),
             "or discard the operation: mise run fork operation abort --yes".into(),
         ];
