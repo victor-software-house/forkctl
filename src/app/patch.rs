@@ -214,18 +214,7 @@ impl App {
         patch
             .validate()
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
-        let uncovered = self
-            .patch_paths(&old_commit)?
-            .into_iter()
-            .filter(|path| !patch.owns(path))
-            .collect::<Vec<_>>();
-        if !uncovered.is_empty() {
-            return Err(DomainError::invalid_request(format!(
-                "the scope of patch {name} must still cover every path it changes; uncovered: {}",
-                uncovered.join(", ")
-            ))
-            .into());
-        }
+        self.require_scope_covers_commit(&patch, &old_commit)?;
         let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let plan = MutationPlan {
             command: "patch.edit".into(),
@@ -274,6 +263,25 @@ impl App {
             )));
         }
         self.finish_patch_edit(&operation, edits, patch, old_commit)
+    }
+
+    /// Refuses a scope that no longer owns every path `commit` changes, before
+    /// any write, so the final check cannot fail on it.
+    fn require_scope_covers_commit(&self, patch: &Patch, commit: &str) -> Result<()> {
+        let uncovered = self
+            .patch_paths(commit)?
+            .into_iter()
+            .filter(|path| !patch.owns(path))
+            .collect::<Vec<_>>();
+        if uncovered.is_empty() {
+            return Ok(());
+        }
+        Err(DomainError::invalid_request(format!(
+            "the scope of patch {} must still cover every path it changes; uncovered: {}",
+            patch.name,
+            uncovered.join(", ")
+        ))
+        .into())
     }
 
     pub(super) fn continue_patch_edit(
