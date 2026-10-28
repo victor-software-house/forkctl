@@ -729,6 +729,110 @@ fn patch_edit_keeps_the_scope_over_changed_paths() {
 }
 
 #[test]
+fn refresh_with_a_hook_rewriting_an_owned_file_continues_once_staged() {
+    let fixture = Fixture::new();
+    stage_tracked_lockfile_patch(&fixture);
+
+    let refresh = fixture.forkctl(&["--format", "json", "patch", "refresh"]);
+    assert!(!refresh.status.success());
+    let refresh: serde_json::Value = serde_json::from_slice(&refresh.stdout).unwrap();
+    assert_eq!(refresh["error"]["code"], "dirty_worktree");
+
+    git_ok(&fixture.repo, ["add", "tool.lock"]);
+    fixture.forkctl_ok(&["operation", "continue"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["show", "HEAD~1:tool.lock"]),
+        "locked"
+    );
+}
+
+#[test]
+fn edit_with_a_hook_rewriting_an_owned_file_continues_once_staged() {
+    let fixture = Fixture::new();
+    stage_tracked_lockfile_patch(&fixture);
+    fs::remove_file(fixture.repo.join(".git/hooks/pre-commit")).unwrap();
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    install_lockfile_rewrite_hook(&fixture);
+
+    let edit = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "edit",
+        "locked-source",
+        "--purpose",
+        "Changed purpose.",
+    ]);
+    assert!(!edit.status.success());
+    let edit: serde_json::Value = serde_json::from_slice(&edit.stdout).unwrap();
+    assert_eq!(edit["error"]["code"], "dirty_worktree");
+
+    git_ok(&fixture.repo, ["add", "tool.lock"]);
+    fixture.forkctl_ok(&["operation", "continue"]);
+    fixture.forkctl_ok(&["check"]);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["show", "HEAD~1:tool.lock"]),
+        "locked"
+    );
+}
+
+#[test]
+fn abort_discards_a_tracked_file_a_hook_rewrote() {
+    let fixture = Fixture::new();
+    let head = git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD"]);
+    stage_tracked_lockfile_patch(&fixture);
+    let refresh = fixture.forkctl(&["patch", "refresh"]);
+    assert!(!refresh.status.success());
+    fs::remove_file(fixture.repo.join(".git/hooks/pre-commit")).unwrap();
+
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD"]),
+        head
+    );
+}
+
+/// Starts a source patch that owns `source.txt` and a tracked `tool.lock`,
+/// stages both, and installs a pre-commit hook that rewrites `tool.lock`, as
+/// `mise` rewrites `mise.lock` after a pin changes.
+fn stage_tracked_lockfile_patch(fixture: &Fixture) {
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "locked-source",
+        "--kind",
+        "source",
+        "--purpose",
+        "Change source beside a lockfile.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream provides equivalent behavior.",
+        "--scope",
+        "source.txt",
+        "--scope",
+        "tool.lock",
+    ]);
+    fs::write(fixture.repo.join("source.txt"), "downstream\n").unwrap();
+    fs::write(fixture.repo.join("tool.lock"), "old\n").unwrap();
+    git_ok(&fixture.repo, ["add", "source.txt", "tool.lock"]);
+    install_lockfile_rewrite_hook(fixture);
+}
+
+fn install_lockfile_rewrite_hook(fixture: &Fixture) {
+    let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\nprintf 'locked\\n' > tool.lock\n").unwrap();
+    make_executable(&hook);
+}
+
+#[test]
 fn patch_edit_left_dirty_by_a_hook_names_its_recovery() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");

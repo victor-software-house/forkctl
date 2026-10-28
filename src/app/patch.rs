@@ -265,6 +265,39 @@ impl App {
         self.finish_patch_edit(&operation, edits, patch, old_commit)
     }
 
+    /// Runs an `stg` step of `operation continue`. When the step stops on a
+    /// conflict, such as while `stg` pushes the patches above, it records phase
+    /// `conflict`, so the next continue refreshes the top patch, which owns the
+    /// resolution. Any other failure keeps the phase.
+    fn continue_stg(&self, operation: &OperationState, args: &[&str]) -> Result<()> {
+        let Err(error) = run(&self.repo, "stg", args) else {
+            return Ok(());
+        };
+        let unmerged = match capture(
+            &self.repo,
+            "git",
+            ["diff", "--name-only", "--diff-filter=U"],
+        ) {
+            Ok(unmerged) => unmerged,
+            Err(check) => {
+                return Err(error.context(format!("could not check for unmerged paths: {check}")));
+            }
+        };
+        if !unmerged.is_empty() {
+            let mut operation = operation.clone();
+            operation.phase = "conflict".into();
+            operation.next_actions = vec![
+                "resolve conflict content".into(),
+                "git add --update".into(),
+                "mise run fork operation continue".into(),
+            ];
+            if let Err(write) = self.write_operation(&operation) {
+                return Err(error.context(format!("could not record the conflict: {write}")));
+            }
+        }
+        Err(error)
+    }
+
     /// Refuses a scope that no longer owns every path `commit` changes, before
     /// any write, so the final check cannot fail on it.
     fn require_scope_covers_commit(&self, patch: &Patch, commit: &str) -> Result<()> {
@@ -312,14 +345,21 @@ impl App {
             .into());
         }
         if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
-            run(&self.repo, "stg", ["refresh", "--index"])?;
+            if operation.phase == "conflict" {
+                // A conflict stopped StGit at the top patch it was pushing.
+                self.continue_stg(operation, &["refresh", "--index"])?;
+            } else {
+                // After the final check, the top is the bookkeeping patch, so
+                // staged paths go to the edited patch by name.
+                self.continue_stg(operation, &["refresh", "--patch", &patch.name, "--index"])?;
+            }
         }
-        if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0"
-            && let Err(error) = run(&self.repo, "stg", ["push", "--all"])
-        {
-            return Err(error.context(
-                "patch edit continuation stopped while restoring applied patches; resolve and continue again",
-            ));
+        if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0" {
+            self.continue_stg(operation, &["push", "--all"]).map_err(|error| {
+                error.context(
+                    "patch edit continuation stopped while restoring applied patches; resolve and continue again",
+                )
+            })?;
         }
         let expected = proposed.patch_names();
         if self.stg_series()? != expected {
@@ -541,14 +581,14 @@ impl App {
             .into());
         }
         if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
-            if normalized_append_bridge {
-                run(
-                    &self.repo,
-                    "stg",
-                    ["refresh", "--patch", &patch.name, "--index"],
-                )?;
+            if operation.phase == "conflict" && !normalized_append_bridge {
+                // A conflict stopped StGit at the top patch it was pushing,
+                // which owns the resolution.
+                self.continue_stg(operation, &["refresh", "--index"])?;
             } else {
-                run(&self.repo, "stg", ["refresh", "--index"])?;
+                // Otherwise the staged paths belong to the refreshed patch,
+                // which is below the top once the bookkeeping is written.
+                self.continue_stg(operation, &["refresh", "--patch", &patch.name, "--index"])?;
             }
         }
         let series = self.stg_series()?;
@@ -556,11 +596,10 @@ impl App {
             .iter()
             .find(|name| name.starts_with("refresh-temp"))
             .cloned();
-        if let Some(temporary) = temporary
-            && let Err(error) = run(
-                &self.repo,
-                "stg",
-                [
+        if let Some(temporary) = temporary {
+            self.continue_stg(
+                operation,
+                &[
                     "squash",
                     "--name",
                     &patch.name,
@@ -570,17 +609,18 @@ impl App {
                     &temporary,
                 ],
             )
-        {
-            return Err(error.context(
-                "refresh continuation stopped while squashing StGit's temporary patch; resolve and continue again",
-            ));
+            .map_err(|error| {
+                error.context(
+                    "refresh continuation stopped while squashing StGit's temporary patch; resolve and continue again",
+                )
+            })?;
         }
-        if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0"
-            && let Err(error) = run(&self.repo, "stg", ["push", "--all"])
-        {
-            return Err(error.context(
-                "refresh continuation stopped while restoring applied patches; resolve and continue again",
-            ));
+        if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0" {
+            self.continue_stg(operation, &["push", "--all"]).map_err(|error| {
+                error.context(
+                    "refresh continuation stopped while restoring applied patches; resolve and continue again",
+                )
+            })?;
         }
         if capture(&self.repo, "stg", ["top"])? != self.manifest()?.bookkeeping_patch {
             return Err(DomainError::operation_conflict(

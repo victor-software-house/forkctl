@@ -48,6 +48,20 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-031
+    title: Abort over tracked files a hook rewrote
+    scope: operation
+    outcome: >-
+      operation abort succeeds when a hook rewrote a tracked file, and a stopped
+      operation names staging owned paths as the fix.
+    plan: openspec/changes/archive/2026-10-28-abort-over-rewritten-files/proposal.md
+    notes:
+      - 'Seen downstream on the 0.0.43 to 0.0.44 pin bump: mise rewrote mise.lock, the refresh stopped in checking, and abort failed in stg delete with mise.lock not uptodate.'
+    completed: 2026-10-28T03:57:48
+    evidence:
+      - openspec/changes/archive/2026-10-28-abort-over-rewritten-files/
+    disposition: completed
+
   - id: FRK-030
     title: Keep every operation recoverable when its final check fails
     scope: operation
