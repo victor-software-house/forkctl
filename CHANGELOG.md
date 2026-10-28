@@ -1,5 +1,11 @@
 # Changelog
 
+## forkctl 0.0.46
+
+### Fixed
+
+- The skill's declared-check example names `.ast-grep/rules/lint.yml` where it named `rules/lint.yml`, a path that reads as a file the skill ships and that skill reference checkers report as missing ([#149](https://github.com/victor-software-house/forkctl/pull/149)).
+
 ## forkctl 0.0.45
 
 ### Fixed
