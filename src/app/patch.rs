@@ -523,7 +523,6 @@ impl App {
         patch: Patch,
         capture_source: CaptureSource,
         captured_paths: Vec<String>,
-        normalized_append_bridge: bool,
     ) -> Result<CommandResult> {
         let conflicts = capture(
             &self.repo,
@@ -540,16 +539,14 @@ impl App {
             )
             .into());
         }
+        // Staged paths belong to the refreshed patch, which is not the top of
+        // the stack once the refresh has written its bookkeeping.
         if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
-            if normalized_append_bridge {
-                run(
-                    &self.repo,
-                    "stg",
-                    ["refresh", "--patch", &patch.name, "--index"],
-                )?;
-            } else {
-                run(&self.repo, "stg", ["refresh", "--index"])?;
-            }
+            run(
+                &self.repo,
+                "stg",
+                ["refresh", "--patch", &patch.name, "--index"],
+            )?;
         }
         let series = self.stg_series()?;
         let temporary = series

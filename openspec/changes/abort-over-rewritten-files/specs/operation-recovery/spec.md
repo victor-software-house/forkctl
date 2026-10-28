@@ -11,7 +11,7 @@
 
 ### Requirement: A refresh continues once the rewritten owned path is staged
 
-When the final check of `patch refresh` fails because a hook rewrote a path the patch owns, staging that path and running `operation continue` SHALL complete the refresh with the staged content in the patch.
+When the final check of `patch refresh` fails because a hook rewrote a path the patch owns, staging that path and running `operation continue` SHALL complete the refresh with the staged content in the refreshed patch, wherever that patch sits in the stack.
 
 #### Scenario: Staging the rewritten lockfile
 

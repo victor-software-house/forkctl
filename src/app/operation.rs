@@ -32,7 +32,7 @@ impl App {
                 requires_confirmation: false,
             }));
         }
-        let normalized_append_bridge = self.normalize_append_bridge_head()?.is_some();
+        self.normalize_append_bridge_head()?;
         let result = match operation.kind {
             OperationKind::Rebase => Some(Box::new(CommandResult::Rebase(Box::new(
                 self.continue_rebase(operation)?,
@@ -65,7 +65,6 @@ impl App {
                     patch,
                     capture,
                     captured_paths,
-                    normalized_append_bridge,
                 )?))
             }
             kind @ (OperationKind::PatchRemove
