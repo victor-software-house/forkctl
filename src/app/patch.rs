@@ -273,11 +273,16 @@ impl App {
         let Err(error) = run(&self.repo, "stg", args) else {
             return Ok(());
         };
-        let unmerged = capture(
+        let unmerged = match capture(
             &self.repo,
             "git",
             ["diff", "--name-only", "--diff-filter=U"],
-        )?;
+        ) {
+            Ok(unmerged) => unmerged,
+            Err(check) => {
+                return Err(error.context(format!("could not check for unmerged paths: {check}")));
+            }
+        };
         if !unmerged.is_empty() {
             let mut operation = operation.clone();
             operation.phase = "conflict".into();
@@ -286,7 +291,9 @@ impl App {
                 "git add --update".into(),
                 "mise run fork operation continue".into(),
             ];
-            self.write_operation(&operation)?;
+            if let Err(write) = self.write_operation(&operation) {
+                return Err(error.context(format!("could not record the conflict: {write}")));
+            }
         }
         Err(error)
     }
