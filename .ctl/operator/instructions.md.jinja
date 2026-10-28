@@ -76,7 +76,7 @@ Checks run during `check` after structural validation, so they gate `patch refre
 - `mise run fork rebase -o REF` records exact recovery/lease evidence and delegates replay to StGit; it never publishes.
 - A rebase that leaves a surviving patch touching fewer paths records the lost paths as recovery-bound history and reports them as `path_changed_patches`; inspect them before publishing. This is path-delta evidence, not a claim of upstream causality.
 - Resolve conflicts with supported Git/StGit commands, then run `mise run fork operation continue`.
-- `mise run fork operation status` reports the exact phase and next actions; `operation abort -n` plans restoration and `operation abort -y` performs it. These remain usable when an in-flight conflict leaves the tracked manifest unreadable.
+- `mise run fork operation status` reports the exact phase and next actions; `operation abort -n` plans restoration and `operation abort -y` performs it. Abort ends the operation once the restored stack matches the journal; if the restored stack then fails `check`, abort says so and the operation is still gone. These remain usable when an in-flight conflict leaves the tracked manifest unreadable.
 - Review the range-diff report and consumer semantic checks before `mise run fork publish`.
 - `mise run fork publish` uses the repository default (`downstream.publish`, shown by `status`). `rewrite` is the default: exact-lease rewrite with a recovery tag at the overwritten tip. `append` keeps that tip as an ancestor and fast-forwards. `propose` pushes `forkctl/proposal/<branch>` (net tree vs the current tip) under a lease on the tip it read, so a repeat updates the branch in place, and opens or updates its draft PR with `gh --repo` taken from the downstream remote URL. A missing or failing `gh` fails the command: before the push when forkctl looks up the PR, and after the push, retryable, when it creates or edits the PR. `publish --promote` moves the lease after the proposal tree matches HEAD.
 - Set the default once: `init --publish append` or `contract edit --publish-mode append`. Override one shot with `--rewrite`, `--append`, or `--propose`. `--set-default MODE` persists a default without publishing.
@@ -90,7 +90,7 @@ Forkctl exposes commands; it does not own a hook manager:
 - pre-commit: `mise run fork check -s`
 - pre-push: `mise run fork check -q`
 
-Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit hook and consumes its final index. A hook that leaves files dirty, such as a regenerated lockfile, fails the refresh's final check after the commit is written. The refresh then stays an operation in phase `checking`: restore or remove those paths and run `mise run fork operation continue`, or run `operation abort -y`. `patch finish` refuses while any operation is in flight.
+Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit hook and consumes its final index. A hook that leaves files dirty, such as a regenerated lockfile, fails the final check after the commit is written. A refresh or edit then stays an operation in phase `checking`: restore or remove those paths and run `mise run fork operation continue`, or run `operation abort -y`. A remove, disable, enable, or rebase stays in `ready_to_publish`: restore those paths and run `mise run fork publish`, which checks again, or abort. `patch finish` refuses while any operation is in flight.
 
 ## Protocol
 

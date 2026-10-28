@@ -44,9 +44,9 @@ None.
 - [`src/app/rebase.rs`][rebase], [`src/app/contract.rs`][contract], [`src/app/operation.rs`][operation].
 - [`tests/lifecycle.rs`][lifecycle]: five tests.
 
-[mod]: ../../../src/app/mod.rs
-[patch]: ../../../src/app/patch.rs
-[rebase]: ../../../src/app/rebase.rs
-[contract]: ../../../src/app/contract.rs
-[operation]: ../../../src/app/operation.rs
-[lifecycle]: ../../../tests/lifecycle.rs
+[mod]: ../../../../src/app/mod.rs
+[patch]: ../../../../src/app/patch.rs
+[rebase]: ../../../../src/app/rebase.rs
+[contract]: ../../../../src/app/contract.rs
+[operation]: ../../../../src/app/operation.rs
+[lifecycle]: ../../../../tests/lifecycle.rs
