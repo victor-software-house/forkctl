@@ -214,6 +214,7 @@ impl App {
         patch
             .validate()
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
+        self.require_scope_covers_commit(&patch, &old_commit)?;
         let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
         let plan = MutationPlan {
             command: "patch.edit".into(),
@@ -262,6 +263,25 @@ impl App {
             )));
         }
         self.finish_patch_edit(&operation, edits, patch, old_commit)
+    }
+
+    /// Refuses a scope that no longer owns every path `commit` changes, before
+    /// any write, so the final check cannot fail on it.
+    fn require_scope_covers_commit(&self, patch: &Patch, commit: &str) -> Result<()> {
+        let uncovered = self
+            .patch_paths(commit)?
+            .into_iter()
+            .filter(|path| !patch.owns(path))
+            .collect::<Vec<_>>();
+        if uncovered.is_empty() {
+            return Ok(());
+        }
+        Err(DomainError::invalid_request(format!(
+            "the scope of patch {} must still cover every path it changes; uncovered: {}",
+            patch.name,
+            uncovered.join(", ")
+        ))
+        .into())
     }
 
     pub(super) fn continue_patch_edit(
@@ -331,16 +351,15 @@ impl App {
         old_commit: String,
     ) -> Result<CommandResult> {
         self.edit_manifest(edits)?;
-        self.write_manifest()?;
-        let exports = self.write_exports()?;
-        let ledger = self.write_ledger()?;
-        let generated = std::iter::once(self.manifest_path.clone())
-            .chain(std::iter::once(ledger))
-            .chain(exports)
-            .collect::<Vec<_>>();
+        let generated = self.write_generated()?;
         self.refresh_bookkeeping(&generated)?;
         let new_commit = self.patch_commit(&patch.name)?;
-        let check = self.check_repository(true)?;
+        let check = self.check_written_operation(
+            operation,
+            true,
+            "checking",
+            "mise run fork operation continue",
+        )?;
         self.complete_local_operation(operation)?;
         Ok(CommandResult::PatchEdit(PatchEditResult {
             patch,
@@ -439,6 +458,7 @@ impl App {
                 name.clone(),
                 self.manifest_path.display().to_string(),
                 self.manifest()?.documents.ledger.clone(),
+                self.manifest()?.documents.exports.clone(),
             ],
             hooks: vec!["pre-commit via stg refresh".into()],
             ref_updates: Vec::new(),
@@ -592,40 +612,18 @@ impl App {
                 patch: patch.clone(),
             }])?;
         }
-        self.write_manifest()?;
-        let exports = self.write_exports()?;
-        let ledger = self.write_ledger()?;
-        let generated = std::iter::once(self.manifest_path.clone())
-            .chain(std::iter::once(ledger))
-            .chain(exports)
-            .collect::<Vec<_>>();
+        let generated = self.write_generated()?;
         self.refresh_bookkeeping(&generated)?;
         let new_commit = self.patch_commit(&patch.name)?;
         self.write_active(&ActivePatchState::Existing {
             patch: patch.name.clone(),
         })?;
-        let check = match self.check_repository(true) {
-            Ok(check) => check,
-            Err(error) => {
-                // The commit and bookkeeping are already written, so the check
-                // failure stays resumable.
-                let mut operation = operation.clone();
-                operation.phase = "checking".into();
-                operation.next_actions = vec![
-                    "fix what the check reported, such as paths a hook left dirty".into(),
-                    "mise run fork operation continue".into(),
-                    "or discard the refresh: mise run fork operation abort --yes".into(),
-                ];
-                if let Err(write_error) = self.write_operation(&operation) {
-                    return Err(
-                        error.context(format!(
-                            "could not record refresh recovery: {write_error}; the operation state was not updated, so fix that write failure and what the check reported, then run mise run fork operation continue, or mise run fork operation abort --yes"
-                        ))
-                    );
-                }
-                return Err(error);
-            }
-        };
+        let check = self.check_written_operation(
+            operation,
+            true,
+            "checking",
+            "mise run fork operation continue",
+        )?;
         self.complete_local_operation(operation)?;
         Ok(CommandResult::PatchRefresh(PatchRefreshResult {
             patch: patch.name,
@@ -995,20 +993,19 @@ impl App {
         commit: String,
         disabled: bool,
     ) -> Result<CommandResult> {
-        self.write_manifest()?;
-        let exports = self.write_exports()?;
-        let ledger = self.write_ledger()?;
-        let generated = std::iter::once(self.manifest_path.clone())
-            .chain(std::iter::once(ledger))
-            .chain(exports)
-            .collect::<Vec<_>>();
+        let generated = self.write_generated()?;
         self.refresh_bookkeeping(&generated)?;
         let new_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;
         operation.phase = "ready_to_publish".into();
         operation.new_tip = Some(new_tip.clone());
         operation.next_actions = vec!["forkctl publish".into()];
         self.write_operation(operation)?;
-        let check = self.check_repository(false)?;
+        let check = self.check_written_operation(
+            operation,
+            false,
+            "ready_to_publish",
+            "mise run fork publish, which checks again",
+        )?;
         let result = PatchTransitionResult {
             patch,
             commit,

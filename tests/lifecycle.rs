@@ -697,6 +697,202 @@ fn refresh_left_dirty_by_a_hook_names_its_recovery() {
 }
 
 #[test]
+fn patch_edit_keeps_the_scope_over_changed_paths() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let head = git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD"]);
+
+    let output = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "edit",
+        "source-change",
+        "--remove-scope",
+        "source.txt",
+        "--add-scope",
+        "other.txt",
+    ]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "invalid_request");
+    let message = output["error"]["message"].as_str().unwrap();
+    assert!(message.contains("uncovered: source.txt"), "{message}");
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD"]),
+        head
+    );
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn patch_edit_left_dirty_by_a_hook_names_its_recovery() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    install_lockfile_hook(&fixture);
+
+    let output = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "edit",
+        "source-change",
+        "--purpose",
+        "Changed purpose.",
+    ]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "dirty_worktree");
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let operation = &status["result"]["operation"];
+    assert_eq!(operation["phase"], "checking");
+    let next = operation["next_actions"].to_string();
+    assert!(next.contains("operation continue"), "{next}");
+    assert!(next.contains("operation abort --yes"), "{next}");
+
+    fs::remove_file(fixture.repo.join("tool.lock")).unwrap();
+    fixture.forkctl_ok(&["operation", "continue"]);
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+    let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
+    let purpose = manifest["patches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|patch| patch["name"] == "source-change")
+        .unwrap()["purpose"]
+        .clone();
+    assert_eq!(purpose, "Changed purpose.");
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn patch_remove_left_dirty_by_a_hook_names_its_recovery() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    install_lockfile_hook(&fixture);
+
+    let output = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "remove",
+        "source-change",
+        "--reason",
+        "obsolete",
+    ]);
+    assert!(!output.status.success());
+    let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output["error"]["code"], "dirty_worktree");
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let operation = &status["result"]["operation"];
+    assert_eq!(operation["phase"], "ready_to_publish");
+    let next = operation["next_actions"].to_string();
+    assert!(next.contains("publish"), "{next}");
+    assert!(next.contains("operation abort --yes"), "{next}");
+
+    fs::remove_file(fixture.repo.join(".git/hooks/pre-commit")).unwrap();
+    fs::remove_file(fixture.repo.join("tool.lock")).unwrap();
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn abort_ends_the_operation_when_the_restored_stack_fails_check() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    commit_stale_export(&fixture);
+    let head = git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD"]);
+    install_lockfile_hook(&fixture);
+    let edit = fixture.forkctl(&[
+        "patch",
+        "edit",
+        "source-change",
+        "--purpose",
+        "Changed purpose.",
+    ]);
+    assert!(!edit.status.success());
+    fs::remove_file(fixture.repo.join(".git/hooks/pre-commit")).unwrap();
+    fs::remove_file(fixture.repo.join("tool.lock")).unwrap();
+
+    let abort = fixture.forkctl(&["--format", "json", "operation", "abort", "--yes"]);
+    assert!(!abort.status.success());
+    let abort: serde_json::Value = serde_json::from_slice(&abort.stdout).unwrap();
+    assert_eq!(abort["error"]["code"], "check_failed");
+    let message = abort["error"].to_string();
+    assert!(message.contains("was aborted"), "{message}");
+    let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(status["result"]["operation"].is_null());
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["rev-parse", "HEAD"]),
+        head
+    );
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "edit",
+        "source-change",
+        "--purpose",
+        "Changed purpose.",
+    ]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn contract_edit_regenerates_every_export() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    commit_stale_export(&fixture);
+
+    fixture.forkctl_ok(&["contract", "edit", "--required-text", "base.txt=base"]);
+    assert!(
+        !fixture
+            .repo
+            .join("patches/downstream/9999-stale.patch")
+            .exists()
+    );
+    fixture.forkctl_ok(&["check"]);
+}
+
+/// A pre-commit hook that leaves an untracked `tool.lock`, as a hook that
+/// regenerates a lockfile does.
+fn install_lockfile_hook(fixture: &Fixture) {
+    let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\nprintf 'locked\\n' > tool.lock\n").unwrap();
+    make_executable(&hook);
+}
+
+/// Commits an export no patch produces into the bookkeeping patch, so the
+/// stack fails `check` the way it does when an older forkctl wrote its
+/// generated documents.
+fn commit_stale_export(fixture: &Fixture) {
+    let stale = fixture.repo.join("patches/downstream/9999-stale.patch");
+    fs::create_dir_all(stale.parent().unwrap()).unwrap();
+    fs::write(&stale, "stale generated evidence\n").unwrap();
+    git_ok(
+        &fixture.repo,
+        ["add", "patches/downstream/9999-stale.patch"],
+    );
+    let refresh = isolated_command(&fixture.repo, "stg")
+        .args(["refresh", "--patch", "fork-tooling", "--index"])
+        .output()
+        .unwrap();
+    assert!(
+        refresh.status.success(),
+        "{}",
+        String::from_utf8_lossy(&refresh.stderr)
+    );
+}
+
+#[test]
 fn documented_staged_check_hook_accepts_source_and_bookkeeping_refreshes() {
     let fixture = Fixture::new();
     fixture.forkctl_ok(&[
