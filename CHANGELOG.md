@@ -1,5 +1,11 @@
 # Changelog
 
+## forkctl 0.0.45
+
+### Fixed
+
+- `operation abort --yes` no longer fails when a hook rewrote a tracked file, such as `mise.lock` after a pin change; it discards that change, as its plan says. An operation stopped by its final check now names the fix: stage paths a hook rewrote that the patch owns, then `operation continue`, or restore the others ([#147](https://github.com/victor-software-house/forkctl/pull/147)).
+
 ## forkctl 0.0.44
 
 ### Fixed
