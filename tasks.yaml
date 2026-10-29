@@ -30,6 +30,7 @@ queue:
     acceptance:
       - Linux CI and the dispatched macOS verification pass with managed provider and sysroot paths.
       - Stable and nightly install only their explicit minimal components.
+    plan: openspec/changes/explicit-mounted-rust/proposal.md
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
