@@ -42,8 +42,11 @@ jobs:
       - name: Verify managed Rust installation
         run: |
           mise x -- sh -eu -c '
-            test "$(command -v rustup)" = "$CARGO_HOME/bin/rustup"
-            case "$(rustc --print sysroot)" in
+            provider=$(command -v rustup)
+            sysroot=$(rustc --print sysroot)
+            printf "rustup=%s\nsysroot=%s\n" "$provider" "$sysroot"
+            test "$provider" = "$CARGO_HOME/bin/rustup"
+            case "$sysroot" in
               "$RUSTUP_HOME"/toolchains/*) ;;
               *) exit 1 ;;
             esac
