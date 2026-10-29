@@ -40,25 +40,24 @@ jobs:
           # Manual gates prove provisioning without restoring an install cache.
           cache: ${{ github.event_name != 'workflow_dispatch' }}
       - name: Verify managed Rust installation
+        shell: mise x -- bash --noprofile --norc -e -o pipefail {0}
         run: |
-          mise x -- sh -eu -c '
-            provider=$(command -v rustup)
-            sysroot=$(rustc --print sysroot)
-            printf "rustup=%s\nsysroot=%s\n" "$provider" "$sysroot"
-            test "$provider" = "$CARGO_HOME/bin/rustup"
-            case "$sysroot" in
-              "$RUSTUP_HOME"/toolchains/*) ;;
-              *) exit 1 ;;
-            esac
-            rustup show active-toolchain
-            rustup component list --installed > "$RUNNER_TEMP/rust-components.txt"
-            cat "$RUNNER_TEMP/rust-components.txt"
-            grep -q "^clippy-" "$RUNNER_TEMP/rust-components.txt"
-            if grep -q "^rust-docs-" "$RUNNER_TEMP/rust-components.txt"; then
-              exit 1
-            fi
-            rustup run "$RUST_NIGHTLY" rustfmt --version
-          '
+          provider=$(command -v rustup)
+          sysroot=$(rustc --print sysroot)
+          printf "rustup=%s\nsysroot=%s\n" "$provider" "$sysroot"
+          test "$provider" = "$CARGO_HOME/bin/rustup"
+          case "$sysroot" in
+            "$RUSTUP_HOME"/toolchains/*) ;;
+            *) exit 1 ;;
+          esac
+          rustup show active-toolchain
+          rustup component list --installed > "$RUNNER_TEMP/rust-components.txt"
+          cat "$RUNNER_TEMP/rust-components.txt"
+          grep -q "^clippy-" "$RUNNER_TEMP/rust-components.txt"
+          if grep -q "^rust-docs-" "$RUNNER_TEMP/rust-components.txt"; then
+            exit 1
+          fi
+          rustup run "$RUST_NIGHTLY" rustfmt --version
       - name: Cache builds with mbx
         uses: jdx/mr-boxington-action@9df1d4b18b2147788a7ee7a2c7b84ecf62fd89d3 # v1.5.0
       - name: Verify
