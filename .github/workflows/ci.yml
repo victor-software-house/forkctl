@@ -1,39 +1,27 @@
 name: CI
 
 on:
-  # A draft pull request runs no CI; marking it ready starts the run.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  # The queue tests each entry on top of the ones ahead of it, so a push to
-  # the default branch has already passed and runs nothing.
   merge_group:
-  # A merge_group run saves its build cache on its queue branch, which no pull
-  # request can restore from, and a schedule run saves none, so the daily
-  # refresh job dispatches this workflow on the default branch, whose run
-  # saves the cache pull requests restore from.
+  # Refresh the default branch's build cache without repeating every push.
   schedule:
     - cron: "37 8 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
-  # A check:versions task reads a pull request that changes a manifest
-  # version, to tell the Version PR apart from a hand edit.
   pull-requests: read
 
 concurrency:
-  # One run per branch: a new push, or a retarget after the base merges,
-  # cancels the run it replaces, on the default branch as on a pull request.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   refresh:
     if: github.event_name == 'schedule'
-    # One API call on a light runner: Namespace 2x4 in a private repository,
-    # where GitHub-hosted minutes count against the quota; GitHub-hosted in a
-    # public one, where they are free.
-    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
+    # One API call on the runner chosen when this repository was rendered.
+    runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
       actions: write
@@ -47,16 +35,18 @@ jobs:
           workflow=${WORKFLOW%@*}
           gh workflow run "${workflow##*/}" --repo "$REPOSITORY" --ref main
 
-  # The shared workflow runs verify, picks the runner from this repository's
-  # visibility, and caches builds with mbx.
   verify:
     if: ${{ !github.event.pull_request.draft && github.event_name != 'schedule' }}
-    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@71d953ffe0ead00bcd979a168224542695cf06cb # main, 2026-10-27
+    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@c1070024608ef9c5c6b333e24596f9109b5ae196 # main, 2026-10-29
     with:
       mise-version: 2026.10.17
       advisories: true
       semver: false
       timeout-minutes: 8
+      build-runner: '["ubuntu-latest"]'
+      read-only-runner: '["ubuntu-latest"]'
+      light-runner: ubuntu-latest
+      cache-volume: false
 
   # What the shared workflow does not run: the suite one test at a time, which
   # catches tests that share process state, and the release binary build.

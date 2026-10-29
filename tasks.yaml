@@ -48,6 +48,17 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-034
+    title: Render final public infrastructure configuration
+    scope: ci
+    outcome: >-
+      Generated public workflows contain only final public runner configuration,
+      without private labels or runtime visibility routing.
+    completed: 2026-10-29T08:46:06
+    evidence:
+      - 2026-10-29, adopted template v0.0.61; CI run 40867203552 passed build, static checks, parallel/isolated suites and release build; generated .github files contain no private infrastructure alternatives.
+    disposition: completed
+
   - id: FRK-033
     title: Use mise-owned Rust homes in every CI job
     scope: ci
