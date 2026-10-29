@@ -28,12 +28,13 @@ jobs:
   # takes that App's key and no other secret.
   template:
     if: ${{ !github.event.pull_request.draft }}
-    uses: victor-software-house/actions/.github/workflows/template-check.yml@71d953ffe0ead00bcd979a168224542695cf06cb # main, 2026-10-27
+    uses: victor-software-house/actions/.github/workflows/template-check.yml@c1070024608ef9c5c6b333e24596f9109b5ae196 # main, 2026-10-29
     permissions:
       contents: read
       issues: write
     with:
       mise-version: 2026.10.17
+      runner: ubuntu-latest
       # A pull request that changes none of these files skips the check, which
       # still reports. They are every file the template renders, whole or in
       # part; check:template-paths keeps the list covering every file a
