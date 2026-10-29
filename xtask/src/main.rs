@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 const MIN_MISE_MARKER: &str = "min_version = \"";
-const RUST_TOOL_MARKER: &str = "rust = \"";
+const RUST_TOOL_MARKER: &str = "rust = { version = \"";
 const CHANNEL_MARKER: &str = "channel = \"";
 const NIGHTLY_ENTRY_MARKER: &str = "{ version = \"nightly-";
 const STGIT_TOOL_MARKER: &str = "\"cargo:stgit\" = { version = \"";
@@ -252,10 +252,20 @@ mod tests {
     #[test]
     fn reads_exactly_one_declared_value() {
         assert_eq!(
-            read_value("rust = \"expected\"\n", RUST_TOOL_MARKER).unwrap(),
+            read_value(
+                "rust = { version = \"expected\", profile = \"minimal\" }\n",
+                RUST_TOOL_MARKER,
+            )
+            .unwrap(),
             "expected"
         );
         assert!(read_value("", RUST_TOOL_MARKER).is_err());
-        assert!(read_value("rust = \"a\"\nrust = \"b\"\n", RUST_TOOL_MARKER).is_err());
+        assert!(
+            read_value(
+                "rust = { version = \"a\" }\nrust = { version = \"b\" }\n",
+                RUST_TOOL_MARKER,
+            )
+            .is_err()
+        );
     }
 }

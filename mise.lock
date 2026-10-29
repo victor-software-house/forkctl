@@ -238,6 +238,7 @@ specifiers = ["1.99.0"]
 
 [tools.rust.options]
 components = "clippy"
+profile = "minimal"
 
 [[tools.rust]]
 version = "nightly-2026-09-29"

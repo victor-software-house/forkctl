@@ -18,7 +18,7 @@ locked = true
 [tools]
 rust = [
   # Pinned stable: build, lint, test.
-  { version = "1.99.0", components = "clippy", mr_boxington = true },
+  { version = "1.99.0", profile = "minimal", components = "clippy", mr_boxington = true },
   # rustfmt's unstable options, and rustdoc as docs.rs builds it.
   { version = "nightly-2026-09-29", profile = "minimal", components = "rustfmt" },
 ]
@@ -84,10 +84,10 @@ includes = [
   # The ver task the release workflow and check:versions run; it pins the
   # verctl above.
   "git::https://github.com/victor-software-house/verctl.git//tasks/ver?ref=v0.7.0",
-  # The shared Rust tasks, at actions main, 2026-10-25.
-  "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=e3e1e593e10a4820e89b489064fa426458d349d0",
-  # template:check, template:off, and template:on, at actions main, 2026-10-25.
-  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=e3e1e593e10a4820e89b489064fa426458d349d0",
+  # The shared Rust tasks, at actions main, 2026-10-27.
+  "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=71d953ffe0ead00bcd979a168224542695cf06cb",
+  # template:check, template:off, and template:on, at actions main, 2026-10-27.
+  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=71d953ffe0ead00bcd979a168224542695cf06cb",
 ]
 
 # The one task here: the last include wins over mise-tasks/, so only an inline

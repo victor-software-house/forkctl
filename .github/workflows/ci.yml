@@ -30,8 +30,10 @@ concurrency:
 jobs:
   refresh:
     if: github.event_name == 'schedule'
-    # One API call: a GitHub-hosted runner, which bills no Namespace units.
-    runs-on: ubuntu-latest
+    # One API call on a light runner: Namespace 2x4 in a private repository,
+    # where GitHub-hosted minutes count against the quota; GitHub-hosted in a
+    # public one, where they are free.
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     permissions:
       actions: write
@@ -49,7 +51,7 @@ jobs:
   # visibility, and caches builds with mbx.
   verify:
     if: ${{ !github.event.pull_request.draft && github.event_name != 'schedule' }}
-    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@e3e1e593e10a4820e89b489064fa426458d349d0 # main, 2026-10-25
+    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@71d953ffe0ead00bcd979a168224542695cf06cb # main, 2026-10-27
     with:
       mise-version: 2026.10.17
       advisories: true

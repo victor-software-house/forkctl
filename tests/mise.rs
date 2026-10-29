@@ -187,6 +187,10 @@ impl MountedCatalog {
         let source =
             fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("tasks/fork/fork"))
                 .unwrap();
+        assert!(
+            source.contains("profile = \"minimal\""),
+            "mounted task must not inherit rustup's machine profile"
+        );
         let source = source
             .replace(
                 &format!(
