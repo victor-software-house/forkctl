@@ -19,6 +19,17 @@ queue:
       - restore_operation_stack passes the journal's patch names to stg uncommit, as init hydration already does.
     notes:
       - 'Seen downstream on 0.0.20 and 0.0.38: abort rebuilt a stack with stg uncommit --to, which names patches from commit subjects cut to 30 characters, so the restored series did not match the journal and abort failed. Setting stgit.namelength to 0 works around it.'
+
+  - id: FRK-033
+    title: Use mise-owned Rust homes in every CI job
+    scope: ci
+    outcome: >-
+      The locked toolchain is provisioned by mise under its data directory, never by
+      the runner rustup, and manual macOS verification proves a cold installation.
+    blocked_by: []
+    acceptance:
+      - Linux CI and the dispatched macOS verification pass with managed provider and sysroot paths.
+      - Stable and nightly install only their explicit minimal components.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
