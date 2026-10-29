@@ -19,18 +19,6 @@ queue:
       - restore_operation_stack passes the journal's patch names to stg uncommit, as init hydration already does.
     notes:
       - 'Seen downstream on 0.0.20 and 0.0.38: abort rebuilt a stack with stg uncommit --to, which names patches from commit subjects cut to 30 characters, so the restored series did not match the journal and abort failed. Setting stgit.namelength to 0 works around it.'
-
-  - id: FRK-033
-    title: Use mise-owned Rust homes in every CI job
-    scope: ci
-    outcome: >-
-      The locked toolchain is provisioned by mise under its data directory, never by
-      the runner rustup, and manual macOS verification proves a cold installation.
-    blocked_by: []
-    acceptance:
-      - Linux CI and the dispatched macOS verification pass with managed provider and sysroot paths.
-      - Stable and nightly install only their explicit minimal components.
-    plan: openspec/changes/explicit-mounted-rust/proposal.md
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -60,6 +48,18 @@ horizon:
     kind: deferred
     open: Deferred by the operator on 2026-10-05; needs a decision on how a manually approved slow-test run blocks merge.
 archive:
+  - id: FRK-033
+    title: Use mise-owned Rust homes in every CI job
+    scope: ci
+    outcome: >-
+      The locked toolchain is provisioned by mise under its data directory, never by
+      the runner rustup, and manual macOS verification proves a cold installation.
+    plan: openspec/changes/archive/2026-10-29-explicit-mounted-rust/proposal.md
+    completed: 2026-10-29T07:06:35
+    evidence:
+      - openspec/changes/archive/2026-10-29-explicit-mounted-rust/
+    disposition: completed
+
   - id: FRK-032
     title: Use a consumer path in the skill check example
     scope: skill
