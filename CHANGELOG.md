@@ -1,5 +1,11 @@
 # Changelog
 
+## forkctl 0.0.47
+
+### Fixed
+
+- The mounted task now requests Rust's minimal profile explicitly. It no longer inherits a machine's default profile or tries adding `rust-docs` during completion against a minimal toolchain ([#151](https://github.com/victor-software-house/forkctl/pull/151)).
+
 ## forkctl 0.0.46
 
 ### Fixed
