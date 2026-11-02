@@ -66,7 +66,8 @@ impl App {
         };
         let manifest_format = ManifestFormat::from_path(&manifest_path)?;
         let (manifest, manifest_error, manifest_text) = match fs::read(&manifest_path) {
-            // The limits govern only YAML parsing, and an absent manifest is not blocked.
+            // The limits govern only YAML parsing, and an absent manifest is
+            // not blocked.
             Ok(_) if manifest_format == ManifestFormat::Yaml && input_error.is_some() => {
                 (None, input_error, None)
             }

@@ -1,6 +1,6 @@
 # forkctl's own tasks. check:features is mise-tasks/check/features.sh. verify in mise.toml depends on check:features and check:repo by name; check:repo is the template's and runs check:local beside its checks.
 "test:isolated" = { description = "Same suite, one test at a time", run = "cargo nextest run --locked --workspace --all-features --test-threads=1", env = { CARGO_TARGET_DIR = "target/test-isolated" } }
-"format:fix" = { description = "Format Rust sources on the formatting nightly", run = "cargo +nightly-2026-09-29 fmt --all" }
+"format:fix" = { description = "Format Rust sources on the formatting nightly", run = "cargo +nightly-2026-11-01 fmt --all" }
 "lint:fix" = { description = "Apply machine-fixable Clippy suggestions", run = "cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets --all-features -- -D warnings" }
 "version:sync" = { description = "Regenerate the locks and all tool pins from mise.toml", run = [
   "mise lock",

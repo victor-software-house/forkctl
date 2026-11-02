@@ -163,7 +163,8 @@ impl App {
             ["merge-base", &target.commit, &upstream_tracking],
         ) {
             Ok(canonical) => canonical,
-            // git merge-base exits non-zero when the two commits share no history.
+            // git merge-base exits non-zero when the two commits share no
+            // history.
             Err(AppError::Domain { .. }) => {
                 return Err(DomainError::invalid_request(format!(
                     "base {} shares no history with {upstream_tracking}",

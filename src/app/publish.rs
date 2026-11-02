@@ -325,7 +325,8 @@ impl App {
             branch,
             "--state",
             "open",
-            // `--head` matches a branch name in any fork; reuse only this repository's branch.
+            // `--head` matches a branch name in any fork; reuse only this
+            // repository's branch.
             "--json",
             "url,isCrossRepository",
             "--jq",
