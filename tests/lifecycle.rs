@@ -599,6 +599,45 @@ fn patch_refresh_abort_restores_stack_and_active_patch() {
 }
 
 #[test]
+fn abort_restores_patch_names_longer_than_stgit_namelength() {
+    let fixture = Fixture::new();
+    let lower = "resolve-deleted-and-answered-threads";
+    assert!(lower.len() > 30);
+    let namelength = isolated_command(&fixture.repo, "git")
+        .args(["config", "--get", "stgit.namelength"])
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(
+        !namelength.status.success(),
+        "stgit.namelength must be unset"
+    );
+    create_source_patch(&fixture, lower, "shared.txt", "lower\n");
+    create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
+    fixture.forkctl_ok(&["patch", "select", lower]);
+    let old_tip = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
+    let old_series = stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]);
+    assert!(old_series.lines().any(|name| name == lower), "{old_series}");
+    fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
+    git_ok(&fixture.repo, ["add", "shared.txt"]);
+    assert!(
+        !fixture
+            .forkctl(&["patch", "refresh", "--rewrite-below"])
+            .status
+            .success()
+    );
+
+    fixture.forkctl_ok(&["operation", "abort", "--yes"]);
+    assert_eq!(git_capture(&fixture.repo, ["rev-parse", "HEAD"]), old_tip);
+    assert_eq!(
+        stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]),
+        old_series
+    );
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
 fn refresh_consumes_pre_commit_hook_modified_index() {
     let fixture = Fixture::new();
     fixture.forkctl_ok(&[

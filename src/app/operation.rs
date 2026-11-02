@@ -193,11 +193,18 @@ impl App {
         run(&self.repo, "git", ["reset", "--hard", "HEAD"])?;
         run(&self.repo, "stg", ["delete", "--all", "--conflicts=allow"])?;
         run(&self.repo, "git", ["reset", "--hard", restored_tip])?;
-        run(
-            &self.repo,
-            "stg",
-            ["uncommit", "--to", &operation.old_base, "--exclusive"],
-        )
+        // Name every patch, newest first: unnamed, StGit cuts names from
+        // commit subjects to `stgit.namelength` characters.
+        let command = std::iter::once("uncommit".to_string())
+            .chain(
+                operation
+                    .old_patches
+                    .iter()
+                    .rev()
+                    .map(|patch| patch.name.clone()),
+            )
+            .collect::<Vec<_>>();
+        run(&self.repo, "stg", command)
     }
 
     fn verify_restored_operation_stack(
