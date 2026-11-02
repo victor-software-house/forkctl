@@ -19,6 +19,7 @@ queue:
       - restore_operation_stack passes the journal's patch names to stg uncommit, as init hydration already does.
     notes:
       - 'Seen downstream on 0.0.20 and 0.0.38: abort rebuilt a stack with stg uncommit --to, which names patches from commit subjects cut to 30 characters, so the restored series did not match the journal and abort failed. Setting stgit.namelength to 0 works around it.'
+    plan: openspec/changes/abort-full-patch-names/proposal.md
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
