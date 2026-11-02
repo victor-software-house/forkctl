@@ -1,5 +1,11 @@
 # Changelog
 
+## forkctl 0.0.48
+
+### Fixed
+
+- `operation abort --yes` restores every patch under its full name. It used to let StGit name patches from commit subjects cut to `stgit.namelength` characters, so a patch name over 30 characters failed the abort unless `stgit.namelength` was 0 ([#154](https://github.com/victor-software-house/forkctl/pull/154)).
+
 ## forkctl 0.0.47
 
 ### Fixed
