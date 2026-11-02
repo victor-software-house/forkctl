@@ -23,7 +23,6 @@ jobs:
     with:
       mise-version: 2026.10.25
       mise-env: ci
-      auto-merge: true
       crates-io-trusted-publishing: true
     # The App token opens the Version PR so that its CI starts; a PR opened
     # with GITHUB_TOKEN starts no workflow.
