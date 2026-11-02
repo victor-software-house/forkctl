@@ -633,6 +633,7 @@ fn abort_restores_patch_names_longer_than_stgit_namelength() {
         stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]),
         old_series
     );
+    fixture.forkctl_ok(&["patch", "finish"]);
     fixture.forkctl_ok(&["check"]);
 }
 
