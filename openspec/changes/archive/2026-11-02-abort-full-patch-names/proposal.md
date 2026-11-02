@@ -33,5 +33,5 @@ None.
 - [`src/app/operation.rs`][operation]: `restore_operation_stack`.
 - [`tests/lifecycle.rs`][lifecycle]: one test.
 
-[operation]: ../../../src/app/operation.rs
-[lifecycle]: ../../../tests/lifecycle.rs
+[operation]: ../../../../src/app/operation.rs
+[lifecycle]: ../../../../tests/lifecycle.rs
