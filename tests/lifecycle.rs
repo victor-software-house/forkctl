@@ -2375,7 +2375,7 @@ fn fixture_processes_use_private_home_git_config_and_templates() {
     assert_eq!(values[2], "C");
     assert_eq!(values[3], "UTC");
 
-    let global = isolated_command(&fixture.repo, "git")
+    let global = support::isolated_command(&fixture.repo, "git")
         .args(["config", "--global", "--list"])
         .output()
         .unwrap();
