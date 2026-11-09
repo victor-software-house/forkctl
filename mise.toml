@@ -39,13 +39,6 @@ ast-grep = "0.45.0"
 # Test-only: the hook-composition test runs a real lefthook, and CI loads no dev profile.
 # version:check keeps it equal to mise.dev.toml's, which arms the hooks.
 lefthook = "2.2.2"
-# The repository checks (mise-tasks/check/repo.sh).
-taplo = "0.10.0"
-rumdl = "0.3.2"
-typos = "1.51.1"
-actionlint = "1.7.12"
-# OpenSpec's standalone release binary; it needs no node.
-"github:Fission-AI/OpenSpec" = "1.16.0"
 
 # The shared Rust tasks read their toolchains from here and name none.
 [env]

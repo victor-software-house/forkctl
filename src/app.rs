@@ -26,7 +26,7 @@ use crate::process::{capture, output, output_with_config, run, succeeds};
 use crate::protocol::CheckResult;
 use crate::state::{ActivePatchState, JournalCommand, OperationState, PatchCommitEvidence};
 
-const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
+const EXPORT_TEMPLATE: &str = include_str!("patchexport.tmpl");
 const APPEND_BRIDGE_MESSAGE_PREFIX: &str = "forkctl: keep published history ";
 
 pub(crate) struct App {
