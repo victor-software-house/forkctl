@@ -469,6 +469,60 @@ fn upgrade_rewrites_a_schema_1_manifest_in_place() {
     assert!(again["result"]["check"].is_null(), "{again}");
 }
 
+#[test]
+fn upgrade_after_a_failed_refresh_refuses_the_uncommitted_rewrite() {
+    let fixture = Fixture::new();
+    let manifest_path = fixture.repo.join("patches/fork.yaml");
+    let ledger_path = fixture.repo.join("PATCHES.md");
+    let current = fs::read_to_string(&manifest_path).unwrap();
+    let ledger = fs::read_to_string(&ledger_path).unwrap();
+    fs::write(&manifest_path, schema_1_text(&current)).unwrap();
+    fs::write(
+        &ledger_path,
+        ledger.replacen("| Order | Patch | Layer |", "| Order | Patch | Kind |", 1),
+    )
+    .unwrap();
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml", "PATCHES.md"]);
+    capture(
+        &fixture.repo,
+        "stg",
+        &["refresh", "--patch", "fork-tooling", "--index"],
+    );
+
+    // The hook fails the bookkeeping refresh after the rewrite is on disk.
+    let hook = fixture.repo.join(".git/hooks/pre-commit");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+    make_executable(&hook);
+    let failed = fixture.forkctl(&["--format", "json", "upgrade"]);
+    assert!(!failed.status.success());
+    let failed: serde_json::Value = serde_json::from_slice(&failed.stdout).unwrap();
+    assert!(
+        failed["error"]
+            .to_string()
+            .contains("mise run fork patch refresh"),
+        "{failed}"
+    );
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), current);
+
+    let again = fixture.forkctl(&["--format", "json", "upgrade"]);
+    assert!(!again.status.success());
+    let again: serde_json::Value = serde_json::from_slice(&again.stdout).unwrap();
+    assert_eq!(again["error"]["code"], "dirty_worktree", "{again}");
+
+    // The commands the first error names finish the commit.
+    fs::remove_file(&hook).unwrap();
+    fixture.forkctl_ok(&["patch", "select", "fork-tooling"]);
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml", "PATCHES.md"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["status", "--porcelain"]),
+        ""
+    );
+    fixture.forkctl_ok(&["check"]);
+}
+
 /// `text` as forkctl 0.0.48 wrote it: schema 1, and `kind` where schema 2
 /// says `layer`, `type`, or `event`.
 fn schema_1_text(text: &str) -> String {

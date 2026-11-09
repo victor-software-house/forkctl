@@ -14,6 +14,7 @@ Compile, format, lint, and test tasks run in CI with `mise run verify`.
 - [ ] 2.2 Add `forkctl upgrade` and the schema 1 hint; proof: `upgrade_rewrites_a_schema_1_manifest_in_place` passes in CI
 - [ ] 2.3 Refuse an unknown schema without writing; proof: the `upgrade` case in `every_mutation_has_a_typed_non_mutating_failure_case` passes in CI
 - [x] 2.4 Track the removal of the upgrade; proof: horizon row FRK-037 names it
+- [ ] 2.5 Refuse an uncommitted rewrite after a failed refresh; proof: `upgrade_after_a_failed_refresh_refuses_the_uncommitted_rewrite` passes in CI
 
 ## 3. Release
 

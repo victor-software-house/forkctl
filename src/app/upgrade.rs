@@ -14,7 +14,9 @@ impl App {
     /// regenerate every generated document and refresh the bookkeeping patch,
     /// as `contract edit` does. A draft active patch is rewritten too. An
     /// operation in progress is refused: its journal belongs to the forkctl
-    /// that started it.
+    /// that started it. A schema 2 manifest is refused while the worktree has
+    /// uncommitted changes, because an upgrade whose bookkeeping refresh
+    /// failed leaves its rewrite uncommitted.
     pub(crate) fn upgrade(&mut self, mode: ExecutionMode) -> Result<CommandResult> {
         let text = fs::read_to_string(&self.manifest_path).map_err(|error| {
             AppError::from(DomainError::manifest_invalid(format!(
@@ -26,6 +28,7 @@ impl App {
             manifest_upgrade::declared_schema(self.manifest_format, &text, &self.manifest_path)?;
         if schema == u64::from(SCHEMA) {
             self.manifest()?;
+            self.require_clean()?;
             return Ok(CommandResult::Upgrade(UpgradeResult {
                 from_schema: SCHEMA,
                 to_schema: SCHEMA,
@@ -82,8 +85,14 @@ impl App {
         if let Some(bytes) = active {
             write_atomic(&self.active_path()?, &bytes)?;
         }
+        let bookkeeping = self.manifest()?.bookkeeping_patch.clone();
         let generated = self.write_generated()?;
-        self.refresh_bookkeeping(&generated)?;
+        self.refresh_bookkeeping(&generated).map_err(|error| {
+            error.context(format!(
+                "{} is written as schema {SCHEMA} but not committed; fix the failure, then run mise run fork patch select {bookkeeping}, git add the changed files, mise run fork patch refresh, and mise run fork patch finish",
+                self.manifest_path.display()
+            ))
+        })?;
         let check = self.check_repository(self.read_active()?.is_some())?;
         Ok(CommandResult::Upgrade(UpgradeResult {
             from_schema: EARLIER_SCHEMA,

@@ -9,7 +9,7 @@ forkctl SHALL refuse a manifest that uses `kind` for any of them.
 #### Scenario: The example manifest reads
 
 - **WHEN** `patches/fork.yaml` holds `examples/fork.yaml`, which declares `schema: 2`, `type: branch`, and `layer: source`
-- **THEN** `forkctl --format json status` reports no `manifest_error`
+- **THEN** `forkctl --format json status` succeeds
 
 #### Scenario: The layer flag
 
@@ -23,7 +23,7 @@ When the tracked manifest declares `schema: 1` and does not read as schema 2, fo
 #### Scenario: Status names the upgrade
 
 - **WHEN** the bookkeeping patch holds a schema 1 `patches/fork.yaml` and the operator runs `forkctl --format json status`
-- **THEN** `result.manifest_error` contains `mise run fork upgrade`
+- **THEN** the command fails, `error.code` is `manifest_invalid`, and `error.message` contains `mise run fork upgrade`
 
 ### Requirement: Upgrade rewrites a schema 1 manifest in place
 
@@ -47,7 +47,7 @@ It SHALL rewrite a draft active patch's metadata the same way, regenerate the le
 
 `forkctl upgrade` SHALL fail with `operation_conflict` and write nothing while an operation journal exists, because that journal belongs to the forkctl that started it.
 It SHALL fail with `manifest_invalid` and write nothing for a manifest whose schema is neither 1 nor 2.
-On a schema 2 manifest it SHALL succeed and change nothing.
+On a schema 2 manifest with a clean worktree it SHALL succeed and change nothing.
 
 #### Scenario: An operation is in progress
 
@@ -63,3 +63,13 @@ On a schema 2 manifest it SHALL succeed and change nothing.
 
 - **WHEN** the manifest is schema 2 and the operator runs `forkctl --format json upgrade`
 - **THEN** `result.from_schema` is 2 and `result.check` is null
+
+### Requirement: Upgrade refuses an uncommitted rewrite
+
+On a schema 2 manifest with uncommitted changes, `forkctl upgrade` SHALL fail with `dirty_worktree`, because an upgrade whose bookkeeping refresh failed leaves the rewritten files uncommitted.
+When the bookkeeping refresh fails, the error SHALL name the commands that finish the commit.
+
+#### Scenario: A rerun after a failed refresh
+
+- **WHEN** a pre-commit hook fails the bookkeeping refresh of `forkctl upgrade`, and the operator runs `forkctl --format json upgrade` again
+- **THEN** the first run fails with a message that names `mise run fork patch refresh`, and the second fails with `error.code` `dirty_worktree`
