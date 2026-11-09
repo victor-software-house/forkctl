@@ -45,6 +45,23 @@ horizon:
     kind: deferred
     open: The operator decides when every downstream manifest has run forkctl upgrade.
 archive:
+  - id: FRK-038
+    title: Take ctl-core 0.7.0 with vsh-serde-saphyr 0.0.3
+    scope: Cargo.toml, Cargo.lock, presentation
+    outcome: >-
+      forkctl builds on ctl-core 0.7.0, vsh-serde-saphyr 0.0.3, and yamled 0.0.12,
+      one serde-saphyr in the lock, and its own clap sets default-features = false
+    notes:
+      - 'forkctl keeps its own completion verb: ctl-core 0.7.0 completion covers bash, zsh, and fish, and forkctl also completes elvish, powershell, and nu.'
+    completed: 2026-11-09T14:55:56
+    evidence:
+      - dbee60b8
+      - 227a99c
+      - mise run verify, test:isolated, and build passed at 227a99c on a fresh NixOS Linux VM with mise 2026.10.25; 148 tests passed
+      - cargo tree -d lists one serde-saphyr (vsh-serde-saphyr 0.0.3)
+      - Help captures differ from main c49274e only by colour wording and table widths; unknown and missing argument captures are byte-identical, exit 2
+    disposition: completed
+
   - id: FRK-036
     title: Name fields by what varies, not kind
     scope: manifest, protocol, cli

@@ -1,5 +1,5 @@
 use ctl_core::{
-    Document, Fields, MessageKind, Notice as UiNotice, NoticeLevel, Present, Section, Table, Text,
+    Document, Fields, Notice as UiNotice, NoticeLevel, Outcome, Present, Section, Table, Text,
 };
 use serde::{Serialize, Serializer};
 
@@ -61,14 +61,14 @@ impl Present for Report {
         }
     }
 
-    fn message_kind(&self) -> MessageKind {
+    fn outcome(&self) -> Outcome {
         match self {
             Self::Response { response, .. }
                 if matches!(response.as_ref(), ApiResponse::Error { .. }) =>
             {
-                MessageKind::Error
+                Outcome::Error
             }
-            Self::Response { .. } | Self::Json(_) | Self::Text(_) => MessageKind::Success,
+            Self::Response { .. } | Self::Json(_) | Self::Text(_) => Outcome::Success,
         }
     }
 
@@ -89,7 +89,7 @@ impl Present for Report {
                 2
             }
             Self::Response { .. } | Self::Json(_) | Self::Text(_) => {
-                self.message_kind().default_exit_code()
+                self.outcome().default_exit_code()
             }
         }
     }
