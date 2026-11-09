@@ -42,7 +42,7 @@ None.
 ## Impact
 
 1. Code: `bootstrap` in [`src/app/init.rs`][init], `require_declared_branch`
-   in [`src/app/mod.rs`][mod], and a new `wrong_tracking` error in
+   in [`src/app.rs`][mod], and a new `wrong_tracking` error in
    [`src/error.rs`][error].
 2. Tests: the fresh-upstream-clone lifecycle test bootstraps, refreshes a
    patch, and publishes as a fast-forward. Another test removes the upstream
@@ -54,6 +54,6 @@ None.
 
 [ledger]: ../../../../tasks.yaml
 [init]: ../../../../src/app/init.rs
-[mod]: ../../../../src/app/mod.rs
+[mod]: ../../../../src/app.rs
 [error]: ../../../../src/error.rs
 [instructions-template]: ../../../../.ctl/operator/instructions.md.jinja

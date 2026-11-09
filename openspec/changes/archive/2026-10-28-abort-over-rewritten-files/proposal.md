@@ -36,10 +36,10 @@ None.
 
 - [`src/app/operation.rs`][operation]: `restore_operation_stack`.
 - [`src/app/patch.rs`][patch]: `continue_patch_refresh`.
-- [`src/app/mod.rs`][mod]: `check_written_operation`.
+- [`src/app.rs`][mod]: `check_written_operation`.
 - [`tests/lifecycle.rs`][lifecycle]: two tests.
 
 [operation]: ../../../../src/app/operation.rs
-[mod]: ../../../../src/app/mod.rs
+[mod]: ../../../../src/app.rs
 [patch]: ../../../../src/app/patch.rs
 [lifecycle]: ../../../../tests/lifecycle.rs

@@ -35,11 +35,11 @@ None.
 
 - [`src/manifest_codec.rs`][codec]: the YAML reader moves to `ctl_core::input`; the serializer stays for bootstrap and JSON.
 - A new manifest document module: one typed edit per kind of change, applied through yamled.
-- [`src/app/mod.rs`][mod]: `write_manifest` applies the recorded edits; the commands that mutate the manifest record them.
+- [`src/app.rs`][mod]: `write_manifest` applies the recorded edits; the commands that mutate the manifest record them.
 - `Cargo.toml`: ctl-core with the `input` feature at its next patch, and yamled 0.0.5.
 - [`README.md`][readme]: the YAML parsing paragraph.
 
 [codec]: ../../../../src/manifest_codec.rs
-[mod]: ../../../../src/app/mod.rs
+[mod]: ../../../../src/app.rs
 [readme]: ../../../../README.md
 [yamled]: https://github.com/victor-software-house/yamled

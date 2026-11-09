@@ -218,7 +218,12 @@ impl App {
             "git",
             ["symbolic-ref", "--quiet", "--short", "HEAD"],
         )
-        .map_err(|_| DomainError::invalid_request("repository is in detached HEAD state").into())
+        .map_err(|error| AppError::Domain {
+            error: Box::new(DomainError::invalid_request(
+                "repository is in detached HEAD state",
+            )),
+            causes: vec![error.to_string()],
+        })
     }
 
     pub(super) fn worktree_inventory(&self) -> Result<WorktreeInventory> {
