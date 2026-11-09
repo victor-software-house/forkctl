@@ -100,7 +100,9 @@ mod tests {
     #[test]
     fn rejects_ambiguous_yaml_features() {
         let path = Path::new("fork.yaml");
-        let duplicate = EXAMPLE.replacen("schema: 1\n", "schema: 1\nschema: 1\n", 1);
+        let schema = format!("schema: {}\n", crate::manifest::SCHEMA);
+        assert!(EXAMPLE.contains(&schema));
+        let duplicate = EXAMPLE.replacen(&schema, &schema.repeat(2), 1);
         assert!(
             ManifestFormat::Yaml
                 .parse(duplicate.as_bytes(), path)
@@ -114,7 +116,7 @@ mod tests {
         );
         assert!(ManifestFormat::Yaml.parse(merged.as_bytes(), path).is_err());
 
-        let multiple = format!("{EXAMPLE}\n---\nschema: 1\n");
+        let multiple = format!("{EXAMPLE}\n---\n{schema}");
         assert!(
             ManifestFormat::Yaml
                 .parse(multiple.as_bytes(), path)

@@ -20,17 +20,17 @@ pub(crate) fn remote_completer() -> ArgValueCompleter {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
-pub(crate) enum CandidateKind {
+pub(crate) enum CandidateType {
     Patch,
     Ref,
     Remote,
 }
 
-pub(crate) fn candidate_lines(kind: CandidateKind) -> Vec<String> {
-    let values = match kind {
-        CandidateKind::Patch => patch_candidates(OsStr::new("")),
-        CandidateKind::Ref => ref_candidates(OsStr::new("")),
-        CandidateKind::Remote => remote_candidates(OsStr::new("")),
+pub(crate) fn candidate_lines(candidate_type: CandidateType) -> Vec<String> {
+    let values = match candidate_type {
+        CandidateType::Patch => patch_candidates(OsStr::new("")),
+        CandidateType::Ref => ref_candidates(OsStr::new("")),
+        CandidateType::Remote => remote_candidates(OsStr::new("")),
     };
     values
         .into_iter()

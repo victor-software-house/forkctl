@@ -11,6 +11,9 @@ use clap::ValueEnum;
 use globset::GlobBuilder;
 use serde::{Deserialize, Serialize};
 
+/// The manifest and Git-private state schema this forkctl reads and writes.
+pub(crate) const SCHEMA: u32 = 2;
+
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Manifest {
@@ -117,7 +120,8 @@ pub(crate) struct Documents {
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct BaseTarget {
-    pub kind: TargetKind,
+    #[serde(rename = "type")]
+    pub target_type: TargetType,
     pub selector: String,
     pub commit: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -126,7 +130,7 @@ pub(crate) struct BaseTarget {
 
 #[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum TargetKind {
+pub(crate) enum TargetType {
     Commit,
     Branch,
     Tag,
@@ -136,7 +140,7 @@ pub(crate) enum TargetKind {
     Debug, Clone, Copy, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize, ValueEnum,
 )]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum PatchKind {
+pub(crate) enum PatchLayer {
     Source,
     Tooling,
 }
@@ -145,7 +149,7 @@ pub(crate) enum PatchKind {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Patch {
     pub name: String,
-    pub kind: PatchKind,
+    pub layer: PatchLayer,
     pub purpose: String,
     pub upstream_status: String,
     pub drop_when: String,
@@ -186,7 +190,7 @@ pub(crate) enum CheckStage {
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum HistoryEvent {
     Rebase {
         target: BaseTarget,
@@ -285,7 +289,7 @@ impl Manifest {
 
     fn validate_identity(&self) -> Result<()> {
         ensure!(
-            self.schema == 1,
+            self.schema == SCHEMA,
             "unsupported manifest schema: {}",
             self.schema
         );
@@ -341,13 +345,13 @@ impl Manifest {
                 "duplicate patch name: {}",
                 patch.name
             );
-            match patch.kind {
-                PatchKind::Source => ensure!(
+            match patch.layer {
+                PatchLayer::Source => ensure!(
                     !seen_tooling,
                     "source patch {} appears after tooling",
                     patch.name
                 ),
-                PatchKind::Tooling => seen_tooling = true,
+                PatchLayer::Tooling => seen_tooling = true,
             }
         }
         Ok(())
@@ -402,7 +406,7 @@ impl Manifest {
             self.bookkeeping_patch
         );
         ensure!(
-            bookkeeping.kind == PatchKind::Tooling,
+            bookkeeping.layer == PatchLayer::Tooling,
             "bookkeeping patch must be tooling"
         );
         for (label, path) in [
@@ -575,18 +579,18 @@ impl Manifest {
         if patch.name == self.bookkeeping_patch {
             return self.patches.len();
         }
-        match patch.kind {
-            PatchKind::Source => self
+        match patch.layer {
+            PatchLayer::Source => self
                 .patches
                 .iter()
-                .position(|patch| patch.kind == PatchKind::Tooling)
+                .position(|patch| patch.layer == PatchLayer::Tooling)
                 .unwrap_or(self.patches.len()),
-            PatchKind::Tooling => self.patches.len() - 1,
+            PatchLayer::Tooling => self.patches.len() - 1,
         }
     }
 
     pub(crate) fn export_path(&self, index: usize, patch: &Patch) -> Option<String> {
-        (patch.kind == PatchKind::Source).then(|| {
+        (patch.layer == PatchLayer::Source).then(|| {
             format!(
                 "{}/{:04}-{}.patch",
                 self.documents.exports.trim_end_matches('/'),
@@ -619,8 +623,8 @@ impl BaseTarget {
             is_full_sha(&self.commit),
             "target commit must be a full SHA"
         );
-        match self.kind {
-            TargetKind::Commit => {
+        match self.target_type {
+            TargetType::Commit => {
                 ensure!(
                     self.selector == self.commit,
                     "commit selector must equal target commit"
@@ -630,7 +634,7 @@ impl BaseTarget {
                     "commit target cannot have tag_object"
                 );
             }
-            TargetKind::Branch => {
+            TargetType::Branch => {
                 ensure!(
                     self.selector.starts_with("refs/heads/"),
                     "branch selector must be a full refs/heads ref"
@@ -640,7 +644,7 @@ impl BaseTarget {
                     "branch target cannot have tag_object"
                 );
             }
-            TargetKind::Tag => {
+            TargetType::Tag => {
                 ensure!(
                     self.selector.starts_with("refs/tags/"),
                     "tag selector must be a full refs/tags ref"
@@ -827,7 +831,7 @@ mod tests {
     fn manifest() -> Manifest {
         let commit = "0".repeat(40);
         Manifest {
-            schema: 1,
+            schema: SCHEMA,
             downstream: Downstream {
                 remote: "origin".into(),
                 branch: "main".into(),
@@ -841,7 +845,7 @@ mod tests {
             },
             base: Base {
                 target: BaseTarget {
-                    kind: TargetKind::Commit,
+                    target_type: TargetType::Commit,
                     selector: commit.clone(),
                     commit: commit.clone(),
                     tag_object: None,
@@ -856,7 +860,7 @@ mod tests {
             bookkeeping_patch: "fork-tooling".into(),
             patches: vec![Patch {
                 name: "fork-tooling".into(),
-                kind: PatchKind::Tooling,
+                layer: PatchLayer::Tooling,
                 purpose: "Own downstream tooling.".into(),
                 upstream_status: "downstream-only".into(),
                 drop_when: "The fork is retired.".into(),
@@ -913,7 +917,7 @@ mod tests {
     fn source_patch() -> Patch {
         Patch {
             name: "source".into(),
-            kind: PatchKind::Source,
+            layer: PatchLayer::Source,
             purpose: "Change source.".into(),
             upstream_status: "not-submitted".into(),
             drop_when: "Upstream changes.".into(),

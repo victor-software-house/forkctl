@@ -4,10 +4,10 @@
 
 Base: `{{ target_selector }}` (`{{ base_sha }}`)
 
-| Order | Patch | Kind | Purpose | Upstream status | Drop condition |
+| Order | Patch | Layer | Purpose | Upstream status | Drop condition |
 |--:|:--|:--|:--|:--|:--|
 {% for patch in patches -%}
-| {{ loop.index }} | `{{ patch.name }}` | {{ patch.kind }} | {{ patch.purpose }} | {{ patch.upstream_status }} | {{ patch.drop_when }} |
+| {{ loop.index }} | `{{ patch.name }}` | {{ patch.layer }} | {{ patch.purpose }} | {{ patch.upstream_status }} | {{ patch.drop_when }} |
 {% endfor %}
 ## Disabled
 
@@ -31,8 +31,8 @@ Base: `{{ target_selector }}` (`{{ base_sha }}`)
 
 | Event | Patch | Former commit | Target | Purpose |
 |:--|:--|:--|:--|:--|
-{% for event in history -%}
-| {{ event.kind }} | `{{ event.patch }}` | `{{ event.commit }}` | `{{ event.target }}` (`{{ event.target_commit }}`) | {{ event.purpose }} |
+{% for entry in history -%}
+| {{ entry.event }} | `{{ entry.patch }}` | `{{ entry.commit }}` | `{{ entry.target }}` (`{{ entry.target_commit }}`) | {{ entry.purpose }} |
 {% else -%}
 | None | — | — | — | — |
 {% endfor %}

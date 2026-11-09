@@ -36,6 +36,7 @@ completion bootstrap.
 | `patch` | — | Create, inspect, select, edit, refresh, or finish patches |
 | `rebase` | — | Replay the declared stack onto an exact upstream target |
 | `contract` | — | Edit declarative repository contracts |
+| `upgrade` | — | Rewrite a manifest from forkctl 0.0.48 or earlier as this release's schema, and refresh the bookkeeping patch |
 | `publish` | — | Publish the managed branch using the repository default, or an explicit mode |
 | `operation` | — | Inspect, continue, or abort the current operation |
 | `instructions` | — | Print the generated operator and repository contract |
@@ -60,6 +61,7 @@ completion bootstrap.
      One-shot: `publish --rewrite` / `--append` / `--propose` / `--promote`.
 3. Respect an explicit `--manifest PATH` or `FORKCTL_MANIFEST`. Do not guess a different manifest when discovery fails.
 4. Run `status`, then the complete read-only `check`, before mutation.
+   If `status` reports a manifest schema 1 from an earlier forkctl, run `upgrade` once on a clean worktree with no operation in progress.
 5. Use `<invocation> --help` and `<invocation> instructions` as the authoritative installed-version contract. Do not invent aliases for rejected commands or fields. `completion SHELL` emits registration.
 
 If the mounted task is missing (later patch popped `mise.toml`), do **not** call a PATH-global binary:
@@ -78,7 +80,7 @@ Create a metadata-only patch intent before editing:
 
 ```sh
 mise run fork patch create PATCH \
-  --kind source \
+  --layer source \
   --purpose 'Why this downstream change exists.' \
   --upstream-status not-submitted \
   --drop-when 'The condition that makes this patch unnecessary.' \
@@ -217,8 +219,8 @@ Pretty output is for operators. Automation uses JSON output or the local one-req
 
 ```sh
 mise run fork status --format json
-mise run fork api schema --kind bundle
-printf '%s' '{"protocol_version":1,"mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
+mise run fork api schema --document bundle
+printf '%s' '{"protocol_version":2,"mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
   | mise run fork api call
 ```
 

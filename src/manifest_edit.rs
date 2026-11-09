@@ -1,4 +1,4 @@
-//! Every kind of change a command makes to the tracked manifest, applied once
+//! Every change a command makes to the tracked manifest, applied once
 //! to the typed [`Manifest`] and once to the YAML text, so the file keeps
 //! every byte the command did not change.
 
@@ -258,7 +258,7 @@ fn refused(path: &Path, what: &str, error: &yamled::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{RecoveryEvidence, TargetKind};
+    use crate::manifest::{RecoveryEvidence, TargetType};
 
     const EXAMPLE: &str = include_str!("../examples/fork.yaml");
 
@@ -323,7 +323,7 @@ mod tests {
     fn base_edits_change_only_the_base_values() {
         let source = commented();
         let target = BaseTarget {
-            kind: TargetKind::Branch,
+            target_type: TargetType::Branch,
             selector: "refs/heads/main".into(),
             commit: "a".repeat(40),
             tag_object: None,

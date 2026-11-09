@@ -151,7 +151,7 @@ reused pull request's URL as `proposal_url`.
 A created or updated proposal pull request SHALL be a draft. Its title SHALL
 name the downstream branch and the short candidate commit. Its body SHALL list
 the candidate commit, the downstream tip it replaces, the upstream base
-selector and commit, each patch with its kind and purpose, and the command
+selector and commit, each patch with its layer and purpose, and the command
 `mise run fork publish --promote`.
 
 #### Scenario: New pull request text

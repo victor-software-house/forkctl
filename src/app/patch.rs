@@ -14,7 +14,7 @@ use crate::protocol::{
     PatchRefreshArgs, PatchRefreshResult, PatchSelectResult, PatchShowResult, PatchSummary,
     PatchTarget, PatchTransitionArgs, PatchTransitionResult, ScopeEdit,
 };
-use crate::state::{ActivePatchState, OperationIntent, OperationKind, OperationState};
+use crate::state::{ActivePatchState, JournalCommand, OperationIntent, OperationState};
 
 impl App {
     pub(crate) fn patch_list(&self) -> Result<PatchListResult> {
@@ -27,7 +27,7 @@ impl App {
             .iter()
             .map(|patch| PatchSummary {
                 name: patch.name.clone(),
-                kind: patch.kind,
+                layer: patch.layer,
                 state: if applied.contains(&patch.name) {
                     "applied".into()
                 } else if unapplied.contains(&patch.name) {
@@ -46,7 +46,7 @@ impl App {
                     .iter()
                     .map(|record| PatchSummary {
                         name: record.patch.name.clone(),
-                        kind: record.patch.kind,
+                        layer: record.patch.layer,
                         state: "disabled".into(),
                         commit: Some(record.commit.clone()),
                         active: false,
@@ -175,15 +175,15 @@ impl App {
         self.require_declared_branch()?;
         self.require_no_operation()?;
         let (name, mut patch) = self.resolve_patch(args.patch.as_deref())?;
-        let Some(old_kind) = self.manifest()?.patch(&name).map(|patch| patch.kind) else {
+        let Some(old_layer) = self.manifest()?.patch(&name).map(|patch| patch.layer) else {
             return Err(DomainError::invalid_request(
                 "draft metadata is edited by recreating the draft",
             )
             .into());
         };
         let old_commit = self.patch_commit(&name)?;
-        if let Some(kind) = args.kind {
-            patch.kind = kind;
+        if let Some(layer) = args.layer {
+            patch.layer = layer;
         }
         if let Some(value) = args.purpose {
             patch.purpose = value;
@@ -215,7 +215,7 @@ impl App {
             .validate()
             .map_err(|error| DomainError::invalid_request(error.to_string()))?;
         self.require_scope_covers_commit(&patch, &old_commit)?;
-        let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
+        let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_layer)?;
         let plan = MutationPlan {
             command: "patch.edit".into(),
             reads: vec![self.manifest_path.display().to_string(), old_commit.clone()],
@@ -228,13 +228,13 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
-        let mut operation = self.create_operation(OperationKind::PatchEdit, None)?;
+        let mut operation = self.create_operation(JournalCommand::PatchEdit, None)?;
         operation.phase = "editing".into();
         operation.intent = Some(OperationIntent::Edit {
             patch: patch.clone(),
         });
         self.write_operation(&operation)?;
-        let mutation = if old_kind == patch.kind {
+        let mutation = if old_layer == patch.layer {
             run(
                 &self.repo,
                 "stg",
@@ -322,13 +322,13 @@ impl App {
         operation: &OperationState,
         patch: Patch,
     ) -> Result<CommandResult> {
-        // The manifest still holds the pre-edit entry, so its kind is the old
-        // kind.
-        let old_kind = self
+        // The manifest still holds the pre-edit entry, so its layer is the old
+        // layer.
+        let old_layer = self
             .manifest()?
             .patch(&patch.name)
-            .map_or(patch.kind, |existing| existing.kind);
-        let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_kind)?;
+            .map_or(patch.layer, |existing| existing.layer);
+        let (proposed, edits) = self.proposed_manifest_with_patch(patch.clone(), old_layer)?;
         let conflicts = capture(
             &self.repo,
             "git",
@@ -413,7 +413,7 @@ impl App {
     fn proposed_manifest_with_patch(
         &self,
         patch: Patch,
-        old_kind: crate::manifest::PatchKind,
+        old_layer: crate::manifest::PatchLayer,
     ) -> Result<(crate::manifest::Manifest, Vec<ManifestEdit>)> {
         let manifest = self.manifest()?;
         manifest.patch(&patch.name).ok_or_else(|| {
@@ -426,10 +426,10 @@ impl App {
                     .map(|active| active.name().to_string()),
             )
         })?;
-        // Only a kind change repositions a patch; an in-place edit must not
+        // Only a layer change repositions a patch; an in-place edit must not
         // move it, or the declared order would diverge from the series
         // StGit still holds.
-        let edits = if old_kind == patch.kind {
+        let edits = if old_layer == patch.layer {
             vec![ManifestEdit::ReplacePatch(patch)]
         } else {
             let remove = ManifestEdit::RemovePatch {
@@ -509,7 +509,7 @@ impl App {
             return Ok(CommandResult::Plan(plan));
         }
         let old_commit = self.patch_commit(&name).ok();
-        let mut operation = self.create_operation(OperationKind::PatchRefresh, None)?;
+        let mut operation = self.create_operation(JournalCommand::PatchRefresh, None)?;
         operation.phase = "refreshing".into();
         operation.intent = Some(OperationIntent::Refresh {
             patch: patch.clone(),
@@ -782,12 +782,12 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
-        let kind = if disable {
-            OperationKind::PatchDisable
+        let journal_command = if disable {
+            JournalCommand::PatchDisable
         } else {
-            OperationKind::PatchRemove
+            JournalCommand::PatchRemove
         };
-        let mut operation = self.create_operation(kind, None)?;
+        let mut operation = self.create_operation(journal_command, None)?;
         operation.phase = "removing".into();
         operation.intent = Some(OperationIntent::Transition {
             patch: patch.clone(),
@@ -885,7 +885,7 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
-        let mut operation = self.create_operation(OperationKind::PatchEnable, None)?;
+        let mut operation = self.create_operation(JournalCommand::PatchEnable, None)?;
         operation.phase = "enabling".into();
         operation.intent = Some(OperationIntent::Transition {
             patch: record.patch.clone(),
@@ -963,7 +963,7 @@ impl App {
     pub(super) fn continue_patch_transition(
         &mut self,
         mut operation: OperationState,
-        kind: OperationKind,
+        command: JournalCommand,
         patch: Patch,
         commit: String,
         position: usize,
@@ -987,7 +987,7 @@ impl App {
         if capture(&self.repo, "stg", ["series", "--unapplied", "--count"])? != "0" {
             run(&self.repo, "stg", ["push", "--all"])?;
         }
-        if kind == OperationKind::PatchEnable {
+        if command == JournalCommand::PatchEnable {
             let record = self
                 .manifest()?
                 .disabled_patches
@@ -1022,7 +1022,7 @@ impl App {
             commit,
             position,
             reason,
-            kind == OperationKind::PatchDisable,
+            command == JournalCommand::PatchDisable,
         )
     }
 
@@ -1055,7 +1055,7 @@ impl App {
         };
         Ok(if disabled {
             CommandResult::PatchDisable(result)
-        } else if operation.kind == OperationKind::PatchRemove {
+        } else if operation.command == JournalCommand::PatchRemove {
             CommandResult::PatchRemove(result)
         } else {
             CommandResult::PatchEnable(result)

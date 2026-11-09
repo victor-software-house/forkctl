@@ -42,9 +42,16 @@ edit path.
 - `PATCHES.md` and source exports are generated evidence; edit metadata with forkctl, not generated files.
 - Active patch and current operation are typed Git-private clone state.
 
+## Upgrading from forkctl 0.0.48
+
+Manifest schema 2 names a patch's `layer`, a base target's `type`, and a history entry's `event`, where schema 1 named each `kind`.
+When `status` reports a schema 1 manifest, finish or abort any operation with the release that started it, commit or discard worktree changes, then run `mise run fork upgrade`.
+It rewrites the manifest in place, keeping every other byte of a YAML file, regenerates the ledger, refreshes the bookkeeping patch, and runs the full check.
+`upgrade -n` shows the plan. On a schema 2 manifest it changes nothing.
+
 ## Patch workflow
 
-1. `mise run fork patch create NAME -k source|tooling -p PURPOSE -u STATUS -d DROP_CONDITION -s SCOPE...` records explicit active intent.
+1. `mise run fork patch create NAME -l source|tooling -p PURPOSE -u STATUS -d DROP_CONDITION -s SCOPE...` records explicit active intent.
 2. Edit normally and stage with Git.
 3. `mise run fork check -s` validates the index against the active patch without mutation.
 4. `mise run fork patch refresh` captures staged files by default, refreshes the targeted StGit patch, regenerates evidence, and refreshes bookkeeping.
@@ -98,7 +105,7 @@ Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit h
 - `--format pretty|json` selects human or complete versioned output. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
 - Every long option reads `FORKCTL_<LONG>`, such as `FORKCTL_FORMAT=json` or `FORKCTL_MANIFEST`. A flag on the command line wins over its variable, and an empty variable counts as unset.
 - `api call` reads one typed invocation and emits one JSON response.
-- `api schema -k bundle|manifest|invocation|response|active-state|operation` emits JSON Schema 2020-12.
+- `api schema -d bundle|manifest|invocation|response|active-state|operation` emits JSON Schema 2020-12.
 - `--usage-spec=fork` emits the mounted mise grammar from the Clap tree.
 - `completion SHELL` supports bash, elvish, fish, Nushell, PowerShell, and zsh.
 - JSON stdout never contains subprocess or human output, and JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say. A parse error under `--format json` is a JSON error even when the bad argument comes first.

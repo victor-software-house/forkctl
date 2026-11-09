@@ -1,0 +1,97 @@
+%YAML 1.2
+---
+# Kept byte for byte by forkctl upgrade.
+schema: 2
+downstream:
+  remote: origin
+  branch: main
+  recovery_tag_prefix: forkctl/recovery
+upstream:
+  remote: upstream
+  url: https://github.com/example/project.git
+  fetch_ref: refs/heads/main
+base:
+  target:
+    type: tag # an annotated release tag
+    selector: refs/tags/v2.0.0
+    commit: '2222222222222222222222222222222222222222'
+    tag_object: '1111111111111111111111111111111111111111'
+  canonical: '2222222222222222222222222222222222222222'
+  stack: '2222222222222222222222222222222222222222'
+documents:
+  ledger: PATCHES.md
+  exports: patches/downstream
+bookkeeping_patch: fork-tooling
+patches:
+  - name: downstream-change
+    layer: source
+    purpose: Describe why this downstream change exists.
+    upstream_status: not-submitted
+    drop_when: Upstream provides the required behavior.
+    scope:
+      - src/**
+  - {name: fork-tooling, layer: tooling, purpose: Own downstream fork policy., upstream_status: 'inappropriate: downstream-only tooling', drop_when: The downstream fork is retired., scope: [PATCHES.md, patches/fork.yaml, patches/downstream/**]}
+disabled_patches:
+  - patch:
+      name: optional-feature
+      layer: source
+      purpose: Add an optional feature.
+      upstream_status: not-submitted
+      drop_when: Upstream provides the feature.
+      scope:
+        - optional/**
+    commit: '1111111111111111111111111111111111111111'
+    position: 1
+    reason: Not needed on this host.
+    recovery:
+      tag: forkctl/recovery/one
+      tag_object: '1111111111111111111111111111111111111111'
+      old_base: '0000000000000000000000000000000000000000'
+      old_tip: '1111111111111111111111111111111111111111'
+history:
+  - event: rebase
+    target:
+      type: branch
+      selector: refs/heads/main
+      commit: '0000000000000000000000000000000000000000'
+    recovery:
+      tag: forkctl/recovery/two
+      tag_object: '1111111111111111111111111111111111111111'
+      old_base: '0000000000000000000000000000000000000000'
+      old_tip: '1111111111111111111111111111111111111111'
+    dropped:
+      - patch:
+          name: merged-change
+          layer: source
+          purpose: Fix a bug upstream later fixed.
+          upstream_status: merged
+          drop_when: Upstream merges the fix.
+          scope:
+            - src/fix.rs
+        commit: '1111111111111111111111111111111111111111'
+    path_changes:
+      - patch: downstream-change
+        commit: '1111111111111111111111111111111111111111'
+        lost_paths:
+          - src/moved.rs
+  - event: patch_removed
+    record:
+      patch:
+        name: retired-feature
+        layer: source
+        purpose: Add a retired feature.
+        upstream_status: not-submitted
+        drop_when: The feature is retired.
+        scope:
+          - retired/**
+      commit: '1111111111111111111111111111111111111111'
+      position: 1
+      reason: Feature retired.
+      recovery:
+        tag: forkctl/recovery/three
+        tag_object: '1111111111111111111111111111111111111111'
+        old_base: '0000000000000000000000000000000000000000'
+        old_tip: '1111111111111111111111111111111111111111'
+contracts:
+  allow_base: []
+  required_text: []

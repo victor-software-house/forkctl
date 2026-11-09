@@ -5,7 +5,7 @@ use crate::protocol::{
     CommandResult, ExecutionMode, MutationPlan, OperationAbortResult, OperationContinueResult,
     OperationStatusResult,
 };
-use crate::state::{OperationIntent, OperationKind};
+use crate::state::{JournalCommand, OperationIntent};
 
 impl App {
     pub(crate) fn operation_status(&self) -> Result<OperationStatusResult> {
@@ -24,7 +24,7 @@ impl App {
                 reads: vec![self.operation_path()?.display().to_string()],
                 writes: vec![format!(
                     "continue {:?} from {}",
-                    operation.kind, operation.phase
+                    operation.command, operation.phase
                 )],
                 hooks: Vec::new(),
                 ref_updates: Vec::new(),
@@ -33,11 +33,11 @@ impl App {
             }));
         }
         let normalized_append_bridge = self.normalize_append_bridge_head()?.is_some();
-        let result = match operation.kind {
-            OperationKind::Rebase => Some(Box::new(CommandResult::Rebase(Box::new(
+        let result = match operation.command {
+            JournalCommand::Rebase => Some(Box::new(CommandResult::Rebase(Box::new(
                 self.continue_rebase(operation)?,
             )))),
-            OperationKind::PatchEdit => {
+            JournalCommand::PatchEdit => {
                 let Some(OperationIntent::Edit { patch }) = operation.intent.clone() else {
                     return Err(DomainError::operation_conflict(
                         "patch edit operation has no typed intent",
@@ -47,7 +47,7 @@ impl App {
                 };
                 Some(Box::new(self.continue_patch_edit(&operation, patch)?))
             }
-            OperationKind::PatchRefresh => {
+            JournalCommand::PatchRefresh => {
                 let Some(OperationIntent::Refresh {
                     patch,
                     capture,
@@ -68,9 +68,9 @@ impl App {
                     normalized_append_bridge,
                 )?))
             }
-            kind @ (OperationKind::PatchRemove
-            | OperationKind::PatchDisable
-            | OperationKind::PatchEnable) => {
+            command @ (JournalCommand::PatchRemove
+            | JournalCommand::PatchDisable
+            | JournalCommand::PatchEnable) => {
                 let Some(OperationIntent::Transition {
                     patch,
                     commit,
@@ -85,7 +85,7 @@ impl App {
                     .into());
                 };
                 Some(Box::new(self.continue_patch_transition(
-                    operation, kind, patch, commit, position, reason,
+                    operation, command, patch, commit, position, reason,
                 )?))
             }
         };
@@ -126,7 +126,7 @@ impl App {
         if !confirmed {
             return Err(DomainError::invalid_request("operation abort requires --yes").into());
         }
-        if matches!(operation.kind, OperationKind::Rebase)
+        if matches!(operation.command, JournalCommand::Rebase)
             && let Some(active) = self.read_active()?
         {
             return Err(DomainError::active_patch_exists(active.name().to_string()).into());
@@ -154,12 +154,12 @@ impl App {
         self.complete_local_operation(&operation)?;
         let check = self
             .check_restored_repository(matches!(
-                operation.kind,
-                OperationKind::PatchRefresh
-                    | OperationKind::PatchEdit
-                    | OperationKind::PatchRemove
-                    | OperationKind::PatchDisable
-                    | OperationKind::PatchEnable
+                operation.command,
+                JournalCommand::PatchRefresh
+                    | JournalCommand::PatchEdit
+                    | JournalCommand::PatchRemove
+                    | JournalCommand::PatchDisable
+                    | JournalCommand::PatchEnable
             ))
             .map_err(|error| {
                 error.context(format!(

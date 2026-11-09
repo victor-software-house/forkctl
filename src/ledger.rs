@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use askama::Template;
 
-use crate::manifest::{CheckStage, HistoryEvent, Manifest, PatchKind};
+use crate::manifest::{CheckStage, HistoryEvent, Manifest, PatchLayer};
 
 #[derive(Template)]
 #[template(path = "patches.md", escape = "none")]
@@ -16,7 +16,7 @@ struct LedgerTemplate<'a> {
 
 struct PatchRow {
     name: String,
-    kind: &'static str,
+    layer: &'static str,
     purpose: String,
     upstream_status: String,
     drop_when: String,
@@ -31,7 +31,7 @@ struct CheckRow {
 }
 
 struct HistoryRow {
-    kind: &'static str,
+    event: &'static str,
     patch: String,
     commit: String,
     target: String,
@@ -79,7 +79,7 @@ pub(crate) fn render(manifest: &Manifest) -> Result<String> {
             .iter()
             .map(|patch| PatchRow {
                 name: escape(&patch.name),
-                kind: patch_kind(patch.kind),
+                layer: patch_layer(patch.layer),
                 purpose: escape(&patch.purpose),
                 upstream_status: escape(&patch.upstream_status),
                 drop_when: escape(&patch.drop_when),
@@ -115,7 +115,7 @@ fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
             } => dropped
                 .iter()
                 .map(|item| HistoryRow {
-                    kind: "upstream merged",
+                    event: "upstream merged",
                     patch: escape(&item.patch.name),
                     commit: item.commit.clone(),
                     target: escape(&target.selector),
@@ -123,7 +123,7 @@ fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
                     purpose: escape(&item.patch.purpose),
                 })
                 .chain(path_changes.iter().map(|item| HistoryRow {
-                    kind: "replay path change",
+                    event: "replay path change",
                     patch: escape(&item.patch),
                     commit: item.commit.clone(),
                     target: escape(&target.selector),
@@ -142,7 +142,7 @@ fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
                 }))
                 .collect::<Vec<_>>(),
             HistoryEvent::PatchRemoved { record } => vec![HistoryRow {
-                kind: "removed",
+                event: "removed",
                 patch: escape(&record.patch.name),
                 commit: record.commit.clone(),
                 target: "—".into(),
@@ -150,7 +150,7 @@ fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
                 purpose: escape(&record.reason),
             }],
             HistoryEvent::PatchEnabled { record, .. } => vec![HistoryRow {
-                kind: "re-enabled",
+                event: "re-enabled",
                 patch: escape(&record.patch.name),
                 commit: record.commit.clone(),
                 target: "—".into(),
@@ -161,10 +161,10 @@ fn history_rows(manifest: &Manifest) -> Vec<HistoryRow> {
         .collect()
 }
 
-pub(crate) fn patch_kind(kind: PatchKind) -> &'static str {
-    match kind {
-        PatchKind::Source => "source",
-        PatchKind::Tooling => "tooling",
+pub(crate) fn patch_layer(layer: PatchLayer) -> &'static str {
+    match layer {
+        PatchLayer::Source => "source",
+        PatchLayer::Tooling => "tooling",
     }
 }
 

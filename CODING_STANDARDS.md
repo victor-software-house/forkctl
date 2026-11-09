@@ -46,7 +46,9 @@ Every production child comes from `process.rs`, clears only repository-local var
 
 ### 3.4 No compatibility
 
-The current manifest/API/local-state contract is `schema: 1`. There are no previous formats from the implementation's perspective and no migration or fallback code.
+The current manifest and local-state contract is `schema: 2`, and the API is protocol version 2. Normal reads accept only the current formats, with no fallback code.
+
+The one migration is `forkctl upgrade` from manifest schema 1, whose `kind` keys schema 2 names `layer`, `type`, and `event`. Its text rewrite lives in `src/manifest_upgrade.rs`, runs only when an operator invokes the command, and leaves with that module.
 
 ### 3.5 Publication evidence
 

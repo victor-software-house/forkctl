@@ -127,7 +127,7 @@ impl Fixture {
 
     pub(crate) fn api_call(&self, mode: &str, request: &serde_json::Value) -> Output {
         let invocation = serde_json::json!({
-            "protocol_version": 1,
+            "protocol_version": 2,
             "manifest": self.manifest,
             "mode": mode,
             "request": request,

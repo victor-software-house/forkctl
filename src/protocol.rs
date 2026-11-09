@@ -7,10 +7,10 @@ use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchKind, RequiredText};
+use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchLayer, RequiredText};
 use crate::state::{ActivePatchState, OperationState};
 
-pub(crate) const PROTOCOL_VERSION: u32 = 1;
+pub(crate) const PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -60,6 +60,8 @@ pub(crate) enum ApiRequest {
     PatchEnable(PatchName),
     #[serde(rename = "contract.edit")]
     ContractEdit(ContractEditArgs),
+    #[serde(rename = "upgrade")]
+    Upgrade(EmptyArgs),
     #[serde(rename = "rebase")]
     Rebase(RebaseArgs),
     #[serde(rename = "publish")]
@@ -91,6 +93,7 @@ impl ApiRequest {
             Self::PatchDisable(_) => "patch.disable",
             Self::PatchEnable(_) => "patch.enable",
             Self::ContractEdit(_) => "contract.edit",
+            Self::Upgrade(_) => "upgrade",
             Self::Rebase(_) => "rebase",
             Self::Publish(_) => "publish",
             Self::OperationStatus(_) => "operation.status",
@@ -205,7 +208,7 @@ pub(crate) struct PatchTransitionArgs {
 #[serde(deny_unknown_fields)]
 pub(crate) struct PatchCreateArgs {
     pub name: String,
-    pub kind: PatchKind,
+    pub layer: PatchLayer,
     pub purpose: String,
     pub upstream_status: String,
     pub drop_when: String,
@@ -218,7 +221,7 @@ impl From<PatchCreateArgs> for Patch {
     fn from(value: PatchCreateArgs) -> Self {
         Self {
             name: value.name,
-            kind: value.kind,
+            layer: value.layer,
             purpose: value.purpose,
             upstream_status: value.upstream_status,
             drop_when: value.drop_when,
@@ -246,7 +249,7 @@ pub(crate) struct PatchEditArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<PatchKind>,
+    pub layer: Option<PatchLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -366,6 +369,7 @@ pub(crate) enum CommandResult {
     PatchDisable(PatchTransitionResult),
     PatchEnable(PatchTransitionResult),
     ContractEdit(ContractEditResult),
+    Upgrade(UpgradeResult),
     Rebase(Box<RebaseResult>),
     Publish(PublishResult),
     OperationStatus(Box<OperationStatusResult>),
@@ -486,7 +490,7 @@ pub(crate) enum ErrorDetails {
     },
     Operation {
         operation_id: String,
-        kind: String,
+        command: String,
         phase: String,
         next_actions: Vec<String>,
     },
@@ -577,7 +581,7 @@ pub(crate) struct CheckSummary {
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
 pub(crate) struct PatchSummary {
     pub name: String,
-    pub kind: PatchKind,
+    pub layer: PatchLayer,
     pub state: String,
     pub commit: Option<String>,
     pub active: bool,
@@ -649,6 +653,16 @@ pub(crate) struct ContractEditResult {
     pub contracts: Contracts,
     pub generated_paths: Vec<String>,
     pub check: CheckResult,
+}
+
+/// What `upgrade` changed. A manifest already at the current schema reports
+/// equal schemas, no generated paths, and no check.
+#[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
+pub(crate) struct UpgradeResult {
+    pub from_schema: u32,
+    pub to_schema: u32,
+    pub generated_paths: Vec<String>,
+    pub check: Option<CheckResult>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
@@ -749,9 +763,9 @@ impl ApiResponse {
     }
 }
 
-pub(crate) fn schema_document(kind: SchemaKind) -> serde_json::Result<serde_json::Value> {
-    match kind {
-        SchemaKind::Bundle => Ok(serde_json::json!({
+pub(crate) fn schema_document(document: SchemaDocument) -> serde_json::Result<serde_json::Value> {
+    match document {
+        SchemaDocument::Bundle => Ok(serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "forkctl_protocol_version": PROTOCOL_VERSION,
             "schemas": {
@@ -762,16 +776,18 @@ pub(crate) fn schema_document(kind: SchemaKind) -> serde_json::Result<serde_json
                 "operation": schemars::schema_for!(OperationState),
             }
         })),
-        SchemaKind::Manifest => serde_json::to_value(schemars::schema_for!(Manifest)),
-        SchemaKind::Invocation => serde_json::to_value(schemars::schema_for!(ApiInvocation)),
-        SchemaKind::Response => serde_json::to_value(schemars::schema_for!(ApiResponse)),
-        SchemaKind::ActiveState => serde_json::to_value(schemars::schema_for!(ActivePatchState)),
-        SchemaKind::Operation => serde_json::to_value(schemars::schema_for!(OperationState)),
+        SchemaDocument::Manifest => serde_json::to_value(schemars::schema_for!(Manifest)),
+        SchemaDocument::Invocation => serde_json::to_value(schemars::schema_for!(ApiInvocation)),
+        SchemaDocument::Response => serde_json::to_value(schemars::schema_for!(ApiResponse)),
+        SchemaDocument::ActiveState => {
+            serde_json::to_value(schemars::schema_for!(ActivePatchState))
+        }
+        SchemaDocument::Operation => serde_json::to_value(schemars::schema_for!(OperationState)),
     }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
-pub(crate) enum SchemaKind {
+pub(crate) enum SchemaDocument {
     Bundle,
     Manifest,
     Invocation,

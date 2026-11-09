@@ -7,5 +7,5 @@ Forkctl proposal for `{{ branch }}`. Do not merge this pull request: promote the
 ## Patches
 
 {% for patch in patches -%}
-- `{{ patch.name }}` ({{ patch.kind }}): {{ patch.purpose }}
+- `{{ patch.name }}` ({{ patch.layer }}): {{ patch.purpose }}
 {% endfor -%}

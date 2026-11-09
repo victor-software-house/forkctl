@@ -103,7 +103,7 @@ fn failure_cases() -> Vec<FailureCase> {
             "patch.create",
             serde_json::json!({
                 "name":"fork-tooling",
-                "kind":"tooling",
+                "layer":"tooling",
                 "purpose":"duplicate",
                 "upstream_status":"not-submitted",
                 "drop_when":"never",
@@ -151,6 +151,12 @@ fn failure_cases() -> Vec<FailureCase> {
             serde_json::json!({"clear":false,"allow_base":[],"required_text":[]}),
             "invalid_request",
         ),
+        FailureCase {
+            command: "upgrade",
+            arguments: serde_json::json!({}),
+            expected_code: "manifest_invalid",
+            prepare: declare_unknown_schema,
+        },
         case("rebase", serde_json::json!({"onto":""}), "invalid_request"),
         FailureCase {
             command: "publish",
@@ -184,12 +190,23 @@ fn case(
     }
 }
 
+/// A manifest at a schema neither this forkctl nor its upgrade reads.
+fn declare_unknown_schema(fixture: &Fixture) {
+    let path = fixture.repo.join("patches/fork.yaml");
+    let manifest = fs::read_to_string(&path).unwrap();
+    assert!(
+        manifest.starts_with("schema: 2\n") || manifest.contains("\nschema: 2\n"),
+        "{manifest}"
+    );
+    fs::write(&path, manifest.replacen("schema: 2\n", "schema: 3\n", 1)).unwrap();
+}
+
 fn create_active_patch(fixture: &Fixture) {
     fixture.forkctl_ok(&[
         "patch",
         "create",
         "draft",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "unpublished draft",
@@ -205,7 +222,7 @@ fn create_active_patch(fixture: &Fixture) {
 fn schema_commands() -> BTreeSet<String> {
     let output = Command::new(env!("CARGO_BIN_EXE_forkctl"))
         .env("FORKCTL_NO_UPDATE_CHECK", "1")
-        .args(["api", "schema", "--kind", "invocation"])
+        .args(["api", "schema", "--document", "invocation"])
         .output()
         .unwrap();
     assert!(output.status.success());

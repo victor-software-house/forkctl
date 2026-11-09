@@ -20,6 +20,7 @@ mod ledger;
 mod manifest;
 mod manifest_codec;
 mod manifest_edit;
+mod manifest_upgrade;
 mod presentation;
 mod process;
 mod proposal;
@@ -92,11 +93,11 @@ fn execute_cli(cli: Cli) -> Result<Report> {
     let quiet = cli.output.quiet;
     let action = cli.into_action();
     Ok(match action {
-        Ok(CliAction::ApiSchema(kind)) => Report::json(protocol::schema_document(kind)?),
+        Ok(CliAction::ApiSchema(document)) => Report::json(protocol::schema_document(document)?),
         Ok(CliAction::ApiCall) => Report::response(run_api_call(manifest.as_deref()), None),
         Ok(CliAction::Completion(shell)) => Report::text(completion_text(shell)?),
-        Ok(CliAction::Candidates(kind)) => {
-            Report::text(completion::candidate_lines(kind).join("\n"))
+        Ok(CliAction::Candidates(candidate_type)) => {
+            Report::text(completion::candidate_lines(candidate_type).join("\n"))
         }
         Ok(CliAction::Request { request, mode }) => {
             if format == OutputFormat::Pretty {
@@ -157,6 +158,7 @@ fn execute(manifest: Option<&str>, request: ApiRequest, mode: ExecutionMode) -> 
         ApiRequest::PatchDisable(args) => app.patch_disable(args, mode)?,
         ApiRequest::PatchEnable(args) => app.patch_enable(&args.patch, mode)?,
         ApiRequest::ContractEdit(args) => app.contract_edit(args, mode)?,
+        ApiRequest::Upgrade(_) => app.upgrade(mode)?,
         ApiRequest::Rebase(args) => app.rebase(&args.onto, mode)?,
         ApiRequest::Publish(args) => app.publish(&args, mode)?,
         ApiRequest::OperationStatus(_) => {
@@ -243,7 +245,7 @@ fn add_usage_completions(spec: &mut usage::Spec, candidate_command: &str) {
         (&["init"], "upstream_remote", "remote"),
         (&["init"], "downstream_remote", "remote"),
     ];
-    for (path, name, kind) in entries {
+    for (path, name, candidate_type) in entries {
         let mut command = &mut spec.cmd;
         for segment in *path {
             let Some(next) = command.subcommands.get_mut(*segment) else {
@@ -254,7 +256,7 @@ fn add_usage_completions(spec: &mut usage::Spec, candidate_command: &str) {
         command.complete.insert(
             (*name).to_string(),
             SpecComplete::new(*name)
-                .run(format!("{candidate_command} __candidates {kind}"))
+                .run(format!("{candidate_command} __candidates {candidate_type}"))
                 .descriptions(true),
         );
     }
