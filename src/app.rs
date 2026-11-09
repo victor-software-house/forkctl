@@ -243,8 +243,8 @@ impl App {
                 continue;
             }
             let bytes = entry.as_bytes();
-            let x = bytes[0] as char;
-            let y = bytes[1] as char;
+            let x = char::from(bytes[0]);
+            let y = char::from(bytes[1]);
             let path = entry[3..].to_string();
             // Rename and copy entries carry their original path in the
             // following field. Both sides are affected, so both are

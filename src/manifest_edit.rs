@@ -212,7 +212,7 @@ fn remove_item(
     len: usize,
 ) -> std::result::Result<(), yamled::Error> {
     if len == 1 {
-        document.replace(sequence, &[] as &[()])
+        document.replace(sequence, &Vec::<()>::new())
     } else {
         document.remove(&sequence.clone().index(index))
     }
