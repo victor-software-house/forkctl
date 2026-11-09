@@ -2492,7 +2492,7 @@ fn json_manifest_is_a_first_class_lifecycle_codec() {
     let fixture = Fixture::new_with_manifest("patches/fork.json");
     let path = fixture.repo.join("patches/fork.json");
     let initial: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    assert_eq!(initial["schema"], 1);
+    assert_eq!(initial["schema"], 2);
 
     fixture.forkctl_ok(&["contract", "edit", "--allow-base", "vendor/**"]);
     let rewritten = fs::read(&path).unwrap();
