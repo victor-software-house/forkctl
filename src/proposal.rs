@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use askama::Template;
 
-use crate::ledger::patch_kind;
+use crate::ledger::patch_layer;
 use crate::manifest::Manifest;
 
 const SHORT_COMMIT: usize = 12;
@@ -25,7 +25,7 @@ struct ProposalTemplate {
 
 struct PatchRow {
     name: String,
-    kind: &'static str,
+    layer: &'static str,
     purpose: String,
 }
 
@@ -47,7 +47,7 @@ pub(crate) fn render(
             .iter()
             .map(|patch| PatchRow {
                 name: escape_inline(&patch.name),
-                kind: patch_kind(patch.kind),
+                layer: patch_layer(patch.layer),
                 purpose: patch.purpose.replace('\n', " "),
             })
             .collect(),

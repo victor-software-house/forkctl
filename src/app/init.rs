@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use super::{App, fetch_upstream, resolve_target, upstream_tracking_ref};
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::manifest::{
-    Base, Contracts, Documents, Downstream, Manifest, Patch, PatchKind, Upstream,
+    Base, Contracts, Documents, Downstream, Manifest, Patch, PatchLayer, Upstream,
 };
 use crate::process::{capture, run, run_operator};
 use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, MutationPlan};
@@ -113,7 +113,7 @@ impl App {
             .is_none();
         let patch = Patch {
             name: bookkeeping_patch.clone(),
-            kind: PatchKind::Tooling,
+            layer: PatchLayer::Tooling,
             purpose: "Own fork policy, generated evidence, and integration configuration.".into(),
             upstream_status: "inappropriate: downstream-only fork maintenance".into(),
             drop_when: "The downstream fork is retired.".into(),
@@ -121,7 +121,7 @@ impl App {
             scope,
         };
         let mut manifest = Manifest {
-            schema: 1,
+            schema: crate::manifest::SCHEMA,
             downstream: Downstream {
                 remote: downstream_remote,
                 branch: downstream_branch,

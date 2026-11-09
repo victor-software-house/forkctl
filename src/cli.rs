@@ -4,11 +4,11 @@ use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use ctl_core::{DryRunArgs, EnvPrefix, OutputArgs};
 
-use crate::manifest::{Check, CheckStage, PatchKind, RequiredText};
+use crate::manifest::{Check, CheckStage, PatchLayer, RequiredText};
 use crate::protocol::{
     ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ContractEditArgs, EmptyArgs,
     ExecutionMode, InitArgs, OperationAbortArgs, PatchCreateArgs, PatchEditArgs, PatchName,
-    PatchRefreshArgs, PatchTarget, PatchTransitionArgs, PublishArgs, RebaseArgs, SchemaKind,
+    PatchRefreshArgs, PatchTarget, PatchTransitionArgs, PublishArgs, RebaseArgs, SchemaDocument,
     ScopeEdit,
 };
 
@@ -51,6 +51,9 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ContractCommand,
     },
+    /// Rewrite a manifest from forkctl 0.0.48 or earlier as this release's
+    /// schema, and refresh the bookkeeping patch.
+    Upgrade(DryRunArgs),
     /// Publish the managed branch using the repository default, or an explicit
     /// mode.
     Publish(PublishCliArgs),
@@ -73,8 +76,8 @@ pub(crate) enum Command {
     },
     #[command(hide = true, name = "__candidates")]
     Candidates {
-        #[arg(value_enum)]
-        kind: crate::completion::CandidateKind,
+        #[arg(value_enum, value_name = "TYPE")]
+        candidate_type: crate::completion::CandidateType,
     },
 }
 
@@ -196,8 +199,8 @@ pub(crate) struct PatchCreateCliArgs {
     /// Unique patch name.
     pub name: String,
     /// Patch layer.
-    #[arg(short = 'k', long, value_enum, help_heading = "Patch metadata")]
-    pub kind: PatchKind,
+    #[arg(short = 'l', long, value_enum, help_heading = "Patch metadata")]
+    pub layer: PatchLayer,
     /// Why this downstream patch exists.
     #[arg(short = 'p', long, help_heading = "Patch metadata")]
     pub purpose: String,
@@ -237,8 +240,8 @@ pub(crate) struct PatchEditCliArgs {
     #[arg(add = crate::completion::patch_completer())]
     pub name: Option<String>,
     /// Replacement patch layer.
-    #[arg(short = 'k', long, value_enum, help_heading = "Patch metadata")]
-    pub kind: Option<PatchKind>,
+    #[arg(short = 'l', long, value_enum, help_heading = "Patch metadata")]
+    pub layer: Option<PatchLayer>,
     /// Replacement downstream purpose.
     #[arg(short = 'p', long, help_heading = "Patch metadata")]
     pub purpose: Option<String>,
@@ -403,8 +406,8 @@ pub(crate) enum ApiCommand {
     /// Emit JSON Schema 2020-12.
     Schema {
         /// Schema document to emit.
-        #[arg(short = 'k', long, value_enum, default_value = "bundle")]
-        kind: SchemaKind,
+        #[arg(short = 'd', long, value_enum, default_value = "bundle")]
+        document: SchemaDocument,
     },
     /// Read one invocation from stdin and emit one response.
     Call,
@@ -425,10 +428,10 @@ pub(crate) enum CliAction {
         request: Box<ApiRequest>,
         mode: ExecutionMode,
     },
-    ApiSchema(SchemaKind),
+    ApiSchema(SchemaDocument),
     ApiCall,
     Completion(CompletionShell),
-    Candidates(crate::completion::CandidateKind),
+    Candidates(crate::completion::CandidateType),
 }
 
 impl Cli {
@@ -478,6 +481,10 @@ impl Cli {
                     mode: mode(args.execution.dry_run),
                 },
             },
+            Command::Upgrade(args) => CliAction::Request {
+                request: Box::new(ApiRequest::Upgrade(EmptyArgs::default())),
+                mode: mode(args.dry_run),
+            },
             Command::Publish(args) => {
                 let publish_mode = if args.rewrite {
                     Some(crate::manifest::PublishMode::Rewrite)
@@ -502,10 +509,10 @@ impl Cli {
             Command::Instructions => request(ApiRequest::Instructions(EmptyArgs::default())),
             Command::Completion { shell } => CliAction::Completion(shell),
             Command::Api { command } => match command {
-                ApiCommand::Schema { kind } => CliAction::ApiSchema(kind),
+                ApiCommand::Schema { document } => CliAction::ApiSchema(document),
                 ApiCommand::Call => CliAction::ApiCall,
             },
-            Command::Candidates { kind } => CliAction::Candidates(kind),
+            Command::Candidates { candidate_type } => CliAction::Candidates(candidate_type),
         };
         ensure!(
             !(self.output.quiet && self.output.format.is_json()),
@@ -519,7 +526,7 @@ fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
     Ok({
         let declared = declared_checks(args.checks, args.check_globs, args.check_stages)?;
         ensure!(
-            args.kind.is_some()
+            args.layer.is_some()
                 || args.purpose.is_some()
                 || args.upstream_status.is_some()
                 || args.drop_when.is_some()
@@ -552,7 +559,7 @@ fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
         CliAction::Request {
             request: Box::new(ApiRequest::PatchEdit(PatchEditArgs {
                 patch: args.name,
-                kind: args.kind,
+                layer: args.layer,
                 purpose: args.purpose,
                 upstream_status: args.upstream_status,
                 drop_when: args.drop_when,
@@ -571,7 +578,7 @@ fn patch_action(command: PatchCommand) -> Result<CliAction> {
         PatchCommand::Create(args) => CliAction::Request {
             request: Box::new(ApiRequest::PatchCreate(PatchCreateArgs {
                 name: args.name,
-                kind: args.kind,
+                layer: args.layer,
                 purpose: args.purpose,
                 upstream_status: args.upstream_status,
                 drop_when: args.drop_when,

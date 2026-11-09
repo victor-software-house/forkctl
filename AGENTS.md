@@ -34,7 +34,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 - An identical branch never clears a ready operation until every required remote recovery ref matches; missing evidence is repaired atomically and mismatched evidence fails closed.
 - Every rewrite publication requires exact evidence of the tip it overwrites: the reviewed rebase lease, or the fetched downstream tracking ref when no operation is in flight.
 - Forkctl does not install hooks, edit `core.hooksPath`, or administer provider branch policy.
-- No compatibility reader, alias, migration, or fallback exists for older forkctl contracts.
+- No compatibility reader, alias, or fallback exists for older forkctl contracts. The one migration is `forkctl upgrade`, which rewrites a manifest schema 1 in place as schema 2; `src/manifest_upgrade.rs` and the schema 1 hint in `App::discover` are its only readers of the old keys, and all three are removed together.
 
 ## CLI and integration
 

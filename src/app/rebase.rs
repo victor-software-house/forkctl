@@ -8,7 +8,7 @@ use crate::manifest_edit::ManifestEdit;
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, RebaseResult};
 use crate::report::{self, ExportEvidence, RebaseReport};
-use crate::state::{OperationKind, OperationState, ReportEvidence};
+use crate::state::{JournalCommand, OperationState, ReportEvidence};
 
 impl App {
     pub(crate) fn rebase(&mut self, selector: &str, mode: ExecutionMode) -> Result<CommandResult> {
@@ -38,7 +38,7 @@ impl App {
         if mode == ExecutionMode::Plan {
             return Ok(CommandResult::Plan(plan));
         }
-        let mut operation = self.create_operation(OperationKind::Rebase, Some(target.clone()))?;
+        let mut operation = self.create_operation(JournalCommand::Rebase, Some(target.clone()))?;
         operation.phase = "replaying".into();
         self.write_operation(&operation)?;
         if let Err(error) = run(
@@ -154,7 +154,7 @@ impl App {
     }
 
     fn validate_rebase_continuation(&self, operation: &OperationState) -> Result<BaseTarget> {
-        if operation.kind != OperationKind::Rebase {
+        if operation.command != JournalCommand::Rebase {
             return Err(DomainError::operation_conflict(
                 "current operation is not rebase",
                 Some(operation),
@@ -279,7 +279,7 @@ impl App {
         )?;
         let mut removed_exports = Vec::new();
         for item in &dropped {
-            if item.patch.kind == crate::manifest::PatchKind::Source {
+            if item.patch.layer == crate::manifest::PatchLayer::Source {
                 let exports = self.repo.join(&self.manifest()?.documents.exports);
                 for entry in
                     fs::read_dir(&exports).internal(format!("read {}", exports.display()))?

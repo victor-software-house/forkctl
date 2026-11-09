@@ -45,7 +45,7 @@ The task uses `dir = "{{cwd}}"`, exact task-local tools, `exec forkctl "$@"`, an
 
 ```sh
 mise run fork patch create downstream-change \
-  -k source \
+  -l source \
   -p 'Describe why this downstream change exists.' \
   -u not-submitted \
   -d 'Upstream provides the required behavior.' \
@@ -112,7 +112,7 @@ A patch encodes the cases that existed when it was written. The drift that break
 
 ```sh
 mise run fork patch create terminal-guard \
-  -k source \
+  -l source \
   -p 'Route every terminal spawn through the downstream guard.' \
   -u not-submitted \
   -d 'Upstream guards terminal spawning.' \
@@ -265,8 +265,8 @@ Completion supports bash, elvish, fish, Nushell, PowerShell, and zsh, including 
 
 ```sh
 forkctl status --format json
-forkctl api schema --kind bundle
-printf '%s' '{"protocol_version":1,"manifest":"patches/fork.yaml","mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
+forkctl api schema --document bundle
+printf '%s' '{"protocol_version":2,"manifest":"patches/fork.yaml","mode":"execute","request":{"command":"check","arguments":{"scope":"repository"}}}' \
   | forkctl api call
 ```
 
@@ -274,7 +274,7 @@ The API already accepts complete typed command arguments from JSON on stdin; `ma
 
 Requests use dotted command names such as `patch.refresh` and `operation.abort`, command-specific typed arguments, and `mode: execute|plan`. Success, plan, notice, error, and error-detail types are schema-derived. JSON stdout is exactly one response and stderr is empty. JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say, and a parse error under `--format json` is a JSON error even when the bad argument comes first.
 
-Schema kinds: `bundle`, `manifest`, `invocation`, `response`, `active-state`, `operation`.
+Schema documents: `bundle`, `manifest`, `invocation`, `response`, `active-state`, `operation`.
 
 ## Manifest
 
@@ -283,7 +283,7 @@ YAML is the default human-authored format:
 ```yaml
 %YAML 1.2
 ---
-schema: 1
+schema: 2
 downstream:
   remote: origin
   branch: main
@@ -294,7 +294,7 @@ upstream:
   fetch_ref: refs/heads/main
 base:
   target:
-    kind: branch
+    type: branch
     selector: refs/heads/main
     commit: '0000000000000000000000000000000000000000'
   canonical: '0000000000000000000000000000000000000000'
@@ -305,7 +305,7 @@ documents:
 bookkeeping_patch: fork-tooling
 patches:
   - name: downstream-change
-    kind: source
+    layer: source
     purpose: Describe why this downstream change exists.
     upstream_status: not-submitted
     drop_when: Upstream provides the required behavior.
@@ -332,6 +332,8 @@ contracts:
 The extension selects the codec: `.yaml`/`.yml` reads and rewrites canonical YAML; `.json` reads and rewrites canonical JSON. Both deserialize into the same typed `Manifest`, execute the same handlers, and produce the same generated evidence. Unknown or missing extensions are rejected — forkctl never sniffs bytes or silently changes a file's format.
 
 YAML is read through ctl-core's input reader, which refuses duplicate keys, merge keys, and booleans other than `true` and `false`, and applies serde-saphyr's default size and nesting limits, which a repository may change under `limits:` in `.ctl/input.yaml`; forkctl prints a warning on stderr on every run for each limit raised above the default. Anchors and aliases are allowed. A command that changes a YAML manifest edits only the nodes it changes, so comments, key order, and formatting elsewhere survive; an edit that would go through an anchor or alias, or into a flow collection yamled cannot edit in place, fails with `manifest_invalid` and leaves the file unchanged. `init` writes a new manifest in full. JSON remains available for generated consumers; YAML is the readable default. Git-private operation/active state, API stdin/stdout, pretty/JSON output selection, and JSON Schema remain JSON.
+
+A patch's `layer` is `source` or `tooling`, and a base target's `type` is `commit`, `branch`, or `tag`. Manifest schema 1, which forkctl 0.0.48 and earlier wrote, named both of these, and a history entry's `event`, `kind`. `mise run fork upgrade` rewrites such a manifest in place as schema 2, regenerates the ledger, and refreshes the bookkeeping patch; run it on a clean worktree with no operation in progress.
 
 Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` trailers. Source patches precede tooling patches. Every source export is generated deterministically as `<exports>/<order>-<name>.patch`; tooling patches have no export. The final tooling patch owns manifest, ledger, exports, and integration files.
 

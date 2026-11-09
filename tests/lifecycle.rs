@@ -37,7 +37,7 @@ fn explicit_patch_workflow_captures_staged_and_generates_evidence() {
         "patch",
         "create",
         "source-change",
-        "-k",
+        "-l",
         "source",
         "-p",
         "Change downstream source.",
@@ -272,7 +272,7 @@ fn yaml_manifest_preserves_disable_enable_and_remove_history() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|event| event["kind"] == "patch_enabled")
+            .any(|event| event["event"] == "patch_enabled")
     );
     assert!(
         !manifest["patches"]
@@ -286,7 +286,7 @@ fn yaml_manifest_preserves_disable_enable_and_remove_history() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|event| event["kind"] == "patch_removed")
+            .any(|event| event["event"] == "patch_removed")
     );
     assert_manifest_comment(&fixture);
 }
@@ -328,7 +328,7 @@ fn staged_check_rejects_out_of_scope_paths() {
         "patch",
         "create",
         "source-change",
-        "-k",
+        "-l",
         "source",
         "-p",
         "Change source.",
@@ -391,12 +391,110 @@ fn contract_edit_preflights_and_refreshes_bookkeeping() {
 }
 
 #[test]
-fn patch_kind_change_reorders_series_and_exports() {
+fn upgrade_rewrites_a_schema_1_manifest_in_place() {
+    let fixture = Fixture::new();
+    add_manifest_comment(&fixture);
+    create_source_patch(&fixture, "kept-feature", "kept.txt", "kept\n");
+    create_source_patch(&fixture, "retired-feature", "retired.txt", "retired\n");
+    fixture.forkctl_ok(&[
+        "patch",
+        "remove",
+        "retired-feature",
+        "--reason",
+        "Feature retired",
+    ]);
+    let manifest_path = fixture.repo.join("patches/fork.yaml");
+    let ledger_path = fixture.repo.join("PATCHES.md");
+    let current = fs::read_to_string(&manifest_path).unwrap();
+    let ledger = fs::read_to_string(&ledger_path).unwrap();
+
+    // Commit the same stack as forkctl 0.0.48 wrote it.
+    let earlier = schema_1_text(&current);
+    assert_ne!(earlier, current);
+    fs::write(&manifest_path, &earlier).unwrap();
+    fs::write(
+        &ledger_path,
+        ledger.replacen("| Order | Patch | Layer |", "| Order | Patch | Kind |", 1),
+    )
+    .unwrap();
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml", "PATCHES.md"]);
+    capture(
+        &fixture.repo,
+        "stg",
+        &["refresh", "--patch", "fork-tooling", "--index"],
+    );
+
+    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert!(
+        status["result"]["manifest_error"]
+            .as_str()
+            .unwrap()
+            .contains("mise run fork upgrade"),
+        "{status}"
+    );
+
+    let operation = fixture.repo.join(git_capture_dynamic(
+        &fixture.repo,
+        &["rev-parse", "--git-path", "forkctl/operation.json"],
+    ));
+    fs::write(&operation, "{}\n").unwrap();
+    let refused = fixture.forkctl(&["--format", "json", "upgrade"]);
+    assert!(!refused.status.success());
+    let refused: serde_json::Value = serde_json::from_slice(&refused.stdout).unwrap();
+    assert_eq!(refused["error"]["code"], "operation_conflict", "{refused}");
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), earlier);
+    fs::remove_file(&operation).unwrap();
+
+    fixture.forkctl_ok(&["upgrade", "-n"]);
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), earlier);
+
+    let upgraded = fixture.forkctl_ok(&["--format", "json", "upgrade"]);
+    let upgraded: serde_json::Value = serde_json::from_str(&upgraded).unwrap();
+    assert_eq!(upgraded["result"]["from_schema"], 1, "{upgraded}");
+    assert_eq!(upgraded["result"]["to_schema"], 2, "{upgraded}");
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), current);
+    assert_eq!(fs::read_to_string(&ledger_path).unwrap(), ledger);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["status", "--porcelain"]),
+        ""
+    );
+    fixture.forkctl_ok(&["check"]);
+
+    let again = fixture.forkctl_ok(&["--format", "json", "upgrade"]);
+    let again: serde_json::Value = serde_json::from_str(&again).unwrap();
+    assert_eq!(again["result"]["from_schema"], 2, "{again}");
+    assert!(again["result"]["check"].is_null(), "{again}");
+}
+
+/// `text` as forkctl 0.0.48 wrote it: schema 1, and `kind` where schema 2
+/// says `layer`, `type`, or `event`.
+fn schema_1_text(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            if line == "schema: 2" {
+                return "schema: 1".to_string();
+            }
+            let body = line.trim_start_matches(' ').trim_start_matches("- ");
+            let prefix = &line[..line.len() - body.len()];
+            for key in ["layer: ", "type: ", "event: "] {
+                if let Some(value) = body.strip_prefix(key) {
+                    return format!("{prefix}kind: {value}");
+                }
+            }
+            line.to_string()
+        })
+        .map(|line| line + "\n")
+        .collect()
+}
+
+#[test]
+fn patch_layer_change_reorders_series_and_exports() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "first-source", "first.txt", "first\n");
     create_source_patch(&fixture, "second-source", "second.txt", "second\n");
 
-    fixture.forkctl_ok(&["patch", "edit", "first-source", "--kind", "tooling"]);
+    fixture.forkctl_ok(&["patch", "edit", "first-source", "--layer", "tooling"]);
     fixture.forkctl_ok(&["check"]);
 
     let series = stg_capture(&fixture.repo, ["series", "--all", "--no-prefix"]);
@@ -478,7 +576,7 @@ fn lower_patch_refresh_conflict_can_continue_from_typed_journal() {
 
     let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
-    assert_eq!(status["result"]["operation"]["kind"], "patch_refresh");
+    assert_eq!(status["result"]["operation"]["command"], "patch_refresh");
     assert_eq!(status["result"]["operation"]["phase"], "conflict");
 
     fs::write(fixture.repo.join("shared.txt"), "lower updated\n").unwrap();
@@ -537,18 +635,18 @@ fn continue_without_a_manifest_source_snapshot_names_its_recovery() {
 }
 
 #[test]
-fn patch_kind_reorder_conflict_can_continue_from_typed_journal() {
+fn patch_layer_reorder_conflict_can_continue_from_typed_journal() {
     let fixture = Fixture::new();
     create_source_patch(&fixture, "lower", "shared.txt", "lower\n");
     create_source_patch(&fixture, "upper", "shared.txt", "upper\n");
 
     let edit = fixture.forkctl(&[
-        "--format", "json", "patch", "edit", "lower", "--kind", "tooling",
+        "--format", "json", "patch", "edit", "lower", "--layer", "tooling",
     ]);
     assert!(!edit.status.success());
     let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
-    assert_eq!(status["result"]["operation"]["kind"], "patch_edit");
+    assert_eq!(status["result"]["operation"]["command"], "patch_edit");
     assert_eq!(status["result"]["operation"]["phase"], "conflict");
 
     fs::write(fixture.repo.join("shared.txt"), "upper\n").unwrap();
@@ -644,7 +742,7 @@ fn refresh_consumes_pre_commit_hook_modified_index() {
         "patch",
         "create",
         "hook-format",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "format through the existing hook",
@@ -687,7 +785,7 @@ fn refresh_left_dirty_by_a_hook_names_its_recovery() {
         "patch",
         "create",
         "hook-lock",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "change source while a hook regenerates a lockfile",
@@ -845,7 +943,7 @@ fn stage_tracked_lockfile_patch(fixture: &Fixture) {
         "patch",
         "create",
         "locked-source",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "Change source beside a lockfile.",
@@ -1042,7 +1140,7 @@ fn documented_staged_check_hook_accepts_source_and_bookkeeping_refreshes() {
         "patch",
         "create",
         "hook-check",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "validate source and generated bookkeeping scopes",
@@ -1097,7 +1195,7 @@ fn refresh_dry_run_is_non_mutating() {
         "patch",
         "create",
         "source-change",
-        "-k",
+        "-l",
         "source",
         "-p",
         "Change source.",
@@ -1242,7 +1340,7 @@ fn active_patch_commands_and_abort_fail_before_mutating_an_operation() {
         "patch",
         "create",
         "blocked",
-        "--kind",
+        "--layer",
         "tooling",
         "--purpose",
         "Must not be created during an operation.",
@@ -1735,7 +1833,7 @@ fn recovery_commands_survive_an_unreadable_tracked_manifest() {
 
     let status = fixture.forkctl_ok(&["--format", "json", "operation", "status"]);
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
-    assert_eq!(status["result"]["operation"]["kind"], "patch_refresh");
+    assert_eq!(status["result"]["operation"]["command"], "patch_refresh");
     fixture.forkctl_ok(&["--format", "json", "status"]);
     fixture.forkctl_ok(&["operation", "abort", "--yes"]);
     let status = fixture.forkctl_ok(&["--format", "json", "status"]);
@@ -1847,7 +1945,7 @@ fn create_source_patch(fixture: &Fixture, name: &str, path: &str, contents: &str
         "patch",
         "create",
         name,
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "Change downstream source.",
@@ -1983,7 +2081,7 @@ fn rebase_records_replay_path_changes_without_claiming_cause() {
         "patch",
         "create",
         "two-file-change",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "Change downstream source.",
@@ -2080,7 +2178,7 @@ fn declared_check_catches_an_upstream_case_the_patch_never_covered() {
         "patch",
         "create",
         "guarded-spawn",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "Route every terminal spawn through the downstream guard.",
@@ -2180,7 +2278,7 @@ fn declared_check_defaults_to_the_declaring_patch_scope() {
         "patch",
         "create",
         "scoped-default",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "Check only the files this patch owns.",
@@ -2219,7 +2317,7 @@ fn declared_checks_never_run_in_the_operator_worktree() {
         "patch",
         "create",
         "isolated-checks",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "Prove declared commands are isolated.",
@@ -2256,7 +2354,7 @@ fn layer_check_observes_only_its_own_patch_commit() {
         "patch",
         "create",
         "lower",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "Own the lower file.",

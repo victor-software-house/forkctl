@@ -220,7 +220,7 @@ impl DomainError {
             format!("operation {} is in progress", operation.id),
             ErrorDetails::Operation {
                 operation_id: operation.id.clone(),
-                kind: format!("{:?}", operation.kind).to_lowercase(),
+                command: format!("{:?}", operation.command).to_lowercase(),
                 phase: operation.phase.clone(),
                 next_actions: operation.next_actions.clone(),
             },
@@ -247,7 +247,7 @@ impl DomainError {
     ) -> Self {
         let details = operation.map_or(ErrorDetails::None, |operation| ErrorDetails::Operation {
             operation_id: operation.id.clone(),
-            kind: format!("{:?}", operation.kind).to_lowercase(),
+            command: format!("{:?}", operation.command).to_lowercase(),
             phase: operation.phase.clone(),
             next_actions: operation.next_actions.clone(),
         });

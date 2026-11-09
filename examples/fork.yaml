@@ -1,6 +1,6 @@
 %YAML 1.2
 ---
-schema: 1
+schema: 2
 downstream:
   remote: origin
   branch: main
@@ -11,7 +11,7 @@ upstream:
   fetch_ref: refs/heads/main
 base:
   target:
-    kind: branch
+    type: branch
     selector: refs/heads/main
     commit: '0000000000000000000000000000000000000000'
   canonical: '0000000000000000000000000000000000000000'
@@ -22,7 +22,7 @@ documents:
 bookkeeping_patch: fork-tooling
 patches:
   - name: downstream-change
-    kind: source
+    layer: source
     purpose: Describe why this downstream change exists.
     upstream_status: not-submitted
     drop_when: Upstream provides the required behavior.
@@ -30,7 +30,7 @@ patches:
       - src/**
       - tests/**
   - name: fork-tooling
-    kind: tooling
+    layer: tooling
     purpose: Own downstream fork policy and generated bookkeeping.
     upstream_status: 'inappropriate: downstream-only tooling'
     drop_when: The downstream fork is retired.

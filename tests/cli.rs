@@ -200,7 +200,7 @@ fn quiet_suppresses_successful_human_output_only() {
 #[test]
 fn schema_bundle_exposes_all_contracts() {
     let output = forkctl()
-        .args(["api", "schema", "--kind", "bundle"])
+        .args(["api", "schema", "--document", "bundle"])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -298,7 +298,7 @@ fn direct_completion_includes_live_patch_names() {
         "patch",
         "create",
         "live-completion-patch",
-        "--kind",
+        "--layer",
         "source",
         "--purpose",
         "completion proof",
@@ -440,7 +440,7 @@ fn mutation_preconditions_are_typed_client_errors() {
             "command":"patch.create",
             "arguments":{
                 "name":"fork-tooling",
-                "kind":"tooling",
+                "layer":"tooling",
                 "purpose":"duplicate patch",
                 "upstream_status":"not-submitted",
                 "drop_when":"never",
@@ -498,7 +498,7 @@ fn mutation_preconditions_are_typed_client_errors() {
 fn repository_discovery_failure_is_typed() {
     let directory = tempfile::tempdir().unwrap();
     let invocation = serde_json::json!({
-        "protocol_version": 1,
+        "protocol_version": 2,
         "mode": "execute",
         "request": {"command":"status","arguments":{}}
     });
@@ -526,25 +526,25 @@ fn repository_discovery_failure_is_typed() {
 #[test]
 fn dynamic_candidates_fail_silently_outside_a_repository() {
     let directory = tempfile::tempdir().unwrap();
-    for kind in ["patch", "ref", "remote"] {
+    for candidate_type in ["patch", "ref", "remote"] {
         let output = forkctl()
-            .args(["__candidates", kind])
+            .args(["__candidates", candidate_type])
             .current_dir(directory.path())
             .output()
             .unwrap();
         assert!(
             output.status.success(),
-            "candidate lookup failed for {kind}"
+            "candidate lookup failed for {candidate_type}"
         );
         assert_eq!(
             output.stdout,
             &[] as &[u8],
-            "candidate lookup printed for {kind}"
+            "candidate lookup printed for {candidate_type}"
         );
         assert_eq!(
             output.stderr,
             &[] as &[u8],
-            "candidate lookup warned for {kind}"
+            "candidate lookup warned for {candidate_type}"
         );
     }
 }
@@ -578,7 +578,7 @@ fn cli_and_api_execute_the_same_status_handler() {
 fn domain_failure_is_one_json_error_with_empty_stderr() {
     let directory = tempfile::tempdir().unwrap();
     let invocation = serde_json::json!({
-        "protocol_version": 1,
+        "protocol_version": 2,
         "mode": "execute",
         "request": {"command":"check","arguments":{"scope":"repository"}}
     });

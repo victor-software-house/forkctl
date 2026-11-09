@@ -7,6 +7,7 @@ mod patch;
 mod publish;
 mod rebase;
 mod status;
+mod upgrade;
 
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
@@ -18,12 +19,12 @@ use tempfile::NamedTempFile;
 
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
 use crate::ledger;
-use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetKind, Upstream};
+use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetType, Upstream};
 use crate::manifest_codec::ManifestFormat;
 use crate::manifest_edit::{ManifestEdit, edit_yaml};
 use crate::process::{capture, output, output_with_config, run, succeeds};
 use crate::protocol::CheckResult;
-use crate::state::{ActivePatchState, OperationKind, OperationState, PatchCommitEvidence};
+use crate::state::{ActivePatchState, JournalCommand, OperationState, PatchCommitEvidence};
 
 const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
 const APPEND_BRIDGE_MESSAGE_PREFIX: &str = "forkctl: keep published history ";
@@ -79,7 +80,12 @@ impl App {
                         Ok(()) => (Some(manifest), None, text),
                         Err(error) => (None, Some(error.to_string()), None),
                     },
-                    Err(error) => (None, Some(error.to_string()), None),
+                    Err(error) => {
+                        let hint = text.as_deref().and_then(|text| {
+                            earlier_schema_hint(manifest_format, text, &manifest_path)
+                        });
+                        (None, Some(hint.unwrap_or_else(|| error.to_string())), None)
+                    }
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None, None),
@@ -288,7 +294,7 @@ impl App {
 
     pub(super) fn fetch_target(&self, target: &BaseTarget, quiet: bool) -> Result<()> {
         let manifest = self.manifest()?;
-        let selector = if target.kind == TargetKind::Tag && target.tag_object.is_some() {
+        let selector = if target.target_type == TargetType::Tag && target.tag_object.is_some() {
             target.selector.as_str()
         } else {
             target.commit.as_str()
@@ -850,7 +856,7 @@ impl App {
 
     pub(super) fn create_operation(
         &self,
-        kind: OperationKind,
+        command: JournalCommand,
         target: Option<BaseTarget>,
     ) -> Result<OperationState> {
         self.require_no_operation()?;
@@ -881,7 +887,7 @@ impl App {
             .get(..12)
             .ok_or_else(|| AppError::internal_message("old tip is not a full SHA"))?;
         let id = format!("{}-{short}", epoch.as_nanos());
-        let (tag, tag_object) = self.create_recovery_tag(&id, &old_tip, &format!("{kind:?}"))?;
+        let (tag, tag_object) = self.create_recovery_tag(&id, &old_tip, &format!("{command:?}"))?;
         let snapshot = self.operation_manifest_snapshot_path()?;
         let snapshot_bytes = serde_json::to_vec_pretty(manifest)
             .internal("serialize operation manifest snapshot")?;
@@ -891,9 +897,9 @@ impl App {
         }
         self.snapshot_workspace_bootstrap()?;
         Ok(OperationState {
-            schema: 1,
+            schema: crate::manifest::SCHEMA,
             id,
-            kind,
+            command,
             phase: "prepared".into(),
             started_at_unix_ms: epoch.as_millis(),
             expected_remote_sha,
@@ -1010,12 +1016,12 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
     if selector.trim().is_empty() {
         return Err(DomainError::invalid_request("target is required").into());
     }
-    let kind = if crate::manifest::is_full_sha(selector) {
-        TargetKind::Commit
+    let target_type = if crate::manifest::is_full_sha(selector) {
+        TargetType::Commit
     } else if selector.starts_with("refs/heads/") {
-        TargetKind::Branch
+        TargetType::Branch
     } else if selector.starts_with("refs/tags/") {
-        TargetKind::Tag
+        TargetType::Tag
     } else {
         return Err(DomainError::invalid_request(
             "target must be a full refs/heads ref, refs/tags ref, or commit SHA",
@@ -1024,7 +1030,7 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
     };
     run(repo, "git", ["fetch", "--no-tags", remote, selector])?;
     let commit = capture(repo, "git", ["rev-parse", "FETCH_HEAD^{commit}"])?;
-    let tag_object = if kind == TargetKind::Tag {
+    let tag_object = if target_type == TargetType::Tag {
         let line = capture(repo, "git", ["ls-remote", "--exit-code", remote, selector])?;
         let object = line
             .split_whitespace()
@@ -1036,8 +1042,8 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
         None
     };
     let target = BaseTarget {
-        kind,
-        selector: if kind == TargetKind::Commit {
+        target_type,
+        selector: if target_type == TargetType::Commit {
             commit.clone()
         } else {
             selector.to_string()
@@ -1047,6 +1053,18 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
     };
     target.validate().internal("validate resolved target")?;
     Ok(target)
+}
+
+/// Name `forkctl upgrade` when an unreadable manifest is schema 1. Goes with
+/// `crate::manifest_upgrade`.
+fn earlier_schema_hint(format: ManifestFormat, text: &str, path: &Path) -> Option<String> {
+    let schema = crate::manifest_upgrade::declared_schema(format, text, path).ok()?;
+    (schema == u64::from(crate::manifest_upgrade::EARLIER_SCHEMA)).then(|| {
+        format!(
+            "{} is manifest schema {schema}, which an earlier forkctl wrote; run mise run fork upgrade",
+            path.display()
+        )
+    })
 }
 
 pub(super) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {

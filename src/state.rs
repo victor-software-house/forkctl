@@ -25,9 +25,10 @@ impl ActivePatchState {
     }
 }
 
+/// The command that started an operation, as its journal records it.
 #[derive(Debug, Clone, Copy, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum OperationKind {
+pub(crate) enum JournalCommand {
     PatchRefresh,
     PatchEdit,
     PatchRemove,
@@ -51,7 +52,7 @@ pub(crate) struct ReportEvidence {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum OperationIntent {
     Edit {
         patch: Patch,
@@ -74,7 +75,7 @@ pub(crate) enum OperationIntent {
 pub(crate) struct OperationState {
     pub schema: u32,
     pub id: String,
-    pub kind: OperationKind,
+    pub command: JournalCommand,
     pub phase: String,
     pub started_at_unix_ms: u128,
     pub expected_remote_sha: String,

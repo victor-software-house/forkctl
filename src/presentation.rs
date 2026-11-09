@@ -7,6 +7,7 @@ use crate::protocol::{
     ApiError, ApiErrorCode, ApiResponse, CheckResult, CommandResult, ContractEditResult,
     ExecutionMode, MutationPlan, OperationStatusResult, PatchListResult, PatchRefreshResult,
     PatchSelectResult, PatchShowResult, PatchTransitionResult, RebaseResult, StatusResult,
+    UpgradeResult,
 };
 
 pub(crate) enum Report {
@@ -164,6 +165,7 @@ fn append_result(document: Document, result: &CommandResult) -> Document {
         | CommandResult::PatchDisable(result)
         | CommandResult::PatchEnable(result) => document.fields(patch_transition_fields(result)),
         CommandResult::ContractEdit(result) => document.fields(contract_edit_fields(result)),
+        CommandResult::Upgrade(result) => document.fields(upgrade_fields(result)),
         CommandResult::Rebase(result) => document.fields(rebase_fields(result)),
         CommandResult::Publish(result) => append_publish(document, result),
         CommandResult::OperationStatus(result) => append_operation(document, result),
@@ -228,6 +230,18 @@ fn contract_edit_fields(result: &ContractEditResult) -> Fields {
             "required text assertions",
             result.contracts.required_text.len().to_string(),
         )
+        .row("check", "passed")
+}
+
+fn upgrade_fields(result: &UpgradeResult) -> Fields {
+    let fields = Fields::new()
+        .row("from schema", result.from_schema.to_string())
+        .row("to schema", result.to_schema.to_string());
+    if result.check.is_none() {
+        return fields.row("manifest", "already current");
+    }
+    fields
+        .row("generated", display_list(&result.generated_paths))
         .row("check", "passed")
 }
 
@@ -404,12 +418,12 @@ fn append_patch_rows(document: Document, patches: &[crate::protocol::PatchSummar
         return document.paragraph(Text::new().muted("no patches"));
     }
     let table = patches.iter().fold(
-        Table::new(["state", "patch", "kind", "commit", "active"]).id_column(1),
+        Table::new(["state", "patch", "layer", "commit", "active"]).id_column(1),
         |table, patch| {
             table.row([
                 patch.state.clone(),
                 patch.name.clone(),
-                format!("{:?}", patch.kind).to_lowercase(),
+                format!("{:?}", patch.layer).to_lowercase(),
                 patch.commit.clone().unwrap_or_else(|| "draft".into()),
                 if patch.active {
                     "yes".into()
@@ -426,7 +440,7 @@ fn append_patch_show(document: Document, result: &PatchShowResult) -> Document {
     document.fields(
         Fields::new()
             .row("patch", result.patch.name.clone())
-            .row("kind", format!("{:?}", result.patch.kind).to_lowercase())
+            .row("layer", format!("{:?}", result.patch.layer).to_lowercase())
             .row("purpose", result.patch.purpose.clone())
             .row("upstream status", result.patch.upstream_status.clone())
             .row("drop when", result.patch.drop_when.clone())
@@ -449,7 +463,7 @@ fn append_operation(document: Document, result: &OperationStatusResult) -> Docum
         Some(operation) => Document::new().fields(
             Fields::new()
                 .row("id", operation.id.clone())
-                .row("kind", format!("{:?}", operation.kind).to_lowercase())
+                .row("command", format!("{:?}", operation.command).to_lowercase())
                 .row("phase", operation.phase.clone())
                 .row("recovery", operation.recovery.tag.clone())
                 .row("next", display_list(&operation.next_actions)),
