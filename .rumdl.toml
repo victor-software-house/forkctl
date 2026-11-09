@@ -5,7 +5,13 @@
 # their layout is generated output instead of a document.
 # OpenSpec schema templates hold placeholders instead of Markdown to render,
 # so their links and anchors point nowhere yet.
-exclude = ["target/**", "CHANGELOG.md", "templates/**", "src/instructions.md", "openspec/schemas/**"]
+exclude = [
+  "target/**",
+  "CHANGELOG.md",
+  "templates/**",
+  "src/instructions.md",
+  "openspec/schemas/**",
+]
 # Prose uses semantic line breaks, so line length is not linted.
 disable = ["MD013"]
 # Heading anchors (MD051), reference labels (MD052) and relative links to
