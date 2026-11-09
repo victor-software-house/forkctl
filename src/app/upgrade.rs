@@ -123,8 +123,16 @@ impl App {
                 "the upgrade stopped while writing {written}; fix the failure, then run git restore --source=HEAD --staged --worktree -- {written}, and run mise run fork upgrade again"
             ))
         })?;
+        // write_atomic renames into place, so a failure keeps the old draft
+        // whole and the rerun after the restore rewrites it.
         if let Some(bytes) = active {
-            write_atomic(&self.active_path()?, bytes)?;
+            self.active_path()
+                .and_then(|path| write_atomic(&path, bytes))
+                .map_err(|error| {
+                    error.context(format!(
+                        "the upgrade stopped while writing the active patch draft; fix the failure, then run git restore --source=HEAD --staged --worktree -- {written}, and run mise run fork upgrade again"
+                    ))
+                })?;
         }
         self.refresh_bookkeeping(&generated).map_err(|error| {
             error.context(format!(
