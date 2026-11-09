@@ -108,5 +108,5 @@ forkctl keeps reading the bytes itself, keeps its `NotFound` branch, checks UTF-
 3. A new edit kind added later without a document effect cannot compile, but a wrong document effect can. Decision 2 catches it at write time, and each edit has a test that checks the bytes outside the change.
 
 [codec]: ../../../../src/manifest_codec.rs
-[mod]: ../../../../src/app/mod.rs
+[mod]: ../../../../src/app.rs
 [yamled]: https://github.com/victor-software-house/yamled

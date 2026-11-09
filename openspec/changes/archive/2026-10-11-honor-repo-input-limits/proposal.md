@@ -27,12 +27,12 @@ None.
 
 ## Impact
 
-- [`src/app/mod.rs`][mod]: `App::discover` installs the limits and keeps the warnings.
+- [`src/app.rs`][mod]: `App::discover` installs the limits and keeps the warnings.
 - [`src/main.rs`][main]: prints the warnings, since `src/app/` never prints.
 - `Cargo.toml`: ctl-core `=0.6.11`.
 - [`README.md`][readme], `AGENTS.md`, and the operator instructions template.
 
 [ctl-core]: https://github.com/victor-software-house/ctl-core
-[mod]: ../../../../src/app/mod.rs
+[mod]: ../../../../src/app.rs
 [main]: ../../../../src/main.rs
 [readme]: ../../../../README.md

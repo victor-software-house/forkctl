@@ -39,12 +39,12 @@ None.
 
 ## Impact
 
-- [`src/app/mod.rs`][mod]: `write_generated` and `check_written_operation`.
+- [`src/app.rs`][mod]: `write_generated` and `check_written_operation`.
 - [`src/app/patch.rs`][patch]: `patch_edit`, `finish_patch_edit`, `finish_patch_refresh`, `finish_patch_transition`.
 - [`src/app/rebase.rs`][rebase], [`src/app/contract.rs`][contract], [`src/app/operation.rs`][operation].
 - [`tests/lifecycle.rs`][lifecycle]: five tests.
 
-[mod]: ../../../../src/app/mod.rs
+[mod]: ../../../../src/app.rs
 [patch]: ../../../../src/app/patch.rs
 [rebase]: ../../../../src/app/rebase.rs
 [contract]: ../../../../src/app/contract.rs

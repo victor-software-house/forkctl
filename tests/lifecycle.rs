@@ -265,7 +265,7 @@ fn yaml_manifest_preserves_disable_enable_and_remove_history() {
     let manifest = read_manifest_value(&fixture.repo.join("patches/fork.yaml"));
     assert_eq!(
         manifest["disabled_patches"].as_array().unwrap().as_slice(),
-        &[] as &[serde_json::Value]
+        <&[serde_json::Value]>::default()
     );
     assert!(
         manifest["history"]
@@ -611,7 +611,7 @@ fn schema_1_text(text: &str) -> String {
             }
             line.to_string()
         })
-        .map(|line| line + "\n")
+        .flat_map(|line| [line, "\n".to_owned()])
         .collect()
 }
 
@@ -1370,7 +1370,7 @@ fn json_status_is_one_clean_envelope() {
         &serde_json::json!({"command":"status","arguments":{}}),
     );
     assert!(output.status.success());
-    assert_eq!(output.stderr, &[] as &[u8]);
+    assert_eq!(output.stderr, b"");
     let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(response["status"], "success");
     assert_eq!(response["command"], "status");
@@ -1846,7 +1846,7 @@ fn patch_work_publishes_under_an_exact_lease_with_recovery() {
             .as_array()
             .unwrap()
             .as_slice(),
-        &[] as &[serde_json::Value]
+        <&[serde_json::Value]>::default()
     );
 
     let published_base = git_capture(&fixture.repo, ["rev-parse", "HEAD"]);
@@ -1998,7 +1998,7 @@ fn repository_input_limits_apply_and_warn_when_loosened() {
     fs::write(&limits, "limits:\n  max_depth: 2\n").unwrap();
     let check = fixture.forkctl(&["--format", "json", "check"]);
     assert!(!check.status.success());
-    assert_eq!(check.stderr, &[] as &[u8]);
+    assert_eq!(check.stderr, b"");
     let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
     assert_eq!(check["error"]["code"], "manifest_invalid");
     assert!(
@@ -2635,7 +2635,7 @@ fn json_manifest_is_a_first_class_lifecycle_codec() {
         &serde_json::json!({"command":"status","arguments":{}}),
     );
     assert!(api.status.success());
-    assert_eq!(api.stderr, &[] as &[u8]);
+    assert_eq!(api.stderr, b"");
     let response: serde_json::Value = serde_json::from_slice(&api.stdout).unwrap();
     assert_eq!(response["status"], "success");
     fixture.forkctl_ok(&["check"]);
@@ -2676,7 +2676,7 @@ fn publish_append_keeps_the_previous_tip_as_an_ancestor() {
             .as_array()
             .unwrap()
             .as_slice(),
-        &[] as &[serde_json::Value]
+        <&[serde_json::Value]>::default()
     );
     assert_eq!(
         git_capture(&fixture.repo, ["rev-parse", "HEAD"]),

@@ -28,13 +28,13 @@ None.
 ## Impact
 
 - [`src/app/init.rs`][init]: canonical base, upstream fetch, and drift check before the push.
-- [`src/app/mod.rs`][mod]: the upstream tracking ref and fetch become usable before a manifest exists.
+- [`src/app.rs`][mod]: the upstream tracking ref and fetch become usable before a manifest exists.
 - [`src/app/check.rs`][check]: the drift check is shared with bootstrap.
 - [`tests/lifecycle.rs`][lifecycle]: bootstrap and rebase on off-branch release tags.
 - [`.ctl/operator/instructions.md.jinja`][instructions]: the `init` paragraph.
 
 [init]: ../../../../src/app/init.rs
-[mod]: ../../../../src/app/mod.rs
+[mod]: ../../../../src/app.rs
 [check]: ../../../../src/app/check.rs
 [lifecycle]: ../../../../tests/lifecycle.rs
 [instructions]: ../../../../.ctl/operator/instructions.md.jinja

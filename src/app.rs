@@ -26,7 +26,7 @@ use crate::process::{capture, output, output_with_config, run, succeeds};
 use crate::protocol::CheckResult;
 use crate::state::{ActivePatchState, JournalCommand, OperationState, PatchCommitEvidence};
 
-const EXPORT_TEMPLATE: &str = include_str!("../patchexport.tmpl");
+const EXPORT_TEMPLATE: &str = include_str!("patchexport.tmpl");
 const APPEND_BRIDGE_MESSAGE_PREFIX: &str = "forkctl: keep published history ";
 
 pub(crate) struct App {
@@ -218,7 +218,12 @@ impl App {
             "git",
             ["symbolic-ref", "--quiet", "--short", "HEAD"],
         )
-        .map_err(|_| DomainError::invalid_request("repository is in detached HEAD state").into())
+        .map_err(|error| AppError::Domain {
+            error: Box::new(DomainError::invalid_request(
+                "repository is in detached HEAD state",
+            )),
+            causes: vec![error.to_string()],
+        })
     }
 
     pub(super) fn worktree_inventory(&self) -> Result<WorktreeInventory> {
@@ -238,8 +243,8 @@ impl App {
                 continue;
             }
             let bytes = entry.as_bytes();
-            let x = bytes[0] as char;
-            let y = bytes[1] as char;
+            let x = char::from(bytes[0]);
+            let y = char::from(bytes[1]);
             let path = entry[3..].to_string();
             // Rename and copy entries carry their original path in the
             // following field. Both sides are affected, so both are
