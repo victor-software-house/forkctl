@@ -39,13 +39,13 @@ Protocol version 1 becomes protocol version 2, and manifest schema 1 becomes sch
 - [`examples/fork.yaml`][example], [`README.md`][readme], `AGENTS.md`, `CODING_STANDARDS.md`, and the operator templates under `.ctl/operator/`.
 - Every consumer runs `mise run fork upgrade` once after taking the release, and renames `FORKCTL_KIND` in its environment.
 
-[manifest]: ../../../src/manifest.rs
-[state]: ../../../src/state.rs
-[protocol]: ../../../src/protocol.rs
-[cli]: ../../../src/cli.rs
-[upgrade]: ../../../src/manifest_upgrade.rs
-[app-upgrade]: ../../../src/app/upgrade.rs
-[ledger]: ../../../templates/patches.md
-[proposal-template]: ../../../templates/proposal-pr.md
-[example]: ../../../examples/fork.yaml
-[readme]: ../../../README.md
+[manifest]: ../../../../src/manifest.rs
+[state]: ../../../../src/state.rs
+[protocol]: ../../../../src/protocol.rs
+[cli]: ../../../../src/cli.rs
+[upgrade]: ../../../../src/manifest_upgrade.rs
+[app-upgrade]: ../../../../src/app/upgrade.rs
+[ledger]: ../../../../templates/patches.md
+[proposal-template]: ../../../../templates/proposal-pr.md
+[example]: ../../../../examples/fork.yaml
+[readme]: ../../../../README.md

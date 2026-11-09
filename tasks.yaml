@@ -6,20 +6,7 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue:
-  - id: FRK-036
-    title: Name fields by what varies, not kind
-    scope: manifest, protocol, cli
-    outcome: >-
-      No forkctl field, flag, type, or message is named kind, and forkctl upgrade
-      rewrites a schema 1 manifest in place as schema 2.
-    blocked_by: []
-    acceptance:
-      - A search for kind in src, tests, docs, and templates matches only the upgrade path, its fixtures, ast-grep rule keys, and library identifiers.
-      - upgrade_rewrites_a_schema_1_manifest_in_place passes in CI.
-    plan: openspec/changes/name-layer-type/proposal.md
-    notes:
-      - 'Operator ruling: kind names nothing and must go.'
+queue: []
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -58,6 +45,21 @@ horizon:
     kind: deferred
     open: The operator decides when every downstream manifest has run forkctl upgrade.
 archive:
+  - id: FRK-036
+    title: Name fields by what varies, not kind
+    scope: manifest, protocol, cli
+    outcome: >-
+      No forkctl field, flag, type, or message is named kind, and forkctl upgrade
+      rewrites a schema 1 manifest in place as schema 2.
+    plan: openspec/changes/archive/2026-11-09-name-layer-type/proposal.md
+    notes:
+      - 'Operator ruling: kind names nothing and must go.'
+    completed: 2026-11-09T03:26:32
+    evidence:
+      - https://github.com/victor-software-house/forkctl/pull/161
+      - openspec/changes/archive/2026-11-09-name-layer-type/
+    disposition: completed
+
   - id: FRK-035
     title: Only the operator merges the Version PR
     scope: .github/workflows/release.yml, AGENTS.md
