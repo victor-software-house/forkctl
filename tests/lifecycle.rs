@@ -403,6 +403,9 @@ fn upgrade_rewrites_a_schema_1_manifest_in_place() {
         "--reason",
         "Feature retired",
     ]);
+    // `patch remove` leaves its operation ready to publish, and `status`
+    // reads an operation's manifest snapshot, not the tracked file.
+    fixture.forkctl_ok(&["publish"]);
     let manifest_path = fixture.repo.join("patches/fork.yaml");
     let ledger_path = fixture.repo.join("PATCHES.md");
     let current = fs::read_to_string(&manifest_path).unwrap();
@@ -424,15 +427,14 @@ fn upgrade_rewrites_a_schema_1_manifest_in_place() {
         &["refresh", "--patch", "fork-tooling", "--index"],
     );
 
-    let status = fixture.forkctl_ok(&["--format", "json", "status"]);
-    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
-    assert!(
-        status["result"]["manifest_error"]
-            .as_str()
-            .unwrap()
-            .contains("mise run fork upgrade"),
-        "{status}"
-    );
+    let status = fixture.forkctl(&["--format", "json", "status"]);
+    assert!(!status.status.success());
+    let status: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
+    assert_eq!(status["error"]["code"], "manifest_invalid", "{status}");
+    let message = status["error"]["message"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no error message: {status}"));
+    assert!(message.contains("mise run fork upgrade"), "{status}");
 
     let operation = fixture.repo.join(git_capture_dynamic(
         &fixture.repo,
