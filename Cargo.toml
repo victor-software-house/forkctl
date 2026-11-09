@@ -112,9 +112,20 @@ askama = { version = "=0.16.0", default-features = false, features = [
   "derive",
   "std",
 ] }
-clap = { version = "=4.6.6", features = ["derive", "env", "string"] }
+clap = { version = "=4.6.6", default-features = false, features = [
+  # clap does not build without it.
+  "std",
+  # The `#[derive(Parser)]` grammar in `src/cli.rs`.
+  "derive",
+  # `env_prefix` binds each long option to a `FORKCTL_*` variable.
+  "env",
+  # A parse error names the argument and its valid values.
+  "error-context",
+  # A parse error suggests the nearest flag or verb.
+  "suggestions",
+] }
 clap_complete = { version = "=4.6.8", features = ["unstable-dynamic"] }
-ctl-core = { version = "=0.6.23", default-features = false, features = [
+ctl-core = { version = "=0.7.0", default-features = false, features = [
   "app",
   "input",
   "usage",
@@ -129,13 +140,15 @@ tempfile = "=3.27.0"
 usage-lib = { version = "=6.1.1", default-features = false, features = [
   "clap",
 ] }
-serde-saphyr = { version = "=2.0.0", default-features = false, features = [
+# serde-saphyr 2.1.1 with two patches, under its own library name, the
+# release ctl-core and yamled take, so forkctl links one serde-saphyr.
+serde-saphyr = { package = "vsh-serde-saphyr", version = "=0.0.3", default-features = false, features = [
   "serialize",
 ] }
-yamled = "=0.0.7"
+yamled = "=0.0.12"
 
 [dev-dependencies]
-ctl-core = { version = "=0.6.23", default-features = false, features = [
+ctl-core = { version = "=0.7.0", default-features = false, features = [
   "surface",
 ] }
 insta = { version = "=1.48.0", features = ["json", "filters"] }

@@ -6,7 +6,20 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-038
+    title: Take ctl-core 0.7.0 with vsh-serde-saphyr 0.0.3
+    scope: Cargo.toml, Cargo.lock, presentation
+    outcome: >-
+      forkctl builds on ctl-core 0.7.0, vsh-serde-saphyr 0.0.3, and yamled 0.0.12,
+      one serde-saphyr in the lock, and its own clap sets default-features = false
+    blocked_by: []
+    acceptance:
+      - cargo tree -d lists no serde-saphyr duplicate
+      - mise run verify passes on the branch
+      - Help and parse-error captures differ from main only by ctl-core 0.7.0 colour wording and table widths
+    notes:
+      - 'forkctl keeps its own completion verb: ctl-core 0.7.0 completion covers bash, zsh, and fish, and forkctl also completes elvish, powershell, and nu.'
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
