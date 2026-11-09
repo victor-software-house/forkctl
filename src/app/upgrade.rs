@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::PathBuf;
 
 use serde_json::Value;
 
@@ -82,9 +83,30 @@ impl App {
             return Ok(CommandResult::Plan(plan));
         }
 
-        if let Some(bytes) = active {
-            write_atomic(&self.active_path()?, &bytes)?;
-        }
+        let generated = self.write_upgrade(active.as_deref())?;
+        let check = self.check_repository(self.read_active()?.is_some())?;
+        Ok(CommandResult::Upgrade(UpgradeResult {
+            from_schema: EARLIER_SCHEMA,
+            to_schema: SCHEMA,
+            generated_paths: generated
+                .iter()
+                .map(|path| {
+                    path.strip_prefix(&self.repo)
+                        .unwrap_or(path)
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect(),
+            check: Some(check),
+        }))
+    }
+
+    /// Write the upgraded files and commit them to the bookkeeping patch.
+    /// The draft active file is written after the tracked files, so a failed
+    /// write leaves only files `git restore` reaches, and before the refresh,
+    /// which reads it.
+    fn write_upgrade(&mut self, active: Option<&[u8]>) -> Result<Vec<PathBuf>> {
+        let manifest = self.manifest()?;
         let bookkeeping = manifest.bookkeeping_patch.clone();
         let written = [
             self.manifest_path
@@ -101,27 +123,16 @@ impl App {
                 "the upgrade stopped while writing {written}; fix the failure, then run git restore --source=HEAD --staged --worktree -- {written}, and run mise run fork upgrade again"
             ))
         })?;
+        if let Some(bytes) = active {
+            write_atomic(&self.active_path()?, bytes)?;
+        }
         self.refresh_bookkeeping(&generated).map_err(|error| {
             error.context(format!(
                 "{} is written as schema {SCHEMA} but not committed; fix the failure, then run mise run fork patch select {bookkeeping}, git add the changed files, mise run fork patch refresh, and mise run fork patch finish",
                 self.manifest_path.display()
             ))
         })?;
-        let check = self.check_repository(self.read_active()?.is_some())?;
-        Ok(CommandResult::Upgrade(UpgradeResult {
-            from_schema: EARLIER_SCHEMA,
-            to_schema: SCHEMA,
-            generated_paths: generated
-                .iter()
-                .map(|path| {
-                    path.strip_prefix(&self.repo)
-                        .unwrap_or(path)
-                        .to_string_lossy()
-                        .into_owned()
-                })
-                .collect(),
-            check: Some(check),
-        }))
+        Ok(generated)
     }
 
     /// The active-patch file rewritten for the current schema, when it holds a
