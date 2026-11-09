@@ -104,7 +104,9 @@ impl App {
     /// Write the upgraded files and commit them to the bookkeeping patch.
     /// The draft active file is written after the tracked files, so a failed
     /// write leaves only files `git restore` reaches, and before the refresh,
-    /// which reads it.
+    /// which reads it. `write_atomic` renames into place, so a failed draft
+    /// write keeps the old draft whole, and the rerun after the restore
+    /// rewrites it.
     fn write_upgrade(&mut self, active: Option<&[u8]>) -> Result<Vec<PathBuf>> {
         let manifest = self.manifest()?;
         let bookkeeping = manifest.bookkeeping_patch.clone();
@@ -123,8 +125,6 @@ impl App {
                 "the upgrade stopped while writing {written}; fix the failure, then run git restore --source=HEAD --staged --worktree -- {written}, and run mise run fork upgrade again"
             ))
         })?;
-        // write_atomic renames into place, so a failure keeps the old draft
-        // whole and the rerun after the restore rewrites it.
         if let Some(bytes) = active {
             self.active_path()
                 .and_then(|path| write_atomic(&path, bytes))
