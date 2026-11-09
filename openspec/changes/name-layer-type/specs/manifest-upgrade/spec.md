@@ -68,8 +68,14 @@ On a schema 2 manifest with a clean worktree it SHALL succeed and change nothing
 
 On a schema 2 manifest with uncommitted changes, `forkctl upgrade` SHALL fail with `dirty_worktree`, because an upgrade whose bookkeeping refresh failed leaves the rewritten files uncommitted.
 When the bookkeeping refresh fails, the error SHALL name the commands that finish the commit.
+When writing the rewritten files fails, the error SHALL name the `git restore` that undoes them.
 
 #### Scenario: A rerun after a failed refresh
 
 - **WHEN** a pre-commit hook fails the bookkeeping refresh of `forkctl upgrade`, and the operator runs `forkctl --format json upgrade` again
 - **THEN** the first run fails with a message that names `mise run fork patch refresh`, and the second fails with `error.code` `dirty_worktree`
+
+#### Scenario: A failed write names the undo
+
+- **WHEN** the exports directory refuses writes and the operator runs `forkctl --format json upgrade`
+- **THEN** the command fails with a message that names `git restore --source=HEAD --staged --worktree --` and the written paths, and after that restore `forkctl upgrade` succeeds with `result.from_schema` 1

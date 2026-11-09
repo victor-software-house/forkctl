@@ -523,6 +523,77 @@ fn upgrade_after_a_failed_refresh_refuses_the_uncommitted_rewrite() {
     fixture.forkctl_ok(&["check"]);
 }
 
+#[test]
+fn upgrade_stopped_while_writing_names_the_undo() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "kept-feature", "kept.txt", "kept\n");
+    let manifest_path = fixture.repo.join("patches/fork.yaml");
+    let ledger_path = fixture.repo.join("PATCHES.md");
+    let current = fs::read_to_string(&manifest_path).unwrap();
+    let ledger = fs::read_to_string(&ledger_path).unwrap();
+    let earlier = schema_1_text(&current);
+    fs::write(&manifest_path, &earlier).unwrap();
+    fs::write(
+        &ledger_path,
+        ledger.replacen("| Order | Patch | Layer |", "| Order | Patch | Kind |", 1),
+    )
+    .unwrap();
+    git_ok(&fixture.repo, ["add", "patches/fork.yaml", "PATCHES.md"]);
+    capture(
+        &fixture.repo,
+        "stg",
+        &["refresh", "--patch", "fork-tooling", "--index"],
+    );
+
+    // A read-only exports directory stops write_generated after the
+    // manifest is written. Git tracks no directory mode, so the worktree
+    // stays clean.
+    let exports = fixture.repo.join("patches/downstream");
+    fs::set_permissions(&exports, fs::Permissions::from_mode(0o555)).unwrap();
+    assert!(
+        fs::write(exports.join("probe"), "").is_err(),
+        "the exports directory accepts writes; run this test as a user without root"
+    );
+    let failed = fixture.forkctl(&["--format", "json", "upgrade"]);
+    fs::set_permissions(&exports, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(!failed.status.success());
+    let failed: serde_json::Value = serde_json::from_slice(&failed.stdout).unwrap();
+    let undo = "git restore --source=HEAD --staged --worktree -- patches/fork.yaml PATCHES.md patches/downstream";
+    assert!(failed["error"].to_string().contains(undo), "{failed}");
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), current);
+
+    let again = fixture.forkctl(&["--format", "json", "upgrade"]);
+    assert!(!again.status.success());
+    let again: serde_json::Value = serde_json::from_slice(&again.stdout).unwrap();
+    assert_eq!(again["error"]["code"], "dirty_worktree", "{again}");
+
+    // The undo the error names puts back the schema 1 files, and the
+    // upgrade then runs to the end.
+    git_ok(
+        &fixture.repo,
+        [
+            "restore",
+            "--source=HEAD",
+            "--staged",
+            "--worktree",
+            "--",
+            "patches/fork.yaml",
+            "PATCHES.md",
+            "patches/downstream",
+        ],
+    );
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), earlier);
+    let upgraded = fixture.forkctl_ok(&["--format", "json", "upgrade"]);
+    let upgraded: serde_json::Value = serde_json::from_str(&upgraded).unwrap();
+    assert_eq!(upgraded["result"]["from_schema"], 1, "{upgraded}");
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), current);
+    assert_eq!(
+        git_capture_dynamic(&fixture.repo, &["status", "--porcelain"]),
+        ""
+    );
+}
+
 /// `text` as forkctl 0.0.48 wrote it: schema 1, and `kind` where schema 2
 /// says `layer`, `type`, or `event`.
 fn schema_1_text(text: &str) -> String {

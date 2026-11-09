@@ -42,7 +42,7 @@ impl App {
             .parse(upgraded.as_bytes(), &self.manifest_path)
             .map_err(|error| {
                 error.context(format!(
-                    "{} does not read as manifest schema {SCHEMA} after the upgrade; an anchor or alias may hide a kind key, so expand it by hand",
+                    "{} does not read as manifest schema {SCHEMA} after the upgrade; an anchor or alias may hide a `kind` key, so expand it by hand",
                     self.manifest_path.display()
                 ))
             })?;
@@ -85,8 +85,22 @@ impl App {
         if let Some(bytes) = active {
             write_atomic(&self.active_path()?, &bytes)?;
         }
-        let bookkeeping = self.manifest()?.bookkeeping_patch.clone();
-        let generated = self.write_generated()?;
+        let bookkeeping = manifest.bookkeeping_patch.clone();
+        let written = [
+            self.manifest_path
+                .strip_prefix(&self.repo)
+                .unwrap_or(&self.manifest_path)
+                .display()
+                .to_string(),
+            manifest.documents.ledger.clone(),
+            manifest.documents.exports.clone(),
+        ]
+        .join(" ");
+        let generated = self.write_generated().map_err(|error| {
+            error.context(format!(
+                "the upgrade stopped while writing {written}; fix the failure, then run git restore --source=HEAD --staged --worktree -- {written}, and run mise run fork upgrade again"
+            ))
+        })?;
         self.refresh_bookkeeping(&generated).map_err(|error| {
             error.context(format!(
                 "{} is written as schema {SCHEMA} but not committed; fix the failure, then run mise run fork patch select {bookkeeping}, git add the changed files, mise run fork patch refresh, and mise run fork patch finish",
