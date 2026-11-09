@@ -611,7 +611,7 @@ fn schema_1_text(text: &str) -> String {
             }
             line.to_string()
         })
-        .map(|line| format!("{line}\n"))
+        .flat_map(|line| [line, "\n".to_owned()])
         .collect()
 }
 
