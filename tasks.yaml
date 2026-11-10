@@ -6,7 +6,21 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-039
+    title: Rebuild derived paths during replay
+    scope: rebase
+    outcome: >-
+      A patch that declares derived paths never stops a rebase on them, and check
+      reports them stale.
+    blocked_by: []
+    acceptance:
+      - forkctl rebase onto an upstream that changed a declared derived file rebuilds it and stops on no conflict there.
+      - forkctl check reports derived_stale when a lower patch changes a source the rebuild reads.
+      - forkctl patch rebuild PATCH refreshes the owner and the full check passes.
+    plan: openspec/changes/derived-paths/proposal.md
+    notes:
+      - The mise-action fork stopped on dist/index.js and dist/index.js.map when it moved onto v5.2.7, while src/index.ts merged.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
