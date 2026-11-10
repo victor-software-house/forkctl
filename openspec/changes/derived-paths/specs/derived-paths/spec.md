@@ -1,122 +1,122 @@
 ## ADDED Requirements
 
-### Requirement: A patch declares derived paths and their rebuild
+### Requirement: The manifest declares derived outputs and their rebuild
 
-A patch SHALL accept an optional `derived` record with `paths`, a non-empty list of globs in the `scope` grammar, and `rebuild`, a non-empty list of shell commands.
-forkctl SHALL report `manifest_invalid` when a `derived.paths` glob is not matched by the same patch's `scope`.
+The manifest SHALL accept one optional `derived` block with `outputs`, a non-empty list of globs, `rebuild`, a non-empty list of shell commands, and `inputs`, an optional list of globs.
+forkctl SHALL report `manifest_invalid` when an output glob matches the manifest, the ledger, or a file under the exports directory.
 
-#### Scenario: Create a patch with derived paths
+#### Scenario: Declare the bundle
 
-- **WHEN** the operator runs `forkctl patch create dist -l source -p P -u not-submitted -d D -s 'dist/**' -D 'dist/**' -R 'sh build.sh'`
-- **THEN** the active draft's metadata has `derived.paths` `["dist/**"]` and `derived.rebuild` `["sh build.sh"]`
+- **WHEN** the operator runs `forkctl contract edit --derived-output 'dist/**' --derived-rebuild 'sh build.sh'`
+- **THEN** `patches/fork.yaml` holds `derived.outputs` `["dist/**"]` and `derived.rebuild` `["sh build.sh"]`, and `forkctl check` reports `derived_absent`
 
-#### Scenario: A derived path outside the scope
+#### Scenario: An output over the manifest
 
-- **WHEN** `patches/fork.yaml` declares a patch with `scope: [src/**]` and `derived.paths: [dist/**]`, and the operator runs `forkctl --format json status`
+- **WHEN** `patches/fork.yaml` declares `derived.outputs: [patches/**]` and the operator runs `forkctl --format json status`
 - **THEN** the command fails and `error.code` is `manifest_invalid`
 
-#### Scenario: Clear the declaration
+### Requirement: One derived patch on top holds every output
 
-- **WHEN** the operator runs `forkctl patch edit dist --clear-derived`
-- **THEN** the manifest entry for `dist` has no `derived` key
+When `derived` is declared, the derived patch SHALL be the top patch, directly above the bookkeeping patch, and SHALL change only files the output globs match.
+Its commit SHALL carry the trailers `Derived-Inputs` and `Derived-Rebuild`.
+A complete `forkctl check` SHALL report `derived_path_foreign` when another patch's commit touches a file the output globs match.
 
-### Requirement: Each derived path has one owner
+#### Scenario: A hand patch touches the bundle
 
-`forkctl check` SHALL report `derived_path_shared` when derived globs of two patches match the same tracked file.
-It SHALL report `derived_path_foreign` when a commit of a patch other than the owner touches a file that the owner's derived globs match.
-
-#### Scenario: Another patch touches the bundle
-
-- **WHEN** patch `dist` declares `derived.paths: [dist/**]`, patch `fix` below it changes `dist/index.js`, and the operator runs `forkctl --format json check`
+- **WHEN** `derived.outputs` is `[dist/**]`, patch `fix` changes `dist/index.js`, and the operator runs `forkctl --format json check`
 - **THEN** the command fails and a finding has code `derived_path_foreign` and subject `fix`
 
-### Requirement: Rebase rebuilds each owner after pushing it
+### Requirement: Derive builds once per input state in a clean clone
 
-`forkctl rebase` SHALL push the series one patch at a time.
-After it pushes a patch that declares `derived`, it SHALL run the `rebuild` commands in order in the worktree, stage every file the derived globs match, and refresh that patch.
-The rebase result SHALL list the patch in `rebuilt_patches`.
+`forkctl derive` SHALL compute the input hash and the rebuild hash from the tree below the derived patch.
+Without a cached result for both, it SHALL clone that tree, delete every file the output globs match, run the `rebuild` commands in order, and commit the files the output globs match as the derived patch.
+With a cached result, it SHALL commit that result and run no command.
 
-#### Scenario: Upstream changed only sources
+#### Scenario: Derive the first time
 
-- **WHEN** the stack holds `src` and `dist`, `dist` declares `derived` with a rebuild that writes `dist/out.txt` from `src/in.txt`, upstream changes another line of `src/in.txt`, and the operator runs `forkctl rebase -o refs/heads/main`
-- **THEN** the command succeeds, `dist/out.txt` at the new tip equals the rebuild of `src/in.txt` at the new tip, and `result.rebuilt_patches` is `["dist"]`
+- **WHEN** `derived` declares a rebuild that writes `dist/out.txt` from `src/in.txt`, and the operator runs `forkctl derive`
+- **THEN** the top patch is `derived`, `dist/out.txt` equals the rebuild of `src/in.txt`, and `forkctl check` succeeds
 
-### Requirement: A rebuild never folds an unrelated change into the owner
+#### Scenario: A stale upstream output does not survive
 
-forkctl SHALL refresh an owner only with the files its derived globs match.
-When a rebuild changes a tracked file outside them, forkctl SHALL stop in phase `conflict` with `derived_rebuild_dirty`, name each such file, refresh nothing, and keep the owner `rebuild_pending`.
+- **WHEN** upstream's tree holds `dist/old-chunk.js`, the rebuild does not write it, and the operator runs `forkctl derive`
+- **THEN** `dist/old-chunk.js` is absent at the new tip
+
+#### Scenario: The same state is not built twice
+
+- **WHEN** the operator runs `forkctl derive`, then `forkctl operation abort` on a later rebase, then `forkctl derive` again on the same tree
+- **THEN** the second derive runs no rebuild command
+
+### Requirement: The input hash covers every tracked file by default
+
+With no `inputs`, the input hash SHALL cover every tracked file below the derived patch except files the output globs match, the manifest, the ledger, and the exports.
+With `inputs`, it SHALL cover only the tracked files those globs match.
+
+#### Scenario: An upstream change outside every patch
+
+- **WHEN** `derived` declares no `inputs`, a rebase moves onto an upstream that changes only `rollup.config.mjs`, which no patch touches
+- **THEN** the rebase rebuilds the outputs
+
+#### Scenario: A metadata edit does not rebuild
+
+- **WHEN** the operator runs `forkctl patch edit fix -p 'New purpose'` and then `forkctl check`
+- **THEN** the check reports the derived patch fresh
+
+### Requirement: A failed or dirty build writes nothing
+
+forkctl SHALL report `derived_rebuild_failed`, with the command and its exit status, when a rebuild command exits non-zero.
+It SHALL report `derived_rebuild_dirty`, naming each file, when the build changes a tracked file outside the output globs.
+In both cases it SHALL leave the worktree and the series unchanged.
 
 #### Scenario: The install rewrites a lockfile
 
-- **WHEN** an owner's rebuild during `forkctl rebase` also rewrites the tracked `aube-lock.yaml`, which its derived globs do not match
-- **THEN** the command fails, the error code is `derived_rebuild_dirty`, the message names `aube-lock.yaml`, and the owner's commit is unchanged
+- **WHEN** the rebuild rewrites the tracked `aube-lock.yaml` and the operator runs `forkctl --format json derive`
+- **THEN** the command fails, `error.code` is `derived_rebuild_dirty`, the message names `aube-lock.yaml`, and `git status --porcelain` is empty
 
-#### Scenario: Continue after the dirty rebuild is fixed
+### Requirement: Rebase never conflicts on an output
 
-- **WHEN** a rebase stopped with `derived_rebuild_dirty` on `aube-lock.yaml`, the operator restores `aube-lock.yaml` and removes the cause, and runs `forkctl operation continue`
-- **THEN** the owner is rebuilt again, the command succeeds, and `aube-lock.yaml` at the new tip equals the new base's copy
-
-### Requirement: A conflict in derived paths alone resolves by rebuilding
-
-When pushing an owner conflicts and every unmerged path matches its derived globs, `forkctl rebase` SHALL restore those paths from `HEAD`, rebuild and refresh the owner, and continue without stopping.
+`forkctl rebase` SHALL delete the derived patch before the replay, replay every other patch, and derive once in phase `deriving` before it regenerates bookkeeping.
+A failed build SHALL stop the rebase in phase `deriving`; `operation continue` SHALL derive again and finish the rebase.
 
 #### Scenario: Upstream changed the bundle
 
-- **WHEN** upstream changes `dist/out.txt` and `src/in.txt`, the owner `dist` changed `dist/out.txt` too, and the operator runs `forkctl rebase -o refs/heads/main`
-- **THEN** the command succeeds with no conflict, and `dist/out.txt` at the new tip equals the rebuild of `src/in.txt` at the new tip
+- **WHEN** upstream changes `dist/out.txt` and `src/in.txt`, the stack holds a derived patch for `dist/**`, and the operator runs `forkctl rebase -o refs/heads/main`
+- **THEN** the command succeeds with no conflict, `dist/out.txt` at the new tip equals the rebuild of `src/in.txt` at the new tip, and `result.derived.rebuilt` is true
 
-### Requirement: Continue finishes a stopped rebuild and pushes the rest
+#### Scenario: A failing build stops the rebase
 
-When pushing an owner conflicts in a path outside its derived globs, `forkctl rebase` SHALL stop in phase `conflict` with that patch recorded as `rebuild_pending`.
-`forkctl operation continue` SHALL rebuild and refresh the `rebuild_pending` patch, push every remaining unapplied patch through the same rebuild rule, and then finish the rebase.
+- **WHEN** a rebuild command exits 3 during `forkctl rebase`
+- **THEN** the command fails, `operation status` reports phase `deriving`, and the error names the command and its exit status 3
 
-#### Scenario: A source conflict in the owner
+### Requirement: Check reads the derived state without building
 
-- **WHEN** a rebase stops on owner `dist` with a conflict in `src/in.txt`, the operator resolves it, runs `stg add --update` and `stg refresh`, and runs `forkctl operation continue`
-- **THEN** the command succeeds, the bookkeeping patch is on top, and `dist/out.txt` at the new tip equals the rebuild of `src/in.txt` at the new tip
+A complete `forkctl check` SHALL report `derived_absent` when `derived` is declared and the top patch is not the derived patch, and `derived_stale` when a trailer differs from the hash forkctl computes.
+It SHALL run no rebuild command, unless the operator passes `--rebuild`, which SHALL build in a clone and report `derived_unreproducible` when the result differs from the derived patch.
 
-#### Scenario: A failing rebuild stops the rebase
+#### Scenario: A patch changed a source
 
-- **WHEN** an owner's rebuild command exits 3 during `forkctl rebase`
-- **THEN** the command fails, `operation status` reports phase `conflict`, and the error names the command and its exit status 3
+- **WHEN** patch `src` changes `src/in.txt` and is finished without a derive, and the operator runs `forkctl --format json check`
+- **THEN** the command fails and a finding has code `derived_stale`, with a message that names `mise run fork derive`
 
-### Requirement: Check reports a stale derived path
+#### Scenario: A build that reads the clock
 
-A complete `forkctl check` SHALL run each owner's `rebuild` commands in a disposable clone at the owner's commit.
-It SHALL report `derived_stale` when any file the derived globs match differs from that commit afterwards, and `derived_rebuild_failed` when a rebuild command exits non-zero.
+- **WHEN** the rebuild writes the current time into `dist/out.txt` and the operator runs `forkctl --format json check --rebuild`
+- **THEN** the command fails and a finding has code `derived_unreproducible`
 
-#### Scenario: A lower patch changed a source
+### Requirement: Finishing a patch derives
 
-- **WHEN** patch `src` below owner `dist` changes `src/in.txt` and is refreshed, and the operator runs `forkctl --format json check`
-- **THEN** the command fails and a finding has code `derived_stale` and subject `dist`, with a message that names `mise run fork patch rebuild dist`
+`forkctl patch finish` SHALL derive before its final check, and `forkctl patch refresh` SHALL run no rebuild command.
 
-### Requirement: Check reuses a passing freshness result
+#### Scenario: Finish after a source change
 
-A passing result SHALL be recorded by owner commit id and a hash of its whole `derived` record, and a later check with the same key SHALL skip the rebuild.
-`forkctl check --no-cache` SHALL ignore the records, and a staged check SHALL skip the freshness check.
+- **WHEN** the active patch changes `src/in.txt`, the operator runs `forkctl patch refresh`, then `forkctl patch finish`
+- **THEN** the refresh runs no rebuild command, the finish succeeds, and `forkctl check` reports the derived patch fresh
 
-#### Scenario: An unchanged owner is not rebuilt again
+### Requirement: Rebase can verify upstream's outputs
 
-- **WHEN** `forkctl check` passed and the operator runs `forkctl check` again with no change to the owner's commit or its `rebuild` list
-- **THEN** the second check runs no rebuild command, and `forkctl check --no-cache` runs them
+`forkctl rebase --verify-base` SHALL also build at the new base and report in the result and the rebase report whether upstream's committed outputs equal that build.
 
-#### Scenario: Changed globs rebuild again
+#### Scenario: Upstream outputs that do not reproduce
 
-- **WHEN** `forkctl check` passed and the operator adds a glob to the owner's `derived.paths` with `forkctl patch edit dist -D 'dist/**' -D 'licenses.txt'`
-- **THEN** the next `forkctl check` runs the rebuild commands
-
-### Requirement: Patch rebuild refreshes an owner in place
-
-`forkctl patch rebuild PATCH` SHALL rebuild and refresh the owner in the worktree, push the patches above it again, and run the full check.
-It SHALL refuse a patch with no `derived` record, a dirty worktree, an active patch, or an operation in flight.
-`forkctl patch rebuild PATCH -n` SHALL report the plan and change nothing.
-
-#### Scenario: Rebuild after a source change
-
-- **WHEN** `forkctl check` reports `derived_stale` for `dist` and the operator runs `forkctl patch rebuild dist`
-- **THEN** the command succeeds, the bookkeeping patch is on top, and `forkctl check` succeeds
-
-#### Scenario: A patch without the declaration
-
-- **WHEN** the operator runs `forkctl --format json patch rebuild src` and `src` declares no `derived`
-- **THEN** the command fails, nothing changes, and `error.message` names `-D/--derived`
+- **WHEN** upstream's committed `dist/out.txt` differs from the rebuild of upstream's `src/in.txt`, and the operator runs `forkctl rebase -o refs/heads/main --verify-base`
+- **THEN** the command succeeds and `result.derived.base_reproducible` is false

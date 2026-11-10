@@ -2,130 +2,144 @@
 
 ## Context
 
-`rebase` hands the whole replay to one `stg rebase --merged <commit>`, and any conflict stops it with the operator's next actions in the journal.
-`operation continue` then requires every patch to be applied and the bookkeeping patch on top, so the operator pushes the rest by hand with `stg goto`.
+forkctl replays a stack of StGit patches onto an exact upstream target and regenerates its own documents, the ledger and the patch exports, into the bookkeeping patch on every refresh.
+`rebase` hands the replay to one `stg rebase --merged <commit>`, and a conflict stops it until the operator resolves the files and runs `operation continue`.
 Declared checks run in a disposable clone of the applied stack or of one patch's commit, and never touch the worktree.
+
+A committed build output breaks the model in two ways.
+It sits in a hand patch, so every upstream release that changes the bundle conflicts in a file nobody can read.
+And nothing ties it to the sources it was built from, so it goes stale silently.
 
 ## Decisions
 
-### 1. The declaration
+### 1. Derived files are a function of the stack, not content of a patch
 
 ```yaml
-patches:
-  - name: dist
-    layer: source
-    scope:
-      - dist/**
-    derived:
-      paths:
-        - dist/**
-      rebuild:
-        - aube install --frozen-lockfile
-        - aube run package
+derived:
+  outputs:
+    - dist/**
+  rebuild:
+    - aube install --frozen-lockfile
+    - aube run package
 ```
 
-`paths` are globs with the same grammar as `scope`, and each must be covered by the patch's own scope, since the rebuild writes them into that patch.
-`rebuild` is a list of commands that run in order through `sh -c`, with the repository root as the working directory, and stop at the first that exits non-zero.
-A list keeps each step a separate command with its own exit status and diagnostics.
+`outputs` are globs in the `scope` grammar.
+`rebuild` is a list of commands that run in order through `sh -c`, from the clone's root, and stop at the first that exits non-zero.
+`inputs` is optional and narrows what counts as an input (section 4).
 
-Alternative considered: one `rebuild` string, like a check's `run`.
-It lost because a rebuild usually installs dependencies and then builds, and one string forces the two into a shell chain whose failing step the finding cannot name.
+A manifest declares at most one `derived` block.
+forkctl reports `manifest_invalid` when an output glob also matches a forkctl document (the manifest, the ledger, or the exports directory), or when `inputs` and `outputs` share a glob.
 
-Alternative considered: a named list of derived records per patch, like `checks`.
-It lost because no known fork needs two rebuilds in one patch, and a patch whose outputs need two separate builds can split into two owner patches.
+Alternative considered: a `derived` record on one patch, which rebuilds the outputs after that patch replays.
+It lost because the outputs then stay content of a hand patch: the patch needs an ownership rule, a rebuild in the operator's worktree in the middle of a replay, and a per-patch freshness check, while the bundle that ships is still built from the tree at the top.
 
-### 2. One owner per derived path
+Alternative considered: a git merge driver for the outputs, as [npm-merge-driver][npm] does for lockfiles.
+It lost because a driver runs once per conflicting file, before the other files of the patch are merged, so it would build from a half-merged tree.
 
-forkctl validates three rules when it reads the manifest or checks the repository:
+### 2. One derived patch, on top, owned by forkctl
 
-1. Each `derived.paths` glob of a patch is matched by that patch's `scope`, or the manifest is invalid (`manifest_invalid`).
-2. No two patches declare derived globs that match the same tracked file (`derived_path_shared`).
-3. No patch other than the owner has a commit that touches a file matched by another patch's derived globs (`derived_path_foreign`).
+When `derived` is declared, the series ends with a patch named `derived` above the bookkeeping patch.
+Its diff against the patch below holds only files the output globs match, and its commit carries two trailers:
 
-With one owner, the derived files change in exactly one commit of the stack, so only that patch can conflict on them, and its rebuild sees every source change below it.
-A fork whose bundle depends on several source patches puts the owner above all of them, often as a patch that holds nothing but the derived files.
+```text
+Derived-Inputs: sha256:<input hash>
+Derived-Rebuild: sha256:<rebuild hash>
+```
 
-Alternative considered: let every patch that touches a derived path rebuild it after its own push.
-It lost because each such patch would carry its own copy of a 5 MB file, every one of them would conflict with the next on every rebase, and the stack's diff would be unreadable.
+No other patch may touch an output; a complete check reports `derived_path_foreign` with the patch's name when one does.
+So below the derived patch every output is upstream's copy, and the derived patch is the fork's whole difference in them.
+The derived patch has no export, as a tooling patch has none, and the ledger lists the declaration.
 
-### 3. Replay pushes one patch at a time
+The invariant that the bookkeeping patch is on top becomes: the bookkeeping patch is on top, or directly below the derived patch.
 
-`rebase` runs `stg rebase --merged --nopush <commit>`, then pushes the series with `stg push --merged <patch>`, one patch at a time.
-After each push of an owner, forkctl rebuilds it in the worktree: it runs the `rebuild` commands, stages every path the derived globs match, added and deleted files included, and runs `stg refresh` limited to those paths.
-When the rebuild also changed a tracked file outside the derived globs, such as a lockfile an install rewrote, forkctl stops in phase `conflict` with `derived_rebuild_dirty`, names each such file, refreshes nothing, and keeps the owner `rebuild_pending`.
-The operator restores those files and removes the cause outside the manifest, such as a dependency cache that forced a re-resolve, then runs `operation continue`, which rebuilds the owner again.
-When the rebuild itself must change, the operator runs `operation abort`, edits the declaration with `patch edit`, and starts the rebase again, because the manifest of an operation in flight is the snapshot taken at its start.
-A rebuild therefore never folds an unrelated change into the owner.
-The worktree is the right place because it holds the operator's installed dependencies, which a disposable clone lacks.
+Alternative considered: put the outputs in the bookkeeping patch.
+It lost because the bookkeeping patch holds the manifest, so the hashes it would record are hashes of a tree that contains them.
 
-When a push conflicts, forkctl reads the unmerged paths.
+### 3. Build in a clone, once per input state
 
-1. When the pushed patch is an owner and every unmerged path matches its derived globs, forkctl restores each from `HEAD` (the base plus the patches below), rebuilds, refreshes, and pushes on.
-2. Otherwise it records the patch in the journal as `rebuild_pending` when it is an owner, sets phase `conflict`, and stops with next actions `resolve conflicts`, `stg add --update`, `stg refresh`, and `forkctl operation continue`.
+`derive` computes the input hash and the rebuild hash from the tree below the derived patch.
+When the cache holds a result for both, forkctl uses it.
+Otherwise it clones that tree as a check does, with no origin remote, deletes every file the output globs match, runs `rebuild`, and reads every file the output globs match.
 
-`operation continue` for a rebase rebuilds the `rebuild_pending` patch when it is on top, then pushes each remaining unapplied patch through the same loop, then finishes as today.
-A continue after the operator already pushed every patch, the old procedure, still works: there is nothing left to push.
+1. The outputs are deleted before the build because they are not inputs. Upstream's copy, which the tree below the derived patch holds, could otherwise feed the build or survive it, such as a chunk file the fork's build no longer emits, and the result would depend on a file the input hash does not cover. A file the build must find in place is not generated, and belongs outside `outputs`.
+2. The build reads only tracked files, so it never sees the operator's ignored files, and the commands install what they need.
+3. When the build changed a tracked file outside the outputs, such as a lockfile an install rewrote, forkctl reports `derived_rebuild_dirty`, names each file, and writes nothing.
+4. A command that exits non-zero reports `derived_rebuild_failed` with the command, its exit status, and its first diagnostic line, and writes nothing.
 
-A rebuild command that fails stops the rebase in phase `conflict` with the command, its exit status, and its first diagnostic line, and the patch stays `rebuild_pending`.
-The operator fixes the cause and runs `operation continue`, or runs `operation abort`.
+On success forkctl writes the outputs into the worktree, stages them with deletions, and replaces the derived patch with one commit that carries the two trailers.
+The result is cached under `$(git rev-parse --git-path forkctl/derived/)` as the output tree's object id, kept reachable by a ref under `refs/forkctl/derived/`, keyed by both hashes.
 
-Alternative considered: keep `stg rebase` and pass `--exec` for the rebuild.
-It lost because `--exec` runs after every patch rather than the owner, cannot stage or refresh, and rolls back the whole rebase on failure, which discards the conflict resolutions already made.
+The build runs once per input state, at the top of the stack.
+It never runs once per commit or once per patch that touches an input, because the outputs that ship are those built from the top.
 
-Alternative considered: resolve the conflict by taking the patch's own copy of the derived files.
-It lost because that copy was built from the old upstream sources, so the result would pass review and ship a stale bundle.
+Alternative considered: build in the worktree, which already holds installed dependencies.
+It lost because the worktree holds files the commit does not, so a build there can pass and still not be reproducible from the commit, and because it runs upstream's build scripts beside the operator's uncommitted work.
 
-### 4. The freshness check
+### 4. The input hash
 
-A complete `check`, and every command that runs it, materializes each owner's commit in a disposable clone, runs the `rebuild` commands there, and reports `derived_stale` when `git status --porcelain` over the derived globs is not empty.
-The clone holds no ignored files, so the `rebuild` commands must install what they need; the example installs dependencies first for that reason.
-A rebuild command that fails reports `derived_rebuild_failed` with the command, its exit status, and its first diagnostic line.
-A derived glob that matches no tracked file at the owner's commit reports `check_glob_stale`, as a check's glob does.
+The input hash is SHA-256 over the sorted lines `<mode> <object id> <path>` of every tracked file that counts as an input.
+It reads object ids from `git ls-tree -r`, so it reads no file content.
 
-The finding's next action is `mise run fork patch rebuild <patch>`.
+With no `inputs`, every tracked file counts, except files the output globs match and forkctl's own documents.
+A fork that lists `inputs` counts only those, which rebuilds less often at the risk of a missed input: the [Bazel sandboxing page][sandbox] describes that failure.
+The default makes the common case right: an upstream change to a file no patch touches, such as a build configuration, still marks the outputs stale.
 
-A passing result is recorded under `$(git rev-parse --git-path forkctl/derived/)`, keyed by the owner's commit id and a hash of its whole `derived` record, `paths` and `rebuild`.
-A commit id fixes the owner's tree and the hash fixes what is rebuilt and compared, so a later check with the same key skips the rebuild; a changed owner commit, changed globs, or changed commands rebuild again.
-A failing result is never recorded.
-A staged check (`check -s`), the pre-commit hook, does not run the freshness check, so editing stays fast; the complete check of `patch finish`, `rebase`, and the pre-push hook does.
-`check --no-cache` ignores the records, which is the override when a build reads something outside the tree, such as the network.
+The rebuild hash is SHA-256 over the `rebuild` commands, each followed by a newline.
 
-Alternative considered: rebuild on every complete check.
-It lost because one rebuild of the mise-action bundle installs every dependency and runs rollup, and the pre-push hook would pay that on every push of an unchanged owner.
+Alternative considered: hash the whole tree.
+It lost because every manifest or ledger rewrite, such as a patch edit that changes only a purpose, would then rebuild the bundle.
 
-Alternative considered: leave freshness to an ordinary declared check that the operator writes.
-It lost because every fork that declares derived paths would write the same check, and a fork that forgot it would ship a bundle that does not match its sources.
+### 5. Rebase never conflicts on an output
 
-Alternative considered: check at the top of the stack.
-It lost because the rebuild runs at the owner's commit, so a check at the top would report a change above the owner that no rebuild can take in.
-A patch that changes the build's inputs belongs below the owner, and the skill says so.
+`rebase` deletes the derived patch from the series before the replay; the recovery tag already preserves it with the old tip.
+It replays every other patch as today, so no patch it replays touches an output.
+After the last push it enters phase `deriving`, derives once, then regenerates bookkeeping and writes the report.
 
-### 5. `patch rebuild`
+A failing build stops the rebase in phase `deriving` with the finding.
+`operation continue` derives again, for a cause outside the manifest such as the network; `operation abort` restores the old stack from the recovery tag.
+A change to `rebuild` needs `operation abort`, `contract edit`, and a new rebase, because an operation in flight reads the manifest snapshot taken at its start.
 
-`patch rebuild PATCH` requires a clean worktree, no active patch, and no operation in flight.
-It records an operation, moves the stack to the owner with `stg goto`, rebuilds and refreshes as in section 3, pushes the patches above it again, and runs the full check before it ends.
-A conflict while pushing the patches above stops in phase `conflict`, and `operation continue` and `operation abort` own it, as for a rebase.
-`patch rebuild -n` reports the plan and changes nothing.
+The report names the input hash, the rebuild hash, and whether the result came from the cache.
+`rebase --verify-base` also builds at the new base and reports whether upstream's committed outputs equal that build.
+A difference there means upstream's outputs do not reproduce from its own sources, so the derived patch will carry that noise.
 
-Alternative considered: no command, with the finding naming `stg goto`, the rebuild commands, and `patch refresh --rewrite-below`.
-It lost because that is four manual steps whose order matters, repeated after every source change in a lower patch.
+### 6. States and the everyday flow
 
-### 6. Automatic behaviour
+The derived state is read from the stack with no build.
 
-The rebuild during `rebase` and the freshness check run only for a patch that declares `derived`.
-The override is the declaration: `patch edit PATCH -R COMMAND` replaces the commands, and `-D GLOB` replaces the paths.
-The disable path is `patch edit PATCH --clear-derived`, which returns the patch to ordinary conflict handling and drops its freshness check.
+| State | Condition | Complete check |
+|:--|:--|:--|
+| `absent` | `derived` is declared and the top patch is not `derived` | fails `derived_absent` |
+| `stale` | a trailer differs from the hash forkctl computes | fails `derived_stale` |
+| `fresh` | both trailers match | passes |
 
-### 7. Protocol and manifest
+1. `patch refresh` keeps its speed: it rebuilds nothing, and its final check reports a stale derived patch as a notice while the patch stays active.
+2. `patch finish` derives before its final check, so a finished patch never leaves the outputs stale.
+3. `forkctl derive` derives on request, records an operation, and supports `-n`.
+4. The staged check of the pre-commit hook skips the derived state; the complete check of the pre-push hook and of `publish` fails on it.
+5. `check --rebuild` also builds the input state in a clone and reports `derived_unreproducible` when the result differs from the derived patch; it ignores the cache.
 
-The `derived` field is optional and skipped when absent, so every existing schema 2 manifest reads unchanged, and the schema number stays 2.
-An older forkctl rejects a manifest that declares `derived`, as `deny_unknown_fields` requires; that is the expected effect of a new field, and the changeset names the first release that reads it.
-The protocol stays at version 2: the `patch rebuild` request, the `rebuilt_patches` result field, the journal's `rebuild_pending` field, and the finding codes are additions.
+Alternative considered: derive on every refresh.
+It lost because one build of the mise-action bundle installs every dependency and runs rollup, which the editing loop would pay on every refresh.
+
+### 7. Automatic behaviour
+
+The build runs only when the operator starts `rebase`, `patch finish`, or `derive`, and only when `derived` is declared.
+`rebase -n` and `derive -n` list the rebuild commands before anything runs.
+The override is the declaration: `contract edit --derived-rebuild` replaces the commands, and `--derived-input` and `--derived-output` replace the globs.
+The disable path is `contract edit --clear-derived`, followed by `patch remove derived` when the stack still holds the patch.
+
+### 8. Protocol and manifest
+
+The `derived` block is optional and skipped when absent, so every existing schema 2 manifest reads unchanged, and the schema number stays 2.
+An older forkctl rejects a manifest that declares `derived`, as `deny_unknown_fields` requires, and the changeset names the first release that reads it.
+The protocol stays at version 2: the `derive` request and result, the `deriving` phase, the rebase result's `derived` field, and the finding codes are additions.
 
 ## Non-goals
 
-1. Generated exports of an owner patch keep showing the derived files as Git shows them; a fork that marks them `-diff`, as the mise-action fork does, sees one line per file.
-2. Detecting which source files a build reads. The single-owner rule and the freshness check make that unnecessary.
-3. Sandboxing rebuild commands. Like checks, they are trusted user-level code.
-   During `rebase` they run the new upstream's build in the operator's worktree, which is the step the operator would run by hand to resolve the same conflict.
-   `rebase -n` lists the rebuild commands before anything runs, and a fork that will not run upstream's build there omits `derived`.
+1. Sandboxing the build. Like checks, rebuild commands are trusted user-level code, and they run upstream's build scripts; the clone keeps them away from the worktree, not from the operator's account.
+2. More than one `derived` block. A fork with two builds lists both in one `rebuild`.
+3. Detecting undeclared inputs. The default counts every tracked file, and `check --rebuild` finds a build that reads something outside the tree.
+
+[npm]: https://github.com/npm/npm-merge-driver/
+[sandbox]: https://bazel.build/docs/sandboxing
