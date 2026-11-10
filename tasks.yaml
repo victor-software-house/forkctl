@@ -45,6 +45,18 @@ horizon:
     kind: deferred
     open: The operator decides when every downstream manifest has run forkctl upgrade.
 archive:
+  - id: FRK-039
+    title: Ship a linux-arm64 release tarball
+    scope: .ctl/ver.yaml, .cargo/config.toml
+    outcome: >-
+      Each release carries forkctl_<version>_linux_arm64.tar.gz, a static aarch64
+      musl binary cross-built on the x64 runner
+    completed: 2026-11-10T04:24:16
+    evidence:
+      - '2026-11-10: cargo build --release --locked --target aarch64-unknown-linux-musl with rust-lld built a static aarch64 ELF in 48 s on an x86_64 Linux host'
+      - '2026-11-10: .ctl/ver.yaml declares linux-arm64 on runner x64 (labels ubuntu-latest), the asset job verctl 0.7.2 plans'
+    disposition: completed
+
   - id: FRK-038
     title: Take ctl-core 0.7.0 with vsh-serde-saphyr 0.0.3
     scope: Cargo.toml, Cargo.lock, presentation
