@@ -1,0 +1,4 @@
+# The aarch64 release binary is cross-built on an x86_64 runner. rust-lld
+# ships with rustc and links a static musl binary without a cross toolchain.
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
