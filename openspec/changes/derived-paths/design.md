@@ -52,8 +52,9 @@ It lost because each such patch would carry its own copy of a 5 MB file, every o
 
 `rebase` runs `stg rebase --merged --nopush <commit>`, then pushes the series with `stg push --merged <patch>`, one patch at a time.
 After each push of an owner, forkctl rebuilds it in the worktree: it runs the `rebuild` commands, stages every path the derived globs match, added and deleted files included, and runs `stg refresh` limited to those paths.
-When the rebuild also changed a tracked file outside the derived globs, such as a lockfile an install rewrote, forkctl stops with `derived_rebuild_dirty`, names each such file, and refreshes nothing.
-The operator restores those files or adds them to `derived.paths`, then runs `operation continue`.
+When the rebuild also changed a tracked file outside the derived globs, such as a lockfile an install rewrote, forkctl stops in phase `conflict` with `derived_rebuild_dirty`, names each such file, refreshes nothing, and keeps the owner `rebuild_pending`.
+The operator restores those files and removes the cause outside the manifest, such as a dependency cache that forced a re-resolve, then runs `operation continue`, which rebuilds the owner again.
+When the rebuild itself must change, the operator runs `operation abort`, edits the declaration with `patch edit`, and starts the rebase again, because the manifest of an operation in flight is the snapshot taken at its start.
 A rebuild therefore never folds an unrelated change into the owner.
 The worktree is the right place because it holds the operator's installed dependencies, which a disposable clone lacks.
 
@@ -83,8 +84,8 @@ A derived glob that matches no tracked file at the owner's commit reports `check
 
 The finding's next action is `mise run fork patch rebuild <patch>`.
 
-A passing result is recorded under `$(git rev-parse --git-path forkctl/derived/)`, keyed by the owner's commit id and a hash of its `rebuild` list.
-A commit id fixes the whole tree, so a later check with the same key skips the rebuild; only a changed owner commit or changed commands rebuild again.
+A passing result is recorded under `$(git rev-parse --git-path forkctl/derived/)`, keyed by the owner's commit id and a hash of its whole `derived` record, `paths` and `rebuild`.
+A commit id fixes the owner's tree and the hash fixes what is rebuilt and compared, so a later check with the same key skips the rebuild; a changed owner commit, changed globs, or changed commands rebuild again.
 A failing result is never recorded.
 A staged check (`check -s`), the pre-commit hook, does not run the freshness check, so editing stays fast; the complete check of `patch finish`, `rebase`, and the pre-push hook does.
 `check --no-cache` ignores the records, which is the override when a build reads something outside the tree, such as the network.

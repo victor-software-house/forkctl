@@ -24,7 +24,7 @@ The change is additive to manifest schema 2 and protocol version 2: one optional
   A conflict confined to that patch's derived paths is resolved this way with no stop.
   A conflict in any other path stops as today, and `operation continue` rebuilds the patch and pushes the remaining patches.
 - `forkctl check` rebuilds each owner's derived paths in a disposable clone at the owner's commit, and reports `derived_stale` when the result differs from the commit.
-  A pass is recorded by owner commit and rebuild commands, so an unchanged owner is not rebuilt again; `check --no-cache` (`FORKCTL_NO_CACHE`) ignores the records, and a staged check skips the rebuild.
+  A pass is recorded by owner commit and the whole `derived` record, so an unchanged owner is not rebuilt again; `check --no-cache` (`FORKCTL_NO_CACHE`) ignores the records, and a staged check skips the rebuild.
 - A rebuild that changes a tracked file outside the derived paths stops with `derived_rebuild_dirty` and refreshes nothing.
 - `patch rebuild PATCH` rebuilds an owner's derived paths in the worktree and refreshes the owner, for the stale case outside a rebase.
 - `patch create` and `patch edit` take `-D/--derived GLOB` and `-R/--rebuild COMMAND`, both repeatable, and `patch edit` takes `--clear-derived`.

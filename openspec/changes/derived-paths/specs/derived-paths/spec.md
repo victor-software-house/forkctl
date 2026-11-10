@@ -44,12 +44,17 @@ The rebase result SHALL list the patch in `rebuilt_patches`.
 ### Requirement: A rebuild never folds an unrelated change into the owner
 
 forkctl SHALL refresh an owner only with the files its derived globs match.
-When a rebuild changes a tracked file outside them, forkctl SHALL stop with `derived_rebuild_dirty`, name each such file, and refresh nothing.
+When a rebuild changes a tracked file outside them, forkctl SHALL stop in phase `conflict` with `derived_rebuild_dirty`, name each such file, refresh nothing, and keep the owner `rebuild_pending`.
 
 #### Scenario: The install rewrites a lockfile
 
 - **WHEN** an owner's rebuild during `forkctl rebase` also rewrites the tracked `aube-lock.yaml`, which its derived globs do not match
 - **THEN** the command fails, the error code is `derived_rebuild_dirty`, the message names `aube-lock.yaml`, and the owner's commit is unchanged
+
+#### Scenario: Continue after the dirty rebuild is fixed
+
+- **WHEN** a rebase stopped with `derived_rebuild_dirty` on `aube-lock.yaml`, the operator restores `aube-lock.yaml` and removes the cause, and runs `forkctl operation continue`
+- **THEN** the owner is rebuilt again, the command succeeds, and `aube-lock.yaml` at the new tip equals the new base's copy
 
 ### Requirement: A conflict in derived paths alone resolves by rebuilding
 
@@ -87,13 +92,18 @@ It SHALL report `derived_stale` when any file the derived globs match differs fr
 
 ### Requirement: Check reuses a passing freshness result
 
-A passing result SHALL be recorded by owner commit id and a hash of its `rebuild` list, and a later check with the same key SHALL skip the rebuild.
+A passing result SHALL be recorded by owner commit id and a hash of its whole `derived` record, and a later check with the same key SHALL skip the rebuild.
 `forkctl check --no-cache` SHALL ignore the records, and a staged check SHALL skip the freshness check.
 
 #### Scenario: An unchanged owner is not rebuilt again
 
 - **WHEN** `forkctl check` passed and the operator runs `forkctl check` again with no change to the owner's commit or its `rebuild` list
 - **THEN** the second check runs no rebuild command, and `forkctl check --no-cache` runs them
+
+#### Scenario: Changed globs rebuild again
+
+- **WHEN** `forkctl check` passed and the operator adds a glob to the owner's `derived.paths` with `forkctl patch edit dist -D 'dist/**' -D 'licenses.txt'`
+- **THEN** the next `forkctl check` runs the rebuild commands
 
 ### Requirement: Patch rebuild refreshes an owner in place
 
