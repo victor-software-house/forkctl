@@ -8,7 +8,9 @@
 #   specs/**/spec.md     1200
 #   research.md          2500
 #
-# Archived changes and the specs under openspec/specs/ are not checked.
+# Archived changes and the specs under openspec/specs/ are not checked. The
+# budgets bound a change's scope, so a change over one is split into smaller
+# changes, not cut down to fit.
 #
 # A word is a whitespace-separated token, as wc -w counts it, so list markers,
 # table pipes, code blocks and HTML comments count. A reference-style link
@@ -75,5 +77,8 @@ find openspec/changes -path openspec/changes/archive -prune -o -type f -name '*.
         failed = 1
       }
     }
-    END { exit failed }
+    END {
+      if (failed) print "✘ split each change over a budget into smaller changes, each with its own proposal; do not cut text to fit"
+      exit failed
+    }
   '

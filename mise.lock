@@ -7,6 +7,12 @@ version = "0.45.0"
 backend = "aqua:ast-grep/ast-grep"
 specifiers = ["0.45.0"]
 
+[tools.ast-grep."platforms.linux-arm64"]
+checksum = "sha256:62b60892dafacfa76d6de87157659f880bbf85ff38bdab52db12f1f14ec60f94"
+checksum_source = "mise-versions"
+url = "https://github.com/ast-grep/ast-grep/releases/download/0.45.0/app-aarch64-unknown-linux-gnu.zip"
+url_api = "https://api.github.com/repos/ast-grep/ast-grep/releases/assets/487374979"
+
 [tools.ast-grep."platforms.linux-x64"]
 checksum = "sha256:78931ae35ebac33d9a72b3aecea3e3d62d6e5b0b718ac8bbedfbe69d68421e41"
 url = "https://github.com/ast-grep/ast-grep/releases/download/0.45.0/app-x86_64-unknown-linux-gnu.zip"
@@ -27,6 +33,12 @@ version = "0.71.1"
 backend = "aqua:open-policy-agent/conftest"
 specifiers = ["0.71.1"]
 
+[tools.conftest."platforms.linux-arm64"]
+checksum = "sha256:218c682e110ae7e826dc14a746a6f9b43eb782643dbe730b771fd305634e3f47"
+url = "https://github.com/open-policy-agent/conftest/releases/download/v0.71.1/conftest_0.71.1_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/open-policy-agent/conftest/releases/assets/614476733"
+provenance = "github-attestations"
+
 [tools.conftest."platforms.linux-x64"]
 checksum = "sha256:c3f6b2a753bd56e377a1e51a95ae3e057f926f2e9139f7d5b5dfbbaf810f7985"
 url = "https://github.com/open-policy-agent/conftest/releases/download/v0.71.1/conftest_0.71.1_Linux_x86_64.tar.gz"
@@ -43,6 +55,12 @@ provenance = "github-attestations"
 version = "2.95.0"
 backend = "aqua:cli/cli"
 specifiers = ["2.95.0"]
+
+[tools.gh."platforms.linux-arm64"]
+checksum = "sha256:d41e0b3b6218e5741c8bb4db39b16e53a59e0e06299a8489bd38f623ef7ebaae"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450525946"
+provenance = "github-attestations"
 
 [tools.gh."platforms.linux-x64"]
 checksum = "sha256:25d1e4729e8808c9ed3d613e96ebd3f3e44446f2d368c89d878a71a36ddb3d8c"
@@ -61,6 +79,12 @@ version = "0.20.2"
 backend = "github:EmbarkStudios/cargo-deny"
 specifiers = ["0.20.2"]
 
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-arm64"]
+checksum = "sha256:995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d"
+checksum_source = "mise-versions"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/471598345"
+
 [tools."github:EmbarkStudios/cargo-deny"."platforms.linux-x64"]
 checksum = "sha256:9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
 url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz"
@@ -75,6 +99,12 @@ url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets
 version = "1.16.0"
 backend = "github:Fission-AI/OpenSpec"
 specifiers = ["1.16.0"]
+
+[tools."github:Fission-AI/OpenSpec"."platforms.linux-arm64"]
+checksum = "sha256:b9b61371a7caa1819da34f766cc24896cfe7a743841f53121b66bd1e2f1b9e93"
+url = "https://github.com/Fission-AI/OpenSpec/releases/download/v1.16.0/openspec-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/Fission-AI/OpenSpec/releases/assets/693785650"
+provenance = "github-attestations"
 
 [tools."github:Fission-AI/OpenSpec"."platforms.linux-x64"]
 checksum = "sha256:f27fb2ff5c6c4aafb207cb0b797189215adb3a1150d4b4600a2d6a0b6e192ae1"
@@ -93,6 +123,12 @@ version = "0.9.2"
 backend = "github:bnjbvr/cargo-machete"
 specifiers = ["0.9.2"]
 
+[tools."github:bnjbvr/cargo-machete"."platforms.linux-arm64"]
+checksum = "sha256:6f96c3e6026a5bdd241b6ae600c6fb86c9197c6e189a894f91371baa01fd10f5"
+checksum_source = "mise-versions"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.2/cargo-machete-v0.9.2-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/397130991"
+
 [tools."github:bnjbvr/cargo-machete"."platforms.linux-x64"]
 checksum = "sha256:48200087f54c55aabcd4db4af1e25742b49846c02a1b1bfa134711945b35b2e9"
 url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.2/cargo-machete-v0.9.2-x86_64-unknown-linux-musl.tar.gz"
@@ -107,6 +143,12 @@ url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/397
 version = "cargo-nextest-0.9.143"
 backend = "github:nextest-rs/nextest"
 specifiers = ["cargo-nextest-0.9.143"]
+
+[tools."github:nextest-rs/nextest"."platforms.linux-arm64"]
+checksum = "sha256:2a64b3566a92508550a7ab29c3e8db25472ca37730ecb4d22100b6aa440c2a68"
+url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.143/cargo-nextest-0.9.143-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501881925"
+provenance = "github-attestations"
 
 [tools."github:nextest-rs/nextest"."platforms.linux-x64"]
 checksum = "sha256:66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e"
@@ -155,6 +197,12 @@ version = "2.5.0"
 backend = "packslip:github.com/jdx/jactionlint"
 specifiers = ["2.5.0"]
 
+[tools.jactionlint."platforms.linux-arm64"]
+checksum = "sha256:ad7e33b6264cea16b7e83ad2bb004824d5b1c15aedb35ba0dc84917f791c5525"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.5.0/jactionlint_2.5.0_linux_arm64.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/jactionlint/.github/workflows/release.yaml"
+repository_ids = { repository = "1404951382" }
+
 [tools.jactionlint."platforms.linux-x64"]
 checksum = "sha256:5ac307b0499bb0eab45ae99c23e8e0790874fbc667c75224410954e0e3c6e0f5"
 url = "https://github.com/jdx/jactionlint/releases/download/v2.5.0/jactionlint_2.5.0_linux_amd64.tar.gz"
@@ -171,6 +219,12 @@ repository_ids = { repository = "1404951382" }
 version = "1.8.2"
 backend = "aqua:jqlang/jq"
 specifiers = ["1.8.2"]
+
+[tools.jq."platforms.linux-arm64"]
+checksum = "sha256:8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309"
+url = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-arm64"
+url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012756"
+provenance = "github-attestations"
 
 [tools.jq."platforms.linux-x64"]
 checksum = "sha256:b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f"
@@ -189,6 +243,12 @@ version = "2.2.2"
 backend = "aqua:evilmartians/lefthook"
 specifiers = ["2.2.2"]
 
+[tools.lefthook."platforms.linux-arm64"]
+checksum = "sha256:5e11944542e9889078d2300495882aa854d63854a664d09c5637df0bbc21c0e1"
+url = "https://github.com/evilmartians/lefthook/releases/download/v2.2.2/lefthook_2.2.2_Linux_aarch64.gz"
+url_api = "https://api.github.com/repos/evilmartians/lefthook/releases/assets/636518953"
+provenance = "github-attestations"
+
 [tools.lefthook."platforms.linux-x64"]
 checksum = "sha256:2b8d7fd52771f26d7a50260ef10cd6fe704d66f60102e566362b84da09884ab7"
 url = "https://github.com/evilmartians/lefthook/releases/download/v2.2.2/lefthook_2.2.2_Linux_x86_64.gz"
@@ -205,6 +265,12 @@ provenance = "github-attestations"
 version = "1.29.1"
 backend = "packslip:github.com/jdx/mr-boxington"
 specifiers = ["1.29.1"]
+
+[tools.mr-boxington."platforms.linux-arm64"]
+checksum = "sha256:92e5554096a9b0c083aaf3d461262d31e3f7a0aa3d38ed2972c62c2b9a953c41"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.29.1/mbx-aarch64-unknown-linux-gnu.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
+repository_ids = { repository = "1340721957" }
 
 [tools.mr-boxington."platforms.linux-x64"]
 checksum = "sha256:ca95f28c77711845c0455839792ca3f3070bdf007979ab75bf7e10c03b07fe3f"
@@ -223,6 +289,11 @@ version = "3.15.2"
 backend = "core:python"
 specifiers = ["3.15.2"]
 
+[tools.python."platforms.linux-arm64"]
+checksum = "sha256:0f23351c03b39beb880de668976074fcc3c082d9c3b03d0b43185632b2b270a0"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2+20261026-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
 [tools.python."platforms.linux-x64"]
 checksum = "sha256:7b03163a980c607ba8194709d4a4086735a7a9c488cc475b098157306927b36b"
 url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2+20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
@@ -237,6 +308,12 @@ provenance = "github-attestations"
 version = "0.3.2"
 backend = "aqua:rvben/rumdl"
 specifiers = ["0.3.2"]
+
+[tools.rumdl."platforms.linux-arm64"]
+checksum = "sha256:bdfca7a602f893fbe5d73d5e38f73b31f45a21d3bcf385b6ea819997d0449ec3"
+url = "https://github.com/rvben/rumdl/releases/download/v0.3.2/rumdl-v0.3.2-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/685449365"
+provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64"]
 checksum = "sha256:f527d1374765d826c1627ceab3d1f46e548268731a495b5b12a3af529b3d79e8"
@@ -273,6 +350,11 @@ version = "0.10.0"
 backend = "aqua:tamasfe/taplo"
 specifiers = ["0.10.0"]
 
+[tools.taplo."platforms.linux-arm64"]
+checksum = "sha256:033681d01eec8376c3fd38fa3703c79316f5e14bb013d859943b60a07bccdcc3"
+url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-aarch64.gz"
+url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257322597"
+
 [tools.taplo."platforms.linux-x64"]
 checksum = "blake3:4871fab0e60275a1eb46e7190726e144f56c9a9527f59b0d1da5a042baead8e2"
 url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86_64.gz"
@@ -287,6 +369,12 @@ url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257323110"
 version = "1.51.1"
 backend = "aqua:crate-ci/typos"
 specifiers = ["1.51.1"]
+
+[tools.typos."platforms.linux-arm64"]
+checksum = "sha256:2ac5e37b3236b3c07dec5cdf1527acf143aec4674a6089b0bf424d021b35e099"
+checksum_source = "mise-versions"
+url = "https://github.com/crate-ci/typos/releases/download/v1.51.1/typos-v1.51.1-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/616652747"
 
 [tools.typos."platforms.linux-x64"]
 checksum = "sha256:93c301fd4120ff076e2cc2a6d6a61cab4a4bdb81899287c0938b452e56d1f454"
@@ -303,6 +391,12 @@ version = "6.11.1"
 backend = "aqua:jdx/usage"
 specifiers = ["6.11.1"]
 
+[tools.usage."platforms.linux-arm64"]
+checksum = "sha256:90622145566409da24d282190ad17cc786c85d498d751543824ab62931705018"
+checksum_source = "mise-versions"
+url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584024322"
+
 [tools.usage."platforms.linux-x64"]
 checksum = "sha256:afa6cb0e76f88cc6392aeecf21bbcd869747d4eeb60ab84c98d6e6178edc359a"
 url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-unknown-linux-gnu.tar.gz"
@@ -317,6 +411,12 @@ url_api = "https://api.github.com/repos/jdx/usage/releases/assets/584026303"
 version = "0.13.6"
 backend = "aqua:astral-sh/uv"
 specifiers = ["0.13.6"]
+
+[tools.uv."platforms.linux-arm64"]
+checksum = "sha256:229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/679980412"
+provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64"]
 checksum = "sha256:f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
@@ -334,6 +434,12 @@ provenance = "github-attestations"
 version = "4.54.1"
 backend = "aqua:mikefarah/yq"
 specifiers = ["4.54.1"]
+
+[tools.yq."platforms.linux-arm64"]
+checksum = "sha256:189088da0c6429ec5178dfaab1a114805f6cab0b61b165ab236efedf1d57a71b"
+url = "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_arm64"
+url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/597222603"
+provenance = "cosign"
 
 [tools.yq."platforms.linux-x64"]
 checksum = "sha256:8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f"
