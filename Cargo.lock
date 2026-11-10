@@ -394,7 +394,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "forkctl"
-version = "0.0.48"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "askama",
@@ -417,7 +417,7 @@ dependencies = [
 
 [[package]]
 name = "forkctl-xtask"
-version = "0.0.48"
+version = "0.1.0"
 
 [[package]]
 name = "garde"
