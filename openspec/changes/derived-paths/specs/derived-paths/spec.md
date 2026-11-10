@@ -41,6 +41,16 @@ The rebase result SHALL list the patch in `rebuilt_patches`.
 - **WHEN** the stack holds `src` and `dist`, `dist` declares `derived` with a rebuild that writes `dist/out.txt` from `src/in.txt`, upstream changes another line of `src/in.txt`, and the operator runs `forkctl rebase -o refs/heads/main`
 - **THEN** the command succeeds, `dist/out.txt` at the new tip equals the rebuild of `src/in.txt` at the new tip, and `result.rebuilt_patches` is `["dist"]`
 
+### Requirement: A rebuild never folds an unrelated change into the owner
+
+forkctl SHALL refresh an owner only with the files its derived globs match.
+When a rebuild changes a tracked file outside them, forkctl SHALL stop with `derived_rebuild_dirty`, name each such file, and refresh nothing.
+
+#### Scenario: The install rewrites a lockfile
+
+- **WHEN** an owner's rebuild during `forkctl rebase` also rewrites the tracked `aube-lock.yaml`, which its derived globs do not match
+- **THEN** the command fails, the error code is `derived_rebuild_dirty`, the message names `aube-lock.yaml`, and the owner's commit is unchanged
+
 ### Requirement: A conflict in derived paths alone resolves by rebuilding
 
 When pushing an owner conflicts and every unmerged path matches its derived globs, `forkctl rebase` SHALL restore those paths from `HEAD`, rebuild and refresh the owner, and continue without stopping.
@@ -74,6 +84,16 @@ It SHALL report `derived_stale` when any file the derived globs match differs fr
 
 - **WHEN** patch `src` below owner `dist` changes `src/in.txt` and is refreshed, and the operator runs `forkctl --format json check`
 - **THEN** the command fails and a finding has code `derived_stale` and subject `dist`, with a message that names `mise run fork patch rebuild dist`
+
+### Requirement: Check reuses a passing freshness result
+
+A passing result SHALL be recorded by owner commit id and a hash of its `rebuild` list, and a later check with the same key SHALL skip the rebuild.
+`forkctl check --no-cache` SHALL ignore the records, and a staged check SHALL skip the freshness check.
+
+#### Scenario: An unchanged owner is not rebuilt again
+
+- **WHEN** `forkctl check` passed and the operator runs `forkctl check` again with no change to the owner's commit or its `rebuild` list
+- **THEN** the second check runs no rebuild command, and `forkctl check --no-cache` runs them
 
 ### Requirement: Patch rebuild refreshes an owner in place
 
