@@ -15,20 +15,17 @@ Compile, format, lint, and test tasks run in CI with `mise run verify`.
 - [ ] 2.3 Report `derived_rebuild_failed` and `derived_rebuild_dirty` and write nothing; proof: the "The install rewrites a lockfile" scenario passes in CI
 - [ ] 2.4 Add `forkctl derive` with plan mode and its refusals; proof: the `derive` case in `every_mutation_has_a_typed_non_mutating_failure_case` passes in CI
 
-## 3. Rebase and patches
+## 3. Patches
 
-- [ ] 3.1 Delete the derived patch before the replay and derive in phase `deriving`; proof: the "Upstream changed the bundle" and "An upstream change outside every patch" scenarios pass in CI
-- [ ] 3.2 Stop a failing build in phase `deriving`, and let `operation continue` derive again; proof: the "A failing build stops the rebase" scenario passes in CI
-- [ ] 3.3 Add `rebase --verify-base` and the `derived` result field; proof: the "Upstream outputs that do not reproduce" scenario passes in CI
-- [ ] 3.4 Derive in `patch finish`, and keep `patch refresh` free of builds; proof: the "Finish after a source change" scenario passes in CI
+- [ ] 3.1 Derive in `patch finish`, and keep `patch refresh` free of builds; proof: the "Finish after a source change" scenario passes in CI
 
 ## 4. Check
 
-- [ ] 4.1 Report `derived_absent` and `derived_stale` with no build; proof: the "A patch changed a source" and "A metadata edit does not rebuild" scenarios pass in CI
+- [ ] 4.1 Report `derived_absent` and `derived_stale` with no build; proof: the "A patch changed a source", "A change to a build configuration", and "A metadata edit does not rebuild" scenarios pass in CI
 - [ ] 4.2 Add `check --rebuild` and `derived_unreproducible`; proof: the "A build that reads the clock" scenario passes in CI
 
 ## 5. Surfaces and release
 
 - [ ] 5.1 Update `src/instructions.md`, the operator templates and both renders, `README.md`, `AGENTS.md`'s product invariants, and `examples/fork.yaml`; proof: both `operator_docs` tests pass in CI, and `rg -n 'derived' skills/forkctl/SKILL.md src/instructions.md` names the derived patch, `derive`, and the clean build
-- [ ] 5.2 Add a patch changeset fragment naming the new block, flags, variables, command, phase, and finding codes; proof: `mise run ver check` passes
+- [ ] 5.2 Add a patch changeset fragment naming the new block, flags, variables, command, and finding codes; proof: `mise run ver check` passes
 - [ ] 5.3 Run the full gate; proof: `mise run verify` passes in CI, and `openspec validate --all --strict` passes

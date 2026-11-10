@@ -8,16 +8,31 @@ style:
 active: null
 queue:
   - id: FRK-039
-    title: Derive build outputs at the top of the stack
+    title: Derive build outputs in one patch on top of the stack
     scope: rebase
     outcome: >-
-      Build outputs live in one forkctl-owned derived patch on top, rebuilt once per input state, so no rebase conflicts on them and check reports them stale.
+      Build outputs live in one forkctl-owned derived patch on top, rebuilt once per input state, and check reports them stale with no build.
     blocked_by: []
     acceptance:
-      - forkctl rebase onto an upstream that changed a declared output stops on no conflict and commits a derived patch built from the new tree.
       - forkctl check reports derived_stale, with no build, when a patch changes an input and nothing derived.
       - forkctl derive run twice on the same tree runs the rebuild commands once.
+      - forkctl patch finish after a source change leaves a derived patch that forkctl check reports fresh.
     plan: openspec/changes/derived-paths/proposal.md
+    notes:
+      - The mise-action fork stopped on dist/index.js and dist/index.js.map when it moved onto v5.2.7, while src/index.ts merged.
+
+  - id: FRK-040
+    title: Rebuild derived outputs during rebase
+    scope: rebase
+    outcome: >-
+      A rebase drops the derived patch and derives once after the replay, so no
+      rebase conflicts on a build output.
+    blocked_by:
+      - FRK-039
+    acceptance:
+      - forkctl rebase onto an upstream that changed a declared output stops on no conflict and commits a derived patch built from the new tree.
+      - forkctl rebase --verify-base reports base_reproducible false when upstream committed outputs differ from its own build.
+    plan: openspec/changes/derived-rebase/proposal.md
     notes:
       - The mise-action fork stopped on dist/index.js and dist/index.js.map when it moved onto v5.2.7, while src/index.ts merged.
 horizon:

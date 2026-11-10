@@ -44,7 +44,7 @@ With a cached result, it SHALL commit that result and run no command.
 
 #### Scenario: The same state is not built twice
 
-- **WHEN** the operator runs `forkctl derive`, then `forkctl operation abort` on a later rebase, then `forkctl derive` again on the same tree
+- **WHEN** the operator runs `forkctl derive`, then `forkctl patch remove derived --reason test`, then `forkctl derive` again on the same tree
 - **THEN** the second derive runs no rebuild command
 
 ### Requirement: The input hash covers every tracked file by default
@@ -52,10 +52,10 @@ With a cached result, it SHALL commit that result and run no command.
 With no `inputs`, the input hash SHALL cover every tracked file below the derived patch except files the output globs match, the manifest, the ledger, and the exports.
 With `inputs`, it SHALL cover only the tracked files those globs match.
 
-#### Scenario: An upstream change outside every patch
+#### Scenario: A change to a build configuration
 
-- **WHEN** `derived` declares no `inputs`, a rebase moves onto an upstream that changes only `rollup.config.mjs`, which no patch touches
-- **THEN** the rebase rebuilds the outputs
+- **WHEN** `derived` declares no `inputs`, and the operator finishes a new patch that changes only `rollup.config.mjs` without a derive, then runs `forkctl --format json check`
+- **THEN** a finding has code `derived_stale`
 
 #### Scenario: A metadata edit does not rebuild
 
@@ -72,21 +72,6 @@ In both cases it SHALL leave the worktree and the series unchanged.
 
 - **WHEN** the rebuild rewrites the tracked `aube-lock.yaml` and the operator runs `forkctl --format json derive`
 - **THEN** the command fails, `error.code` is `derived_rebuild_dirty`, the message names `aube-lock.yaml`, and `git status --porcelain` is empty
-
-### Requirement: Rebase never conflicts on an output
-
-`forkctl rebase` SHALL delete the derived patch before the replay, replay every other patch, and derive once in phase `deriving` before it regenerates bookkeeping.
-A failed build SHALL stop the rebase in phase `deriving`; `operation continue` SHALL derive again and finish the rebase.
-
-#### Scenario: Upstream changed the bundle
-
-- **WHEN** upstream changes `dist/out.txt` and `src/in.txt`, the stack holds a derived patch for `dist/**`, and the operator runs `forkctl rebase -o refs/heads/main`
-- **THEN** the command succeeds with no conflict, `dist/out.txt` at the new tip equals the rebuild of `src/in.txt` at the new tip, and `result.derived.rebuilt` is true
-
-#### Scenario: A failing build stops the rebase
-
-- **WHEN** a rebuild command exits 3 during `forkctl rebase`
-- **THEN** the command fails, `operation status` reports phase `deriving`, and the error names the command and its exit status 3
 
 ### Requirement: Check reads the derived state without building
 
@@ -111,12 +96,3 @@ It SHALL run no rebuild command, unless the operator passes `--rebuild`, which S
 
 - **WHEN** the active patch changes `src/in.txt`, the operator runs `forkctl patch refresh`, then `forkctl patch finish`
 - **THEN** the refresh runs no rebuild command, the finish succeeds, and `forkctl check` reports the derived patch fresh
-
-### Requirement: Rebase can verify upstream's outputs
-
-`forkctl rebase --verify-base` SHALL also build at the new base and report in the result and the rebase report whether upstream's committed outputs equal that build.
-
-#### Scenario: Upstream outputs that do not reproduce
-
-- **WHEN** upstream's committed `dist/out.txt` differs from the rebuild of upstream's `src/in.txt`, and the operator runs `forkctl rebase -o refs/heads/main --verify-base`
-- **THEN** the command succeeds and `result.derived.base_reproducible` is false

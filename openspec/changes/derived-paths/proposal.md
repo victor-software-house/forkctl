@@ -14,12 +14,10 @@ forkctl has no way to declare that, so the operator resolves a conflict in a fil
 A committed bundle can also go stale without any conflict.
 When a patch changes a source file, the bundle no longer matches the sources, and nothing in `forkctl check` notices.
 
-Prior art treats generated output as a function of its inputs, never as content to merge.
-[Debian][debian] regenerates build-system output at build time and keeps it out of its patches.
-[`jj fix`][jj-fix] and [git-branchless `git test fix`][branchless] run a deterministic tool on a commit's tree and promise no new conflicts, and git-branchless [keys its results by tree][tree-key] so they survive a rebase.
-[Bazel][bazel] keys an action by its declared inputs and command, and its [sandboxing page][sandbox] shows why an undeclared input makes an incremental result wrong.
+Prior art treats generated output as a function of its inputs, never as content to merge; [research.md][research] lists it.
 
 The change is additive to manifest schema 2 and protocol version 2.
+The rebase that drops the derived patch and derives after the replay is the [`derived-rebase`][derived-rebase] change, and both ship in one release.
 
 ## Changes
 
@@ -29,10 +27,8 @@ The change is additive to manifest schema 2 and protocol version 2.
   It holds exactly the outputs, nobody edits it, and no other patch may touch an output.
 - forkctl builds the outputs in a disposable clone of the stack below the derived patch, once per input state, and commits them as the derived patch.
   The commit records the input hash and the rebuild hash as trailers, and a result is cached by both, so a state built once is never built again.
-- `rebase` removes the derived patch before the replay and derives once after it, in a new phase `deriving`, so a rebase never conflicts on an output.
 - `forkctl derive` rebuilds on request, and `patch finish` derives before its final check.
 - A complete `check` compares the recorded hashes with the stack and reports `derived_stale` with no build; `check --rebuild` also rebuilds in a clone and reports `derived_unreproducible` when the result differs.
-- `rebase --verify-base` also rebuilds at the new base, and the report says whether upstream's committed outputs match its own sources.
 - `contract edit` takes `--derived-output`, `--derived-input`, `--derived-rebuild`, and `--clear-derived`.
 
 ## Capabilities
@@ -49,7 +45,7 @@ None.
 
 - [`src/manifest.rs`][manifest] and [`src/manifest_edit.rs`][manifest-edit]: the `derived` block and its validation.
 - A new `src/app/derive.rs`: input hashing, the clone build, the cache, and the derived patch.
-- [`src/app/rebase.rs`][rebase], [`src/app/operation.rs`][operation], and [`src/app/patch.rs`][patch]: the `deriving` phase and the derive in `patch finish`.
+- [`src/app/operation.rs`][operation] and [`src/app/patch.rs`][patch]: the `derive` operation and the derive in `patch finish`.
 - [`src/app/check.rs`][check]: the derived findings and `--rebuild`.
 - [`src/app/contract.rs`][contract], [`src/cli.rs`][cli], and [`src/protocol.rs`][protocol]: the `derive` command, the new flags, results, and finding codes.
 - The rule that the bookkeeping patch is on top becomes: on top, or directly below the derived patch.
@@ -57,15 +53,10 @@ None.
 - No consumer must act. A fork adopts the block when it declares `derived`; a fork that carries outputs in a hand patch moves them out first.
 
 [mise-action]: https://github.com/victor-software-house/mise-action
-[debian]: https://www.debian.org/doc/manuals/debmake-doc/ch10.en.html
-[jj-fix]: https://github.com/jj-vcs/jj/blob/9ff73e7f/cli/src/commands/fix.rs
-[branchless]: https://github.com/arxanas/git-branchless/discussions/803
-[tree-key]: https://docs.rs/git-branchless-lib/latest/branchless/git/fn.get_test_tree_dir.html
-[bazel]: https://bazel.build/remote/caching
-[sandbox]: https://bazel.build/docs/sandboxing
+[derived-rebase]: ../derived-rebase/proposal.md
+[research]: research.md
 [manifest]: ../../../src/manifest.rs
 [manifest-edit]: ../../../src/manifest_edit.rs
-[rebase]: ../../../src/app/rebase.rs
 [operation]: ../../../src/app/operation.rs
 [patch]: ../../../src/app/patch.rs
 [check]: ../../../src/app/check.rs

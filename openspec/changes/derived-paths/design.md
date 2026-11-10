@@ -89,21 +89,7 @@ The rebuild hash is SHA-256 over the `rebuild` commands, each followed by a newl
 Alternative considered: hash the whole tree.
 It lost because every manifest or ledger rewrite, such as a patch edit that changes only a purpose, would then rebuild the bundle.
 
-### 5. Rebase never conflicts on an output
-
-`rebase` deletes the derived patch from the series before the replay; the recovery tag already preserves it with the old tip.
-It replays every other patch as today, so no patch it replays touches an output.
-After the last push it enters phase `deriving`, derives once, then regenerates bookkeeping and writes the report.
-
-A failing build stops the rebase in phase `deriving` with the finding.
-`operation continue` derives again, for a cause outside the manifest such as the network; `operation abort` restores the old stack from the recovery tag.
-A change to `rebuild` needs `operation abort`, `contract edit`, and a new rebase, because an operation in flight reads the manifest snapshot taken at its start.
-
-The report names the input hash, the rebuild hash, and whether the result came from the cache.
-`rebase --verify-base` also builds at the new base and reports whether upstream's committed outputs equal that build.
-A difference there means upstream's outputs do not reproduce from its own sources, so the derived patch will carry that noise.
-
-### 6. States and the everyday flow
+### 5. States and the everyday flow
 
 The derived state is read from the stack with no build.
 
@@ -122,18 +108,18 @@ The derived state is read from the stack with no build.
 Alternative considered: derive on every refresh.
 It lost because one build of the mise-action bundle installs every dependency and runs rollup, which the editing loop would pay on every refresh.
 
-### 7. Automatic behaviour
+### 6. Automatic behaviour
 
-The build runs only when the operator starts `rebase`, `patch finish`, or `derive`, and only when `derived` is declared.
-`rebase -n` and `derive -n` list the rebuild commands before anything runs.
+The build runs only when the operator starts `patch finish` or `derive`, and only when `derived` is declared; the [`derived-rebase`][derived-rebase] change adds `rebase`.
+`derive -n` lists the rebuild commands before anything runs.
 The override is the declaration: `contract edit --derived-rebuild` replaces the commands, and `--derived-input` and `--derived-output` replace the globs.
 The disable path is `contract edit --clear-derived`, followed by `patch remove derived` when the stack still holds the patch.
 
-### 8. Protocol and manifest
+### 7. Protocol and manifest
 
 The `derived` block is optional and skipped when absent, so every existing schema 2 manifest reads unchanged, and the schema number stays 2.
 An older forkctl rejects a manifest that declares `derived`, as `deny_unknown_fields` requires, and the changeset names the first release that reads it.
-The protocol stays at version 2: the `derive` request and result, the `deriving` phase, the rebase result's `derived` field, and the finding codes are additions.
+The protocol stays at version 2: the `derive` request and result and the finding codes are additions.
 
 ## Non-goals
 
@@ -142,4 +128,5 @@ The protocol stays at version 2: the `derive` request and result, the `deriving`
 3. Detecting undeclared inputs. The default counts every tracked file, and `check --rebuild` finds a build that reads something outside the tree.
 
 [npm]: https://github.com/npm/npm-merge-driver/
+[derived-rebase]: ../derived-rebase/design.md
 [sandbox]: https://bazel.build/docs/sandboxing
