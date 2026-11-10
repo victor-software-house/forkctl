@@ -24,10 +24,19 @@ env:
   MISE_ENV: ci
   TAG: ${{ inputs.tag }}
 
+# One run per ref at a time. A newer run waits instead of cancelling one in
+# progress, as Release macOS does. Inside a call from Release,
+# github.workflow names the caller, so the group uses this file's own name.
+concurrency:
+  group: mounted-task-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   run:
     name: Mounted fork task (ubuntu-latest)
     runs-on: ubuntu-latest
+    # It installs the released binary and StGit, then runs one fork task.
+    timeout-minutes: 15
     steps:
       - name: Check out the release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
