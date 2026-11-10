@@ -27,6 +27,8 @@ jobs:
   verify:
     name: Verify (macos-latest)
     runs-on: macos-latest
+    # A run takes 9 to 17 minutes.
+    timeout-minutes: 40
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
