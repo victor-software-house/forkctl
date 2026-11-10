@@ -107,7 +107,7 @@ debug = "line-tables-only"
 
 [dependencies]
 anyhow = "=1.0.104"
-askama = { version = "=0.16.0", default-features = false, features = [
+askama = { version = "=0.16.1", default-features = false, features = [
   "config",
   "derive",
   "std",
@@ -137,7 +137,7 @@ serde_json = "=1.0.151"
 semver = "=1.0.28"
 shell-words = "=1.1.1"
 tempfile = "=3.27.0"
-usage-lib = { version = "=6.1.1", default-features = false, features = [
+usage-lib = { version = "=7.3.0", default-features = false, features = [
   "clap",
 ] }
 # serde-saphyr 2.1.1 with two patches, under its own library name, the
