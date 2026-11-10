@@ -5,9 +5,10 @@ min_version = "2026.10.25"
 # mise loads git:: task includes only in experimental mode.
 experimental = true
 lockfile = true
-# The platforms CI and contributors use. Without it, mise install fills every
-# tool up to the platforms any tool already records, and rewrites the locks.
-lockfile_platforms = ["linux-x64", "macos-arm64"]
+# The platforms CI and contributors use, from the platforms answer. Without
+# it, mise install fills every tool up to the platforms any tool already
+# records, and rewrites the locks.
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64"]
 
 # Every tool this root declares must match mise.lock or mise.<env>.lock.
 [tool_config]
