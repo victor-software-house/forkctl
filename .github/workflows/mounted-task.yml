@@ -46,7 +46,7 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
-          version: 2026.10.25
+          version: 2026.11.6
           install: false
       # A consumer with only the documented mise.toml, whose fork task is pinned to this
       # tag, installs the released binary and StGit and runs forkctl.
