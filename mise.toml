@@ -35,7 +35,7 @@ jq = "1.8.2"
 "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
 # test runs on nextest, and test:isolated runs it one test at a time.
 "github:nextest-rs/nextest" = "cargo-nextest-0.9.143"
-usage = "6.11.1"
+usage = "7.3.0"
 gh = "2.95.0"
 "github:victor-software-house/verctl" = "0.7.2"
 # Test-only: the declared-check lifecycle test exercises a real ast-grep command. Consumers
