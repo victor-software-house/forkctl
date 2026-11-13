@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::ErrorKind;
 use std::path::PathBuf;
 
 use serde_json::Value;
@@ -149,7 +150,7 @@ impl App {
         let path = self.active_path()?;
         let bytes = match fs::read(&path) {
             Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
             Err(error) => {
                 return Err(AppError::internal(
                     error,

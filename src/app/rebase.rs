@@ -1,9 +1,10 @@
-use std::fs;
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::{fs, iter};
 
 use super::{App, write_atomic};
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
-use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent, ReplayPathChange};
+use crate::manifest::{BaseTarget, DroppedPatch, HistoryEvent, PatchLayer, ReplayPathChange};
 use crate::manifest_edit::ManifestEdit;
 use crate::process::{capture, run};
 use crate::protocol::{CommandResult, ExecutionMode, MutationPlan, RebaseResult};
@@ -213,7 +214,7 @@ impl App {
             let new_paths = self
                 .patch_paths(&self.patch_commit(&patch.name)?)?
                 .into_iter()
-                .collect::<std::collections::HashSet<_>>();
+                .collect::<HashSet<_>>();
             let lost_paths = old_paths
                 .into_iter()
                 .filter(|path| !new_paths.contains(path))
@@ -264,7 +265,7 @@ impl App {
         if dropped.is_empty() {
             return Ok(DroppedPatches::default());
         }
-        let command = std::iter::once("delete".to_string())
+        let command = iter::once("delete".to_string())
             .chain(dropped.iter().map(|item| item.patch.name.clone()))
             .collect::<Vec<_>>();
         run(&self.repo, "stg", command)?;
@@ -279,7 +280,7 @@ impl App {
         )?;
         let mut removed_exports = Vec::new();
         for item in &dropped {
-            if item.patch.layer == crate::manifest::PatchLayer::Source {
+            if item.patch.layer == PatchLayer::Source {
                 let exports = self.repo.join(&self.manifest()?.documents.exports);
                 for entry in
                     fs::read_dir(&exports).internal(format!("read {}", exports.display()))?

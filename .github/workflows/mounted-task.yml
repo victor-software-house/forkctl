@@ -33,8 +33,8 @@ concurrency:
 
 jobs:
   run:
-    name: Mounted fork task (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Mounted fork task (ubuntu-26.04)
+    runs-on: ubuntu-26.04
     # It installs the released binary and StGit, then runs one fork task.
     timeout-minutes: 15
     steps:

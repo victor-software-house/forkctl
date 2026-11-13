@@ -46,7 +46,7 @@ jobs:
     name: Find the release tag
     needs: release
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # One git command; it takes seconds.
     timeout-minutes: 5
     permissions:

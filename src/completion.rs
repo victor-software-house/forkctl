@@ -1,11 +1,14 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use clap::ValueEnum;
 use clap_complete::CompletionCandidate;
 use clap_complete::engine::ArgValueCompleter;
 
+use crate::manifest_codec::ManifestFormat;
 use crate::process::{capture, command};
+use crate::state::ActivePatchState;
 
 pub(crate) fn patch_completer() -> ArgValueCompleter {
     ArgValueCompleter::new(patch_candidates)
@@ -48,10 +51,10 @@ fn patch_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
     let Some((repo, manifest_path)) = repository_and_manifest() else {
         return Vec::new();
     };
-    let Ok(bytes) = std::fs::read(&manifest_path) else {
+    let Ok(bytes) = fs::read(&manifest_path) else {
         return Vec::new();
     };
-    let Ok(format) = crate::manifest_codec::ManifestFormat::from_path(&manifest_path) else {
+    let Ok(format) = ManifestFormat::from_path(&manifest_path) else {
         return Vec::new();
     };
     let Ok(manifest) = format.parse(&bytes, &manifest_path) else {
@@ -65,8 +68,8 @@ fn patch_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
             .map(|record| record.patch.name.clone()),
     );
     let active = git_private(&repo, "forkctl/active.json")
-        .and_then(|path| std::fs::read(path).ok())
-        .and_then(|bytes| serde_json::from_slice::<crate::state::ActivePatchState>(&bytes).ok())
+        .and_then(|path| fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice::<ActivePatchState>(&bytes).ok())
         .map(|active| active.name().to_string());
     if let Some(active) = active
         && !values.contains(&active)
@@ -78,7 +81,7 @@ fn patch_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
 
 fn ref_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
     let prefix = current.to_string_lossy();
-    let Ok(cwd) = std::env::current_dir() else {
+    let Ok(cwd) = env::current_dir() else {
         return Vec::new();
     };
     let Ok(output) = capture(
@@ -98,7 +101,7 @@ fn ref_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
 
 fn remote_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
     let prefix = current.to_string_lossy();
-    let Ok(cwd) = std::env::current_dir() else {
+    let Ok(cwd) = env::current_dir() else {
         return Vec::new();
     };
     let Ok(output) = capture(&cwd, "git", ["remote"]) else {
@@ -116,9 +119,9 @@ fn candidates(values: impl IntoIterator<Item = String>, prefix: &str) -> Vec<Com
 }
 
 fn repository_and_manifest() -> Option<(PathBuf, PathBuf)> {
-    let cwd = std::env::current_dir().ok()?;
+    let cwd = env::current_dir().ok()?;
     let repo = PathBuf::from(capture(&cwd, "git", ["rev-parse", "--show-toplevel"]).ok()?);
-    let manifest = std::env::var_os("FORKCTL_MANIFEST")
+    let manifest = env::var_os("FORKCTL_MANIFEST")
         .filter(|value| !value.is_empty())
         .map_or_else(|| PathBuf::from("patches/fork.yaml"), PathBuf::from);
     let manifest = if manifest.is_absolute() {

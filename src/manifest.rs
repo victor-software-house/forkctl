@@ -4,6 +4,7 @@
 )]
 
 use std::collections::HashSet;
+use std::fmt;
 use std::path::{Component, Path};
 
 use anyhow::{Context, Result, ensure};
@@ -84,8 +85,8 @@ fn skip_rewrite_mode(mode: &PublishMode) -> bool {
     mode.is_rewrite()
 }
 
-impl std::fmt::Display for PublishMode {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for PublishMode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Rewrite => "rewrite",
             Self::Append => "append",

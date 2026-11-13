@@ -6,8 +6,8 @@ use serde::{Serialize, Serializer};
 use crate::protocol::{
     ApiError, ApiErrorCode, ApiResponse, CheckResult, CommandResult, ContractEditResult,
     ExecutionMode, MutationPlan, OperationStatusResult, PatchListResult, PatchRefreshResult,
-    PatchSelectResult, PatchShowResult, PatchTransitionResult, RebaseResult, StatusResult,
-    UpgradeResult,
+    PatchSelectResult, PatchShowResult, PatchSummary, PatchTransitionResult, PublishResult,
+    RebaseResult, StatusResult, UpgradeResult,
 };
 
 pub(crate) enum Report {
@@ -274,7 +274,7 @@ fn plan_fields(result: &MutationPlan) -> Fields {
         )
 }
 
-fn append_publish(document: Document, result: &crate::protocol::PublishResult) -> Document {
+fn append_publish(document: Document, result: &PublishResult) -> Document {
     document.fields(
         Fields::new()
             .row("branch", result.branch.clone())
@@ -413,7 +413,7 @@ fn append_patch_list(document: Document, result: &PatchListResult) -> Document {
     append_patch_rows(document, &result.patches)
 }
 
-fn append_patch_rows(document: Document, patches: &[crate::protocol::PatchSummary]) -> Document {
+fn append_patch_rows(document: Document, patches: &[PatchSummary]) -> Document {
     if patches.is_empty() {
         return document.paragraph(Text::new().muted("no patches"));
     }

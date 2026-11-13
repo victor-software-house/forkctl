@@ -201,7 +201,7 @@ impl App {
                 DomainError::patch_not_found(
                     &name,
                     self.manifest()
-                        .map_or_else(|_| Vec::new(), crate::manifest::Manifest::patch_names),
+                        .map_or_else(|_| Vec::new(), Manifest::patch_names),
                     self.read_active()
                         .ok()
                         .flatten()
@@ -275,7 +275,7 @@ impl App {
             ensure_check!(
                 scope
                     .iter()
-                    .any(|pattern| crate::manifest::scope_matches(pattern, path)),
+                    .any(|pattern| manifest::scope_matches(pattern, path)),
                 "{label} is outside scope: {path}"
             );
         }
@@ -307,10 +307,7 @@ impl App {
         self.validate_required_text(&self.manifest()?.contracts.required_text)
     }
 
-    pub(super) fn validate_required_text(
-        &self,
-        required_text: &[crate::manifest::RequiredText],
-    ) -> Result<()> {
+    pub(super) fn validate_required_text(&self, required_text: &[RequiredText]) -> Result<()> {
         for required in required_text {
             let path = self.repo.join(&required.path);
             let contents =
@@ -361,7 +358,7 @@ impl App {
             fs::read_dir(&exports)
                 .internal(format!("read {}", exports.display()))?
                 .map(|entry| entry.map(|entry| entry.path()))
-                .collect::<std::io::Result<Vec<_>>>()
+                .collect::<io::Result<Vec<_>>>()
                 .internal(format!("read entries in {}", exports.display()))?
                 .into_iter()
                 .filter(|path| {
@@ -372,7 +369,7 @@ impl App {
                     path.strip_prefix(&self.repo)
                         .map(|path| path.to_string_lossy().into_owned())
                 })
-                .collect::<std::result::Result<Vec<_>, _>>()
+                .collect::<result::Result<Vec<_>, _>>()
                 .internal(format!("make exports relative to {}", self.repo.display()))?
         } else {
             Vec::new()
@@ -446,7 +443,7 @@ impl App {
         Ok(())
     }
 
-    fn check_recovery(&self, recovery: &crate::manifest::RecoveryEvidence) -> Result<()> {
+    fn check_recovery(&self, recovery: &RecoveryEvidence) -> Result<()> {
         run(
             &self.repo,
             "git",
@@ -490,7 +487,7 @@ impl App {
         Ok(())
     }
 
-    fn check_historical_patch(&self, patch: &crate::manifest::Patch, commit: &str) -> Result<()> {
+    fn check_historical_patch(&self, patch: &Patch, commit: &str) -> Result<()> {
         let paths = self.patch_paths(commit)?;
         ensure_check!(
             !paths.is_empty(),
@@ -501,7 +498,7 @@ impl App {
         self.check_patch_commit(patch, commit)
     }
 
-    pub(super) fn check_operation(&self, operation: &crate::state::OperationState) -> Result<()> {
+    pub(super) fn check_operation(&self, operation: &OperationState) -> Result<()> {
         let local_object = capture(
             &self.repo,
             "git",
@@ -554,7 +551,7 @@ impl App {
         }
         if let Some(report) = &operation.report {
             ensure_check!(
-                self.file_object_id(std::path::Path::new(&report.path))? == report.object_id,
+                self.file_object_id(Path::new(&report.path))? == report.object_id,
                 "operation report differs"
             );
         }
@@ -563,3 +560,9 @@ impl App {
 }
 
 use std::collections::HashSet;
+use std::path::Path;
+use std::{io, result};
+
+use crate::manifest;
+use crate::manifest::{Manifest, RecoveryEvidence, RequiredText};
+use crate::state::OperationState;

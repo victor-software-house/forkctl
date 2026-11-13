@@ -1,9 +1,5 @@
 //! The mounted mise task: proxied output, exit codes, cwd, and completion.
 #![cfg(unix)]
-#![expect(
-    clippy::unwrap_used,
-    reason = "test setup helpers fail the test on the first unexpected error"
-)]
 
 mod support;
 

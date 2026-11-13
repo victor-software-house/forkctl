@@ -14,7 +14,7 @@
 )]
 
 use std::path::{Path, PathBuf};
-use std::{env, fs};
+use std::{env, fs, process};
 
 const MIN_MISE_MARKER: &str = "min_version = \"";
 const RUST_TOOL_MARKER: &str = "rust = { version = \"";
@@ -43,7 +43,7 @@ struct ToolVersions {
 fn main() {
     if let Err(error) = run() {
         eprintln!("version-sync: {error}");
-        std::process::exit(1);
+        process::exit(1);
     }
 }
 

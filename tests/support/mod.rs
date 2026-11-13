@@ -1,14 +1,8 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    reason = "test setup helpers fail the test on the first unexpected error"
-)]
-
 use std::ffi::OsStr;
-use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::{env, fs};
 
 const SANDBOX_DIR: &str = ".forkctl-test-env";
 const FIXED_GIT_DATE: &str = "2001-02-03T04:05:06Z";
@@ -194,9 +188,9 @@ pub(crate) fn isolated_command(dir: &Path, program: impl AsRef<OsStr>) -> Comman
 
 fn sandboxed_command(dir: &Path, program: impl AsRef<OsStr>, clear_git_context: bool) -> Command {
     let sandbox = sandbox_path(dir);
-    let mise_data_dir = std::env::var_os("MISE_DATA_DIR").map_or_else(
+    let mise_data_dir = env::var_os("MISE_DATA_DIR").map_or_else(
         || {
-            PathBuf::from(std::env::var_os("HOME").expect("test runner HOME is required"))
+            PathBuf::from(env::var_os("HOME").expect("test runner HOME is required"))
                 .join(".local/share/mise")
         },
         PathBuf::from,
@@ -204,7 +198,7 @@ fn sandboxed_command(dir: &Path, program: impl AsRef<OsStr>, clear_git_context: 
     let mut command = Command::new(program);
     clear_forkctl_env(&mut command);
     if clear_git_context {
-        for (key, _) in std::env::vars_os() {
+        for (key, _) in env::vars_os() {
             if key.to_string_lossy().starts_with("GIT_") {
                 command.env_remove(key);
             }
@@ -273,7 +267,7 @@ pub(crate) fn git_ok<const N: usize>(dir: &Path, args: [&str; N]) {
 /// Every long option reads `FORKCTL_<LONG>`, so a caller's variable would
 /// change what a test runs. A test sets the ones it needs back on top.
 pub(crate) fn clear_forkctl_env(command: &mut Command) {
-    for (key, _) in std::env::vars_os() {
+    for (key, _) in env::vars_os() {
         if key.to_string_lossy().starts_with("FORKCTL_") {
             command.env_remove(key);
         }

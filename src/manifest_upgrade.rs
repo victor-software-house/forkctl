@@ -6,6 +6,7 @@
 //! schema 1. Both go, with this module, in the change that ends support for
 //! upgrading from forkctl 0.0.48.
 
+use std::cmp::Reverse;
 use std::path::Path;
 
 use ctl_core::input::Input;
@@ -168,7 +169,7 @@ fn upgrade_yaml(text: &str, path: &Path, renames: &[Rename]) -> Result<String> {
             splices.push((location.start, location.end, rename.to.to_string()));
         }
     }
-    splices.sort_by_key(|splice| std::cmp::Reverse(splice.0));
+    splices.sort_by_key(|splice| Reverse(splice.0));
     splices.dedup_by_key(|splice| splice.0);
     let mut upgraded = text.to_string();
     for (start, end, replacement) in splices {

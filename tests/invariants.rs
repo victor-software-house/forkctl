@@ -1,8 +1,4 @@
 //! Product invariants that hold across commands.
-#![expect(
-    clippy::unwrap_used,
-    reason = "test setup helpers fail the test on the first unexpected error"
-)]
 
 mod support;
 

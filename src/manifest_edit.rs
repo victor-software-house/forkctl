@@ -3,6 +3,7 @@
 //! every byte the command did not change.
 
 use std::path::Path;
+use std::result;
 
 use serde::Serialize;
 use yamled::{Document, Path as YamlPath, Position};
@@ -121,7 +122,7 @@ fn apply_yaml(
     document: &mut Document,
     before: &Manifest,
     edit: &ManifestEdit,
-) -> std::result::Result<(), yamled::Error> {
+) -> result::Result<(), yamled::Error> {
     let root = YamlPath::root();
     match edit {
         ManifestEdit::SetContracts(contracts) => set_key(document, &root, "contracts", contracts),
@@ -180,7 +181,7 @@ fn set_key<T: Serialize>(
     root: &YamlPath,
     key: &str,
     value: &T,
-) -> std::result::Result<(), yamled::Error> {
+) -> result::Result<(), yamled::Error> {
     let path = root.clone().key(key);
     if document.node(&path).is_some() {
         document.replace(&path, value)
@@ -195,7 +196,7 @@ fn push_item<T: Serialize>(
     root: &YamlPath,
     key: &str,
     value: &T,
-) -> std::result::Result<(), yamled::Error> {
+) -> result::Result<(), yamled::Error> {
     let path = root.clone().key(key);
     if document.node(&path).is_some() {
         document.push(&path, value)
@@ -210,7 +211,7 @@ fn remove_item(
     sequence: &YamlPath,
     index: usize,
     len: usize,
-) -> std::result::Result<(), yamled::Error> {
+) -> result::Result<(), yamled::Error> {
     if len == 1 {
         document.replace(sequence, &Vec::<()>::new())
     } else {
@@ -222,7 +223,7 @@ fn patch_index(
     manifest: &Manifest,
     name: &str,
     root: &YamlPath,
-) -> std::result::Result<usize, yamled::Error> {
+) -> result::Result<usize, yamled::Error> {
     manifest
         .patches
         .iter()

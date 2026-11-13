@@ -3,11 +3,15 @@
     reason = "schemars' JsonSchema derive expands concat!"
 )]
 
+use std::fmt;
+
 use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::manifest::{BaseTarget, Check, Contracts, Manifest, Patch, PatchLayer, RequiredText};
+use crate::manifest::{
+    BaseTarget, Check, Contracts, Manifest, Patch, PatchLayer, PublishMode, RequiredText,
+};
 use crate::state::{ActivePatchState, OperationState};
 
 pub(crate) const PROTOCOL_VERSION: u32 = 2;
@@ -148,7 +152,7 @@ pub(crate) struct InitArgs {
     #[serde(default)]
     pub required_text: Vec<RequiredText>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub publish: Option<crate::manifest::PublishMode>,
+    pub publish: Option<PublishMode>,
 }
 
 impl InitArgs {
@@ -300,7 +304,7 @@ pub(crate) struct ContractEditArgs {
     #[serde(default)]
     pub required_text: Vec<RequiredText>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub publish_mode: Option<crate::manifest::PublishMode>,
+    pub publish_mode: Option<PublishMode>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Serialize)]
@@ -320,10 +324,10 @@ pub(crate) struct OperationAbortArgs {
 pub(crate) struct PublishArgs {
     /// Override the repository default for this invocation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<crate::manifest::PublishMode>,
+    pub mode: Option<PublishMode>,
     /// Persist a new repository default without publishing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub set_default: Option<crate::manifest::PublishMode>,
+    pub set_default: Option<PublishMode>,
     /// Promote an exact proposal instead of publishing HEAD.
     #[serde(default)]
     pub promote: bool,
@@ -451,8 +455,8 @@ pub(crate) enum ApiErrorCode {
     InternalError,
 }
 
-impl std::fmt::Display for ApiErrorCode {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ApiErrorCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidRequest => "invalid_request",
             Self::UnsupportedProtocol => "unsupported_protocol",
@@ -555,7 +559,7 @@ pub(crate) struct StatusResult {
     pub manifest: String,
     pub current_branch: Option<String>,
     pub declared_branch: String,
-    pub publish_mode: crate::manifest::PublishMode,
+    pub publish_mode: PublishMode,
     pub downstream_remote: String,
     pub downstream_sha: Option<String>,
     pub upstream_remote: String,
@@ -698,7 +702,7 @@ pub(crate) struct PublishResult {
     pub head: String,
     pub already_published: bool,
     pub fast_forward: bool,
-    pub mode: crate::manifest::PublishMode,
+    pub mode: PublishMode,
     pub recovery_tags: Vec<String>,
     pub pushed_refs: Vec<String>,
     pub expected_lease: String,
