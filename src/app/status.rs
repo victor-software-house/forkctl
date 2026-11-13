@@ -1,5 +1,6 @@
 use super::App;
 use crate::error::AppResult as Result;
+use crate::process;
 use crate::protocol::{CheckSummary, PatchSummary, StatusResult};
 
 impl App {
@@ -73,14 +74,12 @@ impl App {
 }
 
 fn series(app: &App, state: &str) -> Vec<String> {
-    crate::process::capture(&app.repo, "stg", ["series", state, "--no-prefix"])
-        .map(|value| {
-            value
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
+    process::capture(&app.repo, "stg", ["series", state, "--no-prefix"]).map_or_default(|value| {
+        value
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
 }

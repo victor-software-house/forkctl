@@ -9,22 +9,28 @@ mod rebase;
 mod status;
 mod upgrade;
 
+use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{env, fs};
+use std::{env, fs, iter};
 
+use ctl_core::input;
+use serde::de::DeserializeOwned;
 use tempfile::NamedTempFile;
 
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
-use crate::ledger;
-use crate::manifest::{BaseTarget, Manifest, Patch, RecoveryEvidence, TargetType, Upstream};
+use crate::manifest::{
+    BaseTarget, Manifest, Patch, RecoveryEvidence, SCHEMA, TargetType, Upstream,
+};
 use crate::manifest_codec::ManifestFormat;
 use crate::manifest_edit::{ManifestEdit, edit_yaml};
+use crate::manifest_upgrade::EARLIER_SCHEMA;
 use crate::process::{capture, output, output_with_config, run, succeeds};
 use crate::protocol::CheckResult;
 use crate::state::{ActivePatchState, JournalCommand, OperationState, PatchCommitEvidence};
+use crate::{ledger, manifest, manifest_upgrade};
 
 const EXPORT_TEMPLATE: &str = include_str!("patchexport.tmpl");
 const APPEND_BRIDGE_MESSAGE_PREFIX: &str = "forkctl: keep published history ";
@@ -56,7 +62,7 @@ impl App {
         // A malformed .ctl/input.yaml blocks a YAML manifest like an unreadable
         // one, so operation status, continue, and abort still run from
         // the snapshot.
-        let (input_warnings, input_error) = match ctl_core::input::use_repo_limits(&repo) {
+        let (input_warnings, input_error) = match input::use_repo_limits(&repo) {
             Ok(loosened) => (loosened.iter().map(ToString::to_string).collect(), None),
             Err(error) => (Vec::new(), Some(error.to_string())),
         };
@@ -88,7 +94,7 @@ impl App {
                     }
                 }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, None, None),
+            Err(error) if error.kind() == ErrorKind::NotFound => (None, None, None),
             Err(error) => {
                 return Err(AppError::internal(
                     error,
@@ -419,10 +425,7 @@ impl App {
             write_atomic(&path, &self.export_patch(export.patch)?)?;
             expected.push(path);
         }
-        let expected_set = expected
-            .iter()
-            .cloned()
-            .collect::<std::collections::HashSet<_>>();
+        let expected_set = expected.iter().cloned().collect::<HashSet<_>>();
         for entry in
             fs::read_dir(&exports_dir).internal(format!("read {}", exports_dir.display()))?
         {
@@ -559,8 +562,8 @@ impl App {
         self.write_manifest()?;
         let exports = self.write_exports()?;
         let ledger = self.write_ledger()?;
-        Ok(std::iter::once(self.manifest_path.clone())
-            .chain(std::iter::once(ledger))
+        Ok(iter::once(self.manifest_path.clone())
+            .chain(iter::once(ledger))
             .chain(exports)
             .collect())
     }
@@ -765,7 +768,7 @@ impl App {
         let source = self.operation_manifest_source_path()?;
         self.manifest_text = match fs::read_to_string(&source) {
             Ok(text) => Some(text),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) if error.kind() == ErrorKind::NotFound => None,
             Err(error) => {
                 return Err(AppError::internal(
                     error,
@@ -902,7 +905,7 @@ impl App {
         }
         self.snapshot_workspace_bootstrap()?;
         Ok(OperationState {
-            schema: crate::manifest::SCHEMA,
+            schema: SCHEMA,
             id,
             command,
             phase: "prepared".into(),
@@ -1021,7 +1024,7 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
     if selector.trim().is_empty() {
         return Err(DomainError::invalid_request("target is required").into());
     }
-    let target_type = if crate::manifest::is_full_sha(selector) {
+    let target_type = if manifest::is_full_sha(selector) {
         TargetType::Commit
     } else if selector.starts_with("refs/heads/") {
         TargetType::Branch
@@ -1063,8 +1066,8 @@ pub(super) fn resolve_target(repo: &Path, remote: &str, selector: &str) -> Resul
 /// Name `forkctl upgrade` when an unreadable manifest is schema 1. Goes with
 /// `crate::manifest_upgrade`.
 fn earlier_schema_hint(format: ManifestFormat, text: &str, path: &Path) -> Option<String> {
-    let schema = crate::manifest_upgrade::declared_schema(format, text, path).ok()?;
-    (schema == u64::from(crate::manifest_upgrade::EARLIER_SCHEMA)).then(|| {
+    let schema = manifest_upgrade::declared_schema(format, text, path).ok()?;
+    (schema == u64::from(EARLIER_SCHEMA)).then(|| {
         format!(
             "{} is manifest schema {schema}, which an earlier forkctl wrote; run mise run fork upgrade",
             path.display()
@@ -1099,12 +1102,12 @@ fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> Result<()> {
     write_atomic(path, &bytes)
 }
 
-fn read_optional_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>> {
+fn read_optional_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(
             serde_json::from_slice(&bytes).internal(format!("parse {}", path.display()))?,
         )),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
         Err(error) => Err(AppError::internal(
             error,
             format!("read {}", path.display()),
@@ -1115,7 +1118,7 @@ fn read_optional_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Opt
 fn remove_optional(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
         Err(error) => Err(AppError::internal(
             error,
             format!("remove {}", path.display()),

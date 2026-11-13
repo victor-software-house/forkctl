@@ -627,8 +627,7 @@ impl App {
         Ok(CommandResult::Publish(PublishResult {
             branch: self
                 .manifest()
-                .map(|manifest| manifest.downstream.branch.clone())
-                .unwrap_or_default(),
+                .map_or_default(|manifest| manifest.downstream.branch.clone()),
             head: publication.head.clone(),
             already_published: true,
             fast_forward: true,

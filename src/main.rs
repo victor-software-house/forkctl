@@ -29,11 +29,11 @@ mod report;
 mod state;
 mod update;
 
-use std::env;
 use std::ffi::OsString;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::{env, io};
 
 use anyhow::{Context, Result};
 use app::App;
@@ -46,6 +46,8 @@ use protocol::{
     ApiError, ApiErrorCode, ApiInvocation, ApiRequest, ApiResponse, CommandResult, ErrorDetails,
     ExecutionMode, InstructionsResult, Outcome, PROTOCOL_VERSION,
 };
+use usage::complete;
+use usage::complete::CompleteOptions;
 
 const DEFAULT_MANIFEST: &str = "patches/fork.yaml";
 const INSTRUCTIONS: &str = include_str!("instructions.md");
@@ -277,7 +279,7 @@ fn completion_text(shell: CompletionShell) -> Result<String> {
             Fish.write_registration("COMPLETE", "forkctl", "forkctl", "forkctl", &mut output)?;
         }
         CompletionShell::Nu => {
-            return usage::complete::complete(&usage::complete::CompleteOptions {
+            return complete::complete(&CompleteOptions {
                 usage_bin: "usage".to_string(),
                 shell: "nu".to_string(),
                 bin: "forkctl".to_string(),
@@ -306,7 +308,7 @@ fn completion_text(shell: CompletionShell) -> Result<String> {
 
 fn read_invocation() -> Result<ApiInvocation> {
     let mut input = String::new();
-    std::io::stdin()
+    io::stdin()
         .read_to_string(&mut input)
         .context("read API invocation from stdin")?;
     serde_json::from_str(&input).context("parse API invocation")

@@ -1,12 +1,14 @@
 use std::collections::HashSet;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::slice;
 
 use super::App;
 use crate::error::{AppResult as Result, DomainError, InternalResultExt as _};
-use crate::manifest::{DisabledPatch, HistoryEvent, Patch};
+use crate::manifest::{DisabledPatch, HistoryEvent, Manifest, Patch, PatchLayer};
 use crate::manifest_edit::ManifestEdit;
+use crate::process;
 use crate::process::{capture, run};
 use crate::protocol::{
     CaptureSource, CheckEdit, CommandResult, ExecutionMode, MutationPlan, PatchCreateArgs,
@@ -344,7 +346,7 @@ impl App {
             )
             .into());
         }
-        if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
+        if !process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
             if operation.phase == "conflict" {
                 // A conflict stopped StGit at the top patch it was pushing.
                 self.continue_stg(operation, &["refresh", "--index"])?;
@@ -413,8 +415,8 @@ impl App {
     fn proposed_manifest_with_patch(
         &self,
         patch: Patch,
-        old_layer: crate::manifest::PatchLayer,
-    ) -> Result<(crate::manifest::Manifest, Vec<ManifestEdit>)> {
+        old_layer: PatchLayer,
+    ) -> Result<(Manifest, Vec<ManifestEdit>)> {
         let manifest = self.manifest()?;
         manifest.patch(&patch.name).ok_or_else(|| {
             DomainError::patch_not_found(
@@ -436,7 +438,7 @@ impl App {
                 name: patch.name.clone(),
             };
             let index = manifest
-                .edited(std::slice::from_ref(&remove))
+                .edited(slice::from_ref(&remove))
                 .insertion_index(&patch);
             vec![remove, ManifestEdit::InsertPatch { index, patch }]
         };
@@ -447,7 +449,7 @@ impl App {
         Ok((proposed, edits))
     }
 
-    fn reorder_series(&self, manifest: &crate::manifest::Manifest) -> Result<()> {
+    fn reorder_series(&self, manifest: &Manifest) -> Result<()> {
         let mut series = tempfile::NamedTempFile::new_in(&self.repo)
             .internal(format!("create series file in {}", self.repo.display()))?;
         for patch in &manifest.patches {
@@ -458,8 +460,8 @@ impl App {
             &self.repo,
             "stg",
             [
-                std::ffi::OsStr::new("float"),
-                std::ffi::OsStr::new("--series"),
+                OsStr::new("float"),
+                OsStr::new("--series"),
                 series.path().as_os_str(),
             ],
         )
@@ -580,7 +582,7 @@ impl App {
             )
             .into());
         }
-        if !crate::process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
+        if !process::succeeds(&self.repo, "git", ["diff", "--cached", "--quiet"])? {
             if operation.phase == "conflict" && !normalized_append_bridge {
                 // A conflict stopped StGit at the top patch it was pushing,
                 // which owns the resolution.
@@ -1117,19 +1119,17 @@ impl App {
 }
 
 fn series(app: &App, state: &str) -> Vec<String> {
-    capture(&app.repo, "stg", ["series", state, "--no-prefix"])
-        .map(|value| {
-            value
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
+    capture(&app.repo, "stg", ["series", state, "--no-prefix"]).map_or_default(|value| {
+        value
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
 }
 
-fn display_paths(repo: &std::path::Path, paths: &[PathBuf]) -> Vec<String> {
+fn display_paths(repo: &Path, paths: &[PathBuf]) -> Vec<String> {
     paths
         .iter()
         .map(|path| {

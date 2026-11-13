@@ -1,13 +1,11 @@
 //! The command-line surface: arguments, output formats, and typed errors.
-#![expect(
-    clippy::unwrap_used,
-    reason = "test setup helpers fail the test on the first unexpected error"
-)]
 
 mod support;
 
+use std::fs;
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::path::Path;
+use std::process::{Command, Output, Stdio};
 
 use support::Fixture;
 
@@ -89,7 +87,7 @@ fn narrow_help_preserves_complete_tokens() {
     }
 }
 
-fn complete_in(directory: &std::path::Path, words: &[&str], index: usize) -> std::process::Output {
+fn complete_in(directory: &Path, words: &[&str], index: usize) -> Output {
     forkctl()
         .env("COMPLETE", "bash")
         .env("_CLAP_COMPLETE_INDEX", index.to_string())
@@ -121,8 +119,7 @@ fn instructions_work_outside_a_repository() {
     assert!(output.status.success());
     assert_eq!(output.stderr, b"");
     let expected =
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/instructions.md"))
-            .unwrap();
+        fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/instructions.md")).unwrap();
     assert_eq!(output.stdout, expected);
 }
 
@@ -248,10 +245,8 @@ fn usage_spec_bare_defaults_to_fork() {
 
 #[test]
 fn task_mount_directives_are_ctl_core() {
-    let task = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tasks/fork/fork"),
-    )
-    .unwrap();
+    let task =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("tasks/fork/fork")).unwrap();
     assert!(
         task.contains(&ctl_core::mount_directives("fork")),
         "task lacks ctl-core's mount directives:\n{task}"
@@ -413,7 +408,7 @@ fn api_domain_errors_are_typed_at_the_boundary() {
     assert_eq!(missing["error"]["details"]["type"], "patch");
     assert_eq!(missing["error"]["details"]["requested"], "missing-patch");
 
-    std::fs::write(fixture.repo.join("outside.txt"), "outside\n").unwrap();
+    fs::write(fixture.repo.join("outside.txt"), "outside\n").unwrap();
     support::git_ok(&fixture.repo, ["add", "outside.txt"]);
     let staged = fixture.api_call(
         "execute",

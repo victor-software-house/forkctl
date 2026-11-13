@@ -1,3 +1,5 @@
+use std::iter;
+
 use super::App;
 use crate::error::{AppResult as Result, DomainError};
 use crate::process::{capture, run};
@@ -5,7 +7,7 @@ use crate::protocol::{
     CommandResult, ExecutionMode, MutationPlan, OperationAbortResult, OperationContinueResult,
     OperationStatusResult,
 };
-use crate::state::{JournalCommand, OperationIntent};
+use crate::state::{JournalCommand, OperationIntent, OperationState};
 
 impl App {
     pub(crate) fn operation_status(&self) -> Result<OperationStatusResult> {
@@ -176,7 +178,7 @@ impl App {
 
     fn restore_operation_stack(
         &self,
-        operation: &crate::state::OperationState,
+        operation: &OperationState,
         restored_tip: &str,
     ) -> Result<()> {
         if !capture(
@@ -195,7 +197,7 @@ impl App {
         run(&self.repo, "git", ["reset", "--hard", restored_tip])?;
         // Name every patch, newest first: unnamed, StGit cuts names from
         // commit subjects to `stgit.namelength` characters.
-        let command = std::iter::once("uncommit".to_string())
+        let command = iter::once("uncommit".to_string())
             .chain(
                 operation
                     .old_patches
@@ -209,7 +211,7 @@ impl App {
 
     fn verify_restored_operation_stack(
         &self,
-        operation: &crate::state::OperationState,
+        operation: &OperationState,
         restored_tip: &str,
     ) -> Result<()> {
         let actual_tip = capture(&self.repo, "git", ["rev-parse", "HEAD"])?;

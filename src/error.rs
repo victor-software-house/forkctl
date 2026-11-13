@@ -2,11 +2,12 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::path::Path;
 use std::process::Output;
+use std::{error, fmt, result};
 
-use crate::protocol::{ApiError, ApiErrorCode, ErrorDetails};
+use crate::protocol::{ApiError, ApiErrorCode, CheckFinding, ErrorDetails};
 use crate::state::OperationState;
 
-pub(crate) type AppResult<T> = std::result::Result<T, AppError>;
+pub(crate) type AppResult<T> = result::Result<T, AppError>;
 
 #[derive(Debug)]
 pub(crate) enum AppError {
@@ -64,8 +65,8 @@ impl From<DomainError> for AppError {
     }
 }
 
-impl std::fmt::Display for AppError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for AppError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Domain { error, .. } => error.fmt(formatter),
             Self::Internal(error) => error.fmt(formatter),
@@ -73,7 +74,7 @@ impl std::fmt::Display for AppError {
     }
 }
 
-impl std::error::Error for AppError {}
+impl error::Error for AppError {}
 
 /// Explicitly marks an infrastructure failure as internal.
 ///
@@ -84,7 +85,7 @@ pub(crate) trait InternalResultExt<T> {
     fn internal(self, context: impl Display + Send + Sync + 'static) -> AppResult<T>;
 }
 
-impl<T, E> InternalResultExt<T> for std::result::Result<T, E>
+impl<T, E> InternalResultExt<T> for result::Result<T, E>
 where
     E: Into<anyhow::Error>,
 {
@@ -232,7 +233,7 @@ impl DomainError {
         Self::new(ApiErrorCode::CheckFailed, message, ErrorDetails::None)
     }
 
-    pub(crate) fn declared_checks_failed(findings: Vec<crate::protocol::CheckFinding>) -> Self {
+    pub(crate) fn declared_checks_failed(findings: Vec<CheckFinding>) -> Self {
         Self::new(
             ApiErrorCode::CheckFailed,
             format!("{} declared patch check(s) failed", findings.len()),
@@ -285,7 +286,7 @@ impl DomainError {
 
     pub(crate) fn publication_restoration_failed(
         publication: &Self,
-        restoration: impl std::fmt::Display,
+        restoration: impl fmt::Display,
     ) -> Self {
         let mut combined = publication.clone();
         combined.message = format!(
@@ -419,16 +420,18 @@ impl DomainError {
     }
 }
 
-impl std::fmt::Display for DomainError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for DomainError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.message)
     }
 }
 
-impl std::error::Error for DomainError {}
+impl error::Error for DomainError {}
 
 #[cfg(test)]
 mod tests {
+    use std::io::Error;
+
     use super::*;
 
     #[test]
@@ -462,7 +465,7 @@ mod tests {
 
     #[test]
     fn internal_error_preserves_contextual_causes() {
-        let error = AppError::internal(std::io::Error::other("disk failure"), "write state");
+        let error = AppError::internal(Error::other("disk failure"), "write state");
 
         let api = error.to_api_error();
         assert_eq!(api.code.to_string(), "internal_error");

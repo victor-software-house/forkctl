@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::str;
 
 use anyhow::Result;
 use ctl_core::input::Input;
@@ -28,7 +29,7 @@ impl ManifestFormat {
     pub(crate) fn parse(self, bytes: &[u8], path: &Path) -> AppResult<Manifest> {
         match self {
             Self::Yaml => {
-                let text = std::str::from_utf8(bytes).map_err(|error| {
+                let text = str::from_utf8(bytes).map_err(|error| {
                     DomainError::manifest_invalid(format!(
                         "YAML manifest {} is not UTF-8: {error}",
                         path.display()
@@ -72,6 +73,7 @@ impl ManifestFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manifest::SCHEMA;
 
     const EXAMPLE: &str = include_str!("../examples/fork.yaml");
 
@@ -100,7 +102,7 @@ mod tests {
     #[test]
     fn rejects_ambiguous_yaml_features() {
         let path = Path::new("fork.yaml");
-        let schema = format!("schema: {}\n", crate::manifest::SCHEMA);
+        let schema = format!("schema: {SCHEMA}\n");
         assert!(EXAMPLE.contains(&schema));
         let duplicate = EXAMPLE.replacen(&schema, &schema.repeat(2), 1);
         assert!(

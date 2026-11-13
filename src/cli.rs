@@ -1,10 +1,12 @@
 use std::path::PathBuf;
+use std::result;
 
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use ctl_core::{DryRunArgs, EnvPrefix, OutputArgs};
 
-use crate::manifest::{Check, CheckStage, PatchLayer, RequiredText};
+use crate::completion::CandidateType;
+use crate::manifest::{Check, CheckStage, PatchLayer, PublishMode, RequiredText};
 use crate::protocol::{
     ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ContractEditArgs, EmptyArgs,
     ExecutionMode, InitArgs, OperationAbortArgs, PatchCreateArgs, PatchEditArgs, PatchName,
@@ -77,7 +79,7 @@ pub(crate) enum Command {
     #[command(hide = true, name = "__candidates")]
     Candidates {
         #[arg(value_enum, value_name = "TYPE")]
-        candidate_type: crate::completion::CandidateType,
+        candidate_type: CandidateType,
     },
 }
 
@@ -100,7 +102,7 @@ pub(crate) struct InitCliArgs {
     pub downstream_branch: Option<String>,
     /// Default publish mode for this repository.
     #[arg(long, help_heading = "Repository", value_enum)]
-    pub publish: Option<crate::manifest::PublishMode>,
+    pub publish: Option<PublishMode>,
     /// Initial full branch/tag ref or commit SHA.
     #[arg(short = 'b', long, help_heading = "Repository", add = crate::completion::ref_completer())]
     pub base: Option<String>,
@@ -335,7 +337,7 @@ pub(crate) struct ContractEditCliArgs {
     pub required_text: Vec<RequiredText>,
     /// Set the repository default publish mode.
     #[arg(long, help_heading = "Contracts", value_enum)]
-    pub publish_mode: Option<crate::manifest::PublishMode>,
+    pub publish_mode: Option<PublishMode>,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -380,7 +382,7 @@ pub(crate) struct PublishCliArgs {
     /// Persist this mode as the repository default, then publish unless
     /// --set-default is the only action.
     #[arg(long, value_enum, help_heading = "Mode")]
-    pub set_default: Option<crate::manifest::PublishMode>,
+    pub set_default: Option<PublishMode>,
     #[command(flatten)]
     pub execution: DryRunArgs,
 }
@@ -431,7 +433,7 @@ pub(crate) enum CliAction {
     ApiSchema(SchemaDocument),
     ApiCall,
     Completion(CompletionShell),
-    Candidates(crate::completion::CandidateType),
+    Candidates(CandidateType),
 }
 
 impl Cli {
@@ -487,11 +489,11 @@ impl Cli {
             },
             Command::Publish(args) => {
                 let publish_mode = if args.rewrite {
-                    Some(crate::manifest::PublishMode::Rewrite)
+                    Some(PublishMode::Rewrite)
                 } else if args.append {
-                    Some(crate::manifest::PublishMode::Append)
+                    Some(PublishMode::Append)
                 } else if args.propose {
-                    Some(crate::manifest::PublishMode::Propose)
+                    Some(PublishMode::Propose)
                 } else {
                     None
                 };
@@ -659,7 +661,7 @@ fn request(request: ApiRequest) -> CliAction {
     }
 }
 
-fn parse_required_text(value: &str) -> std::result::Result<RequiredText, String> {
+fn parse_required_text(value: &str) -> result::Result<RequiredText, String> {
     let (path, contains) = value
         .split_once('=')
         .ok_or_else(|| "required text must use PATH=TEXT".to_string())?;
@@ -672,7 +674,7 @@ fn parse_required_text(value: &str) -> std::result::Result<RequiredText, String>
     })
 }
 
-fn parse_check(value: &str) -> std::result::Result<Check, String> {
+fn parse_check(value: &str) -> result::Result<Check, String> {
     let (name, run) = split_named(value, "COMMAND")?;
     Ok(Check {
         name,
@@ -682,11 +684,11 @@ fn parse_check(value: &str) -> std::result::Result<Check, String> {
     })
 }
 
-fn parse_named_value(value: &str) -> std::result::Result<(String, String), String> {
+fn parse_named_value(value: &str) -> result::Result<(String, String), String> {
     split_named(value, "GLOB")
 }
 
-fn parse_check_stage(value: &str) -> std::result::Result<(String, CheckStage), String> {
+fn parse_check_stage(value: &str) -> result::Result<(String, CheckStage), String> {
     let (name, stage) = split_named(value, "stack|patch")?;
     let stage = match stage.as_str() {
         "stack" => CheckStage::Stack,
@@ -696,7 +698,7 @@ fn parse_check_stage(value: &str) -> std::result::Result<(String, CheckStage), S
     Ok((name, stage))
 }
 
-fn split_named(value: &str, label: &str) -> std::result::Result<(String, String), String> {
+fn split_named(value: &str, label: &str) -> result::Result<(String, String), String> {
     let (name, rest) = value
         .split_once('=')
         .ok_or_else(|| format!("expected NAME={label}"))?;

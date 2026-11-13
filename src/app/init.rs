@@ -1,9 +1,12 @@
 use std::ffi::OsString;
+use std::iter;
+use std::path::Path;
 
 use super::{App, fetch_upstream, resolve_target, upstream_tracking_ref};
 use crate::error::{AppError, AppResult as Result, DomainError, InternalResultExt as _};
+use crate::manifest;
 use crate::manifest::{
-    Base, Contracts, Documents, Downstream, Manifest, Patch, PatchLayer, Upstream,
+    Base, Contracts, Documents, Downstream, Manifest, Patch, PatchLayer, SCHEMA, Upstream,
 };
 use crate::process::{capture, run, run_operator};
 use crate::protocol::{CommandResult, ExecutionMode, InitArgs, InitResult, MutationPlan};
@@ -69,7 +72,7 @@ impl App {
                     && !path.starts_with(&exports_prefix)
                     && scope
                         .iter()
-                        .any(|pattern| crate::manifest::scope_matches(pattern, path))
+                        .any(|pattern| manifest::scope_matches(pattern, path))
             });
         let mut blocking = inventory.staged;
         blocking.extend(inventory.unstaged);
@@ -121,7 +124,7 @@ impl App {
             scope,
         };
         let mut manifest = Manifest {
-            schema: crate::manifest::SCHEMA,
+            schema: SCHEMA,
             downstream: Downstream {
                 remote: downstream_remote,
                 branch: downstream_branch,
@@ -337,7 +340,7 @@ impl App {
                 ],
             )
             .map_err(|error| {
-                crate::error::DomainError::check_failed(format!(
+                DomainError::check_failed(format!(
                     "history recovery tag {} is unavailable from {}: {error}; restore the published recovery tag before hydrating this clone",
                     recovery.tag, manifest.downstream.remote
                 ))
@@ -360,7 +363,7 @@ impl App {
                 run(&self.repo, "git", ["reset", "--hard", &stack_tip])?;
             }
             run(&self.repo, "stg", ["init"])?;
-            let command = std::iter::once("uncommit".to_string())
+            let command = iter::once("uncommit".to_string())
                 .chain(expected.iter().rev().cloned())
                 .collect::<Vec<_>>();
             run(&self.repo, "stg", command)?;
@@ -378,7 +381,7 @@ impl App {
     }
 }
 
-fn ensure_remote(repo: &std::path::Path, name: &str, url: &str) -> Result<()> {
+fn ensure_remote(repo: &Path, name: &str, url: &str) -> Result<()> {
     match capture(repo, "git", ["remote", "get-url", name]) {
         Ok(actual) => {
             if actual != url {

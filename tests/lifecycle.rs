@@ -1,13 +1,13 @@
 //! Real `git` and `stg` lifecycles in private sandboxes.
-#![expect(
-    clippy::unwrap_used,
-    reason = "test setup helpers fail the test on the first unexpected error"
-)]
 
 mod support;
 
-use std::fs;
+use std::os::unix::fs::symlink;
+use std::path::{Path, PathBuf};
+use std::process::Output;
+use std::{env, fs};
 
+use ctl_core::input::Input;
 use support::{Fixture, git_ok, isolated_command};
 
 #[test]
@@ -1631,7 +1631,7 @@ fn publish_retry_verifies_completed_remote_refs_and_cleans_local_operation() {
         &fixture.repo,
         &["rev-parse", "--git-path", "forkctl/manifest.json"],
     );
-    let snapshot = std::path::PathBuf::from(snapshot);
+    let snapshot = PathBuf::from(snapshot);
     let snapshot = if snapshot.is_absolute() {
         snapshot
     } else {
@@ -1719,7 +1719,7 @@ fn publish_preserves_refs_when_remote_policy_rejects_atomic_push() {
     let response: serde_json::Value = serde_json::from_str(&response).unwrap();
     let tag = response["result"]["recovery_tag"].as_str().unwrap();
     let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
-    let hook = std::path::Path::new(&remote).join("hooks/pre-receive");
+    let hook = Path::new(&remote).join("hooks/pre-receive");
     fs::create_dir_all(hook.parent().unwrap()).unwrap();
     fs::write(
         &hook,
@@ -2083,13 +2083,13 @@ fn create_source_patch(fixture: &Fixture, name: &str, path: &str, contents: &str
         "--scope",
         path,
     ]);
-    std::fs::write(fixture.repo.join(path), contents).unwrap();
+    fs::write(fixture.repo.join(path), contents).unwrap();
     git_ok(&fixture.repo, ["add", path]);
     fixture.forkctl_ok(&["patch", "refresh"]);
     fixture.forkctl_ok(&["patch", "finish"]);
 }
 
-fn advance_upstream(repo: &std::path::Path, contents: &str) {
+fn advance_upstream(repo: &Path, contents: &str) {
     let upstream = git_capture_dynamic(repo, &["remote", "get-url", "upstream"]);
     let work = repo.parent().unwrap().join("advance-upstream");
     git_ok(
@@ -2103,13 +2103,13 @@ fn advance_upstream(repo: &std::path::Path, contents: &str) {
     );
     git_ok(&work, ["config", "user.name", "Forkctl Test"]);
     git_ok(&work, ["config", "user.email", "forkctl@example.com"]);
-    std::fs::write(work.join("upstream.txt"), contents).unwrap();
+    fs::write(work.join("upstream.txt"), contents).unwrap();
     git_ok(&work, ["add", "upstream.txt"]);
     git_ok(&work, ["commit", "--quiet", "-m", "upstream v2"]);
     git_ok(&work, ["push", "--quiet", "origin", "main"]);
 }
 
-fn advance_downstream(repo: &std::path::Path, contents: &str) {
+fn advance_downstream(repo: &Path, contents: &str) {
     let downstream = git_capture_dynamic(repo, &["remote", "get-url", "origin"]);
     let work = repo.parent().unwrap().join("advance-downstream");
     git_ok(
@@ -2129,11 +2129,11 @@ fn advance_downstream(repo: &std::path::Path, contents: &str) {
     git_ok(&work, ["push", "--quiet", "origin", "main"]);
 }
 
-fn git_capture_dynamic(repo: &std::path::Path, args: &[&str]) -> String {
+fn git_capture_dynamic(repo: &Path, args: &[&str]) -> String {
     capture(repo, "git", args)
 }
 
-fn git_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
+fn git_ok_dynamic(repo: &Path, args: &[&str]) {
     let output = support::isolated_command(repo, "git")
         .args(args)
         .current_dir(repo)
@@ -2147,7 +2147,7 @@ fn git_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
     );
 }
 
-fn capture(repo: &std::path::Path, program: &str, args: &[&str]) -> String {
+fn capture(repo: &Path, program: &str, args: &[&str]) -> String {
     let output = support::isolated_command(repo, program)
         .args(args)
         .current_dir(repo)
@@ -2161,16 +2161,16 @@ fn capture(repo: &std::path::Path, program: &str, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_string()
 }
 
-fn stg_capture(repo: &std::path::Path, args: [&str; 3]) -> String {
+fn stg_capture(repo: &Path, args: [&str; 3]) -> String {
     capture(repo, "stg", &args)
 }
 
-fn stg_top_commit(repo: &std::path::Path) -> String {
+fn stg_top_commit(repo: &Path) -> String {
     let top = capture(repo, "stg", &["top"]);
     capture(repo, "stg", &["id", &top])
 }
 
-fn stg_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
+fn stg_ok_dynamic(repo: &Path, args: &[&str]) {
     let output = support::isolated_command(repo, "stg")
         .args(args)
         .current_dir(repo)
@@ -2183,18 +2183,18 @@ fn stg_ok_dynamic(repo: &std::path::Path, args: &[&str]) {
     );
 }
 
-fn git_capture(repo: &std::path::Path, args: [&str; 2]) -> String {
+fn git_capture(repo: &Path, args: [&str; 2]) -> String {
     capture(repo, "git", &args)
 }
 
-fn read_manifest_value(path: &std::path::Path) -> serde_json::Value {
+fn read_manifest_value(path: &Path) -> serde_json::Value {
     let contents = fs::read_to_string(path).unwrap();
-    ctl_core::input::Input::new(path.display().to_string(), contents)
+    Input::new(path.display().to_string(), contents)
         .parse()
         .unwrap()
 }
 
-fn make_executable(path: &std::path::Path) {
+fn make_executable(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
     let mut permissions = fs::metadata(path).unwrap().permissions();
     permissions.set_mode(0o755);
@@ -2776,7 +2776,7 @@ fn publish_append_restores_stack_after_remote_rejection() {
     fixture.forkctl_ok(&["patch", "finish"]);
     let stack_tip = stg_top_commit(&fixture.repo);
     let remote = git_capture_dynamic(&fixture.repo, &["remote", "get-url", "origin"]);
-    let hook = std::path::Path::new(&remote).join("hooks/pre-receive");
+    let hook = Path::new(&remote).join("hooks/pre-receive");
     fs::create_dir_all(hook.parent().unwrap()).unwrap();
     fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
     make_executable(&hook);
@@ -2829,11 +2829,7 @@ fn publish_append_restores_stack_after_remote_rejection() {
         ])
         .env(
             "PATH",
-            format!(
-                "{}:{}",
-                wrapper_dir.display(),
-                std::env::var("PATH").unwrap()
-            ),
+            format!("{}:{}", wrapper_dir.display(), env::var("PATH").unwrap()),
         );
     let failed_restore = command.output().unwrap();
     assert!(!failed_restore.status.success());
@@ -3021,7 +3017,7 @@ esac
 "#;
 
 struct GhStub {
-    dir: std::path::PathBuf,
+    dir: PathBuf,
 }
 
 impl GhStub {
@@ -3066,30 +3062,24 @@ impl GhStub {
             .collect()
     }
 
-    fn forkctl(&self, fixture: &Fixture, args: &[&str]) -> std::process::Output {
+    fn forkctl(&self, fixture: &Fixture, args: &[&str]) -> Output {
         self.forkctl_with_path(fixture, args, &self.dir)
     }
 
-    fn forkctl_with_path(
-        &self,
-        fixture: &Fixture,
-        args: &[&str],
-        first: &std::path::Path,
-    ) -> std::process::Output {
-        let mut path =
-            std::env::split_paths(&std::env::var_os("PATH").unwrap()).collect::<Vec<_>>();
+    fn forkctl_with_path(&self, fixture: &Fixture, args: &[&str], first: &Path) -> Output {
+        let mut path = env::split_paths(&env::var_os("PATH").unwrap()).collect::<Vec<_>>();
         path.insert(0, self.dir.clone());
         path.insert(0, first.to_path_buf());
         support::forkctl_command(&fixture.repo)
             .args(["--manifest", "patches/fork.yaml"])
             .args(args)
-            .env("PATH", std::env::join_paths(path).unwrap())
+            .env("PATH", env::join_paths(path).unwrap())
             .output()
             .unwrap()
     }
 }
 
-fn json_output(output: &std::process::Output) -> serde_json::Value {
+fn json_output(output: &Output) -> serde_json::Value {
     serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
         panic!(
             "{error}\nstdout: {}\nstderr: {}",
@@ -3349,7 +3339,7 @@ fn publish_propose_fails_before_the_push_when_gh_is_missing() {
             .output()
             .unwrap();
         assert!(found.status.success());
-        std::os::unix::fs::symlink(
+        symlink(
             String::from_utf8(found.stdout).unwrap().trim(),
             tools.join(program),
         )
@@ -3561,7 +3551,7 @@ fn bootstrap_refuses_a_base_without_upstream_history() {
 
 /// Commits a version bump on a detached head above upstream main and pushes
 /// only its tag, the way a release tag sits off the branch it was cut from.
-fn tag_off_branch_release(upstream_work: &std::path::Path, tag: &str) -> String {
+fn tag_off_branch_release(upstream_work: &Path, tag: &str) -> String {
     git_ok(upstream_work, ["checkout", "--quiet", "--detach", "main"]);
     fs::write(upstream_work.join("VERSION"), format!("{tag}\n")).unwrap();
     git_ok(upstream_work, ["add", "VERSION"]);
