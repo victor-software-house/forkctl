@@ -1,7 +1,10 @@
 # Changes here will be overwritten by Copier; edit with `copier update --data`.
-_commit: v0.0.101
+_commit: v0.0.104
 _src_path: https://github.com/victor-software-house/templates.git
 build_os: linux
+cargo_min_publish_age: 3 days
+cargo_trusted_owners:
+- any-victor
 ci_runner: github-hosted
 clippy_disallowed_methods: []
 clippy_disallowed_types: []
@@ -15,7 +18,6 @@ deny_ignore:
 deny_licenses:
 -   license: BSD-3-Clause
     reason: encoding_rs, which serde-saphyr pulls in
-deny_skip: []
 feature_sets: []
 generated_paths: []
 github_owner: victor-software-house
@@ -52,7 +54,7 @@ project: rust-crate
 published: false
 repository_visibility: public
 rust_nightly: nightly-2026-11-01
-rust_version: 1.99.1
+rust_version: 1.100.0
 test_profiles: []
 tokio: false
 verify_timeout: 8
