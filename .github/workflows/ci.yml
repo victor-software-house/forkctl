@@ -76,7 +76,7 @@ jobs:
   isolated:
     if: ${{ !github.event.pull_request.draft && github.event_name != 'schedule' }}
     name: Isolated tests and release build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # A run takes about 4 to 6 minutes.
     timeout-minutes: 20
     env:
