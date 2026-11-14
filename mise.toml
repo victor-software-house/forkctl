@@ -85,10 +85,10 @@ includes = [
   "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=5927d79c3689854aaef93a55d94df6ec8bd6a584",
   # The ver task the release workflow and check:versions run; it pins the verctl above.
   "git::https://github.com/victor-software-house/verctl.git//tasks/ver?ref=v0.7.2",
-  # The shared Rust tasks, at actions main, 2026-11-13.
-  "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=4f2318e8587711ead93246fc6a73174803264c3c",
-  # template:check, template:off, and template:on, at actions main, 2026-11-13.
-  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=4f2318e8587711ead93246fc6a73174803264c3c",
+  # The shared Rust tasks, at actions main, 2026-11-14.
+  "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=5ad08e7382a53bd35c65fc1e1aaa1c2fae427ed9",
+  # template:check, template:off, and template:on, at actions main, 2026-11-14.
+  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=5ad08e7382a53bd35c65fc1e1aaa1c2fae427ed9",
 ]
 
 # The one task here: the last include wins over mise-tasks/, so only an inline
