@@ -6,7 +6,19 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-040
+    title: Hydrate a parallel worktree of an existing fork on a wip branch
+    scope: cli
+    outcome: >-
+      A second checkout of a fork with a manifest works on its own downstream branch,
+      as the guide and the skill describe.
+    blocked_by: []
+    acceptance:
+      - forkctl init --downstream-branch wip/foo in a worktree of a fork whose patches/fork.yaml exists hydrates that worktree on wip/foo, or the guide and skill state the supported way and the docs match the code.
+    notes:
+      - 2026-11-17, in a worktree of victor-software-house/firecracker on wip/elastic-patches, init --downstream-branch failed with "bootstrap options require an absent manifest" (src/app/init.rs), and plain init failed with "current branch is wip/elastic-patches, expected downstream".
+      - src/instructions.md line 111 and skills/forkctl/SKILL.md describe the refused form.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
