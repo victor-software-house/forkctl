@@ -5,21 +5,8 @@ prefix: FRK
 style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
-active: FRK-040
-queue:
-  - id: FRK-040
-    title: Declare extra commit trailers on a patch
-    scope: manifest
-    outcome: >-
-      A patch declares extra commit trailers, such as Co-authored-by, that forkctl
-      writes into its commit and check verifies.
-    blocked_by: []
-    acceptance:
-      - patch create and patch edit take --trailer, and the commit carries each declared trailer after Drop-When.
-      - check fails on a missing or extra value for a declared trailer key and ignores undeclared keys.
-    plan: openspec/changes/patch-trailers/proposal.md
-    notes:
-      - Asked by the operator on 2026-11-22 so that a downstream patch can credit the co-author of the upstream code it carries.
+active: null
+queue: []
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
@@ -58,6 +45,21 @@ horizon:
     kind: deferred
     open: The operator decides when every downstream manifest has run forkctl upgrade.
 archive:
+  - id: FRK-040
+    title: Declare extra commit trailers on a patch
+    scope: manifest
+    outcome: >-
+      A patch declares extra commit trailers, such as Co-authored-by, that forkctl
+      writes into its commit and check verifies.
+    plan: openspec/changes/archive/2026-11-22-patch-trailers/proposal.md
+    notes:
+      - Asked by the operator on 2026-11-22 so that a downstream patch can credit the co-author of the upstream code it carries.
+    completed: 2026-11-22T05:02:59
+    evidence:
+      - https://github.com/victor-software-house/forkctl/pull/182
+      - openspec/changes/archive/2026-11-22-patch-trailers/
+    disposition: completed
+
   - id: FRK-039
     title: Ship a linux-arm64 release tarball
     scope: .ctl/ver.yaml, .cargo/config.toml

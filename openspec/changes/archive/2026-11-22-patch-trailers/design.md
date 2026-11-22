@@ -33,5 +33,5 @@ The manifest has no place for any other trailer, and a hand-amended commit messa
 - A repository whose hooks add a trailer with a key the manifest also declares, such as a hook that appends `Co-authored-by`, fails `check`.
   The operator then declares that value in the manifest too, or removes it from the hook.
 
-[manifest]: ../../../src/manifest.rs
-[check]: ../../../src/app/check.rs
+[manifest]: ../../../../src/manifest.rs
+[check]: ../../../../src/app/check.rs
