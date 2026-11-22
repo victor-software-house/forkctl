@@ -38,12 +38,12 @@ None.
 - [`README.md`][readme], `AGENTS.md`, and the operator templates under `.ctl/operator/` with their renders.
 - Consumers change nothing: an existing manifest, ledger, and commit stay valid.
 
-[manifest]: ../../../src/manifest.rs
-[check]: ../../../src/app/check.rs
-[protocol]: ../../../src/protocol.rs
-[cli]: ../../../src/cli.rs
-[patch]: ../../../src/app/patch.rs
-[ledger]: ../../../src/ledger.rs
-[presentation]: ../../../src/presentation.rs
-[ledger-template]: ../../../templates/patches.md
-[readme]: ../../../README.md
+[manifest]: ../../../../src/manifest.rs
+[check]: ../../../../src/app/check.rs
+[protocol]: ../../../../src/protocol.rs
+[cli]: ../../../../src/cli.rs
+[patch]: ../../../../src/app/patch.rs
+[ledger]: ../../../../src/ledger.rs
+[presentation]: ../../../../src/presentation.rs
+[ledger-template]: ../../../../templates/patches.md
+[readme]: ../../../../README.md
