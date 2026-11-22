@@ -13,16 +13,17 @@
 # changes, not cut down to fit.
 #
 # A word is a whitespace-separated token, as wc -w counts it, so list markers,
-# table pipes, code blocks and HTML comments count. A reference-style link
-# definition does not: `[label]: <url-or-path>`, with an optional title in
-# double quotes or parentheses and no prose after it. A footnote definition,
-# `[^1]: text`, and a line such as `[Note]: some prose` count.
+# table pipes, code blocks and HTML comments count.
+# The count skips a reference-style link definition: `[label]: <url-or-path>`,
+# with an optional title in double quotes or parentheses and no prose after it.
+# A footnote definition, `[^1]: text`, and a line such as
+# `[Note]: some prose` count.
 #
 # In tasks.md the budget covers the task text: headings, the task lines and
-# their Verify lines. An evidence note is a nested list item that starts with
-# a date, such as `  - 2026-11-09 (UTC): …`, or with a linked date, such as
-# `  - [2026-11-09][notes]: …`, with the lines indented under it. It counts
-# toward its own budget instead.
+# their Verify lines. An evidence note is a nested list item, with the lines
+# indented under it. It starts with a date, such as `  - 2026-11-09 (UTC): …`,
+# or with a linked date, such as `  - [2026-11-09][notes]: …`.
+# It counts toward its own budget instead.
 set -euo pipefail
 [ -d openspec/changes ] || exit 0
 find openspec/changes -path openspec/changes/archive -prune -o -type f -name '*.md' -print |
