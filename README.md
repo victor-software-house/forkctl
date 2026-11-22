@@ -93,6 +93,15 @@ mise run fork patch refresh -p src/example.rs -p tests/example.rs
 mise run fork patch refresh -n             # semantic dry-run plan
 ```
 
+A patch that carries another author's code credits them with a commit trailer:
+
+```sh
+mise run fork patch edit downstream-change \
+  --trailer 'Co-authored-by=Ada Lovelace <ada@example.com>'
+```
+
+`--trailer KEY=VALUE` is repeatable on `patch create` and `patch edit`, and the trailers follow `Drop-When` in the commit message in the order given. On `patch edit` it replaces the whole list, and `--clear-trailers` removes it. A key may repeat with different values, so a patch can credit several co-authors. The key is ASCII letters, digits, and hyphens starting with a letter, and may not be `Downstream-Reason`, `Upstream-Status`, or `Drop-When` in any case; the value is one non-empty line.
+
 Persistent ownership uses `scope` globs (`*` stays within a segment; `**` crosses directories). One-shot capture uses Git pathspecs. Forkctl never guesses intent.
 
 Declarative contracts may be added after their files exist:
@@ -309,6 +318,9 @@ patches:
     purpose: Describe why this downstream change exists.
     upstream_status: not-submitted
     drop_when: Upstream provides the required behavior.
+    trailers:
+      - key: Co-authored-by
+        value: Ada Lovelace <ada@example.com>
     scope:
       - src/**
       - tests/**
@@ -335,7 +347,7 @@ YAML is read through ctl-core's input reader, which refuses duplicate keys, merg
 
 A patch's `layer` is `source` or `tooling`, and a base target's `type` is `commit`, `branch`, or `tag`. Manifest schema 1, which forkctl 0.0.48 and earlier wrote, named both of these, and a history entry's `event`, `kind`. `mise run fork upgrade` rewrites such a manifest in place as schema 2, regenerates the ledger, and refreshes the bookkeeping patch; run it on a clean worktree with no operation in progress.
 
-Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` trailers. Source patches precede tooling patches. Every source export is generated deterministically as `<exports>/<order>-<name>.patch`; tooling patches have no export. The final tooling patch owns manifest, ledger, exports, and integration files.
+Every patch commit carries matching `Downstream-Reason`, `Upstream-Status`, and `Drop-When` trailers, followed by the patch's `trailers` in manifest order. For each key a patch declares, `check` requires the commit's values for that key to equal the manifest's, in order; a trailer whose key the manifest never names, such as `Signed-off-by` from a hook, is not compared. `PATCHES.md` lists the declared trailers in a `Trailers` section, present only when a patch declares one. Source patches precede tooling patches. Every source export is generated deterministically as `<exports>/<order>-<name>.patch`; tooling patches have no export. The final tooling patch owns manifest, ledger, exports, and integration files.
 
 ## Bootstrap and clone hydration
 

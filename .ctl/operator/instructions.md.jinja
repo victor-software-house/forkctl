@@ -75,6 +75,16 @@ A check whose globs match no tracked file fails as stale, so a moved or deleted 
 
 Checks run during `check` after structural validation, so they gate `patch refresh`, `patch finish`, `rebase`, and both hook checks. They execute `sh -c` with repository-local Git variables cleared; provide their tools through the consumer's own mise configuration.
 
+## Commit trailers
+
+A patch may declare extra commit trailers, such as `Co-authored-by` for the author of upstream code it carries:
+
+- `--trailer KEY=VALUE` on `patch create` or `patch edit` adds a trailer; repeatable, written after `Drop-When` in the order given. A key may repeat with different values.
+- On `patch edit`, `--trailer` replaces the complete list and `--clear-trailers` removes it.
+- A key is ASCII letters, digits, and hyphens starting with a letter, and is never `Downstream-Reason`, `Upstream-Status`, or `Drop-When` in any case. A value is one non-empty line.
+
+`check` requires the commit's values for each declared key to equal the manifest's, in order, so a missing or extra value fails. A trailer whose key the patch never declares, such as `Signed-off-by` from a hook, is not compared.
+
 ## Stack lifecycle
 
 - `mise run fork init` hydrates a fresh clone with StGit metadata and exact historical recovery refs. Without a manifest it requires explicit bootstrap arguments and a branch exactly at its selected base. The base may be a release tag outside the upstream branch: bootstrap records where it meets that branch as the canonical base, and the tag's own commits must match `--allow-base` before anything is pushed or written. Bootstrap adds untracked files inside the bookkeeping scope, such as the `mise.toml` that mounts this task, to the bookkeeping patch and refuses every other change. It creates a missing downstream branch at the base under an absent lease and sets the branch to track the downstream remote. Install hooks that call forkctl after bootstrap.
