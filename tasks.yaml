@@ -5,8 +5,21 @@ prefix: FRK
 style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
-active: null
-queue: []
+active: FRK-040
+queue:
+  - id: FRK-040
+    title: Declare extra commit trailers on a patch
+    scope: manifest
+    outcome: >-
+      A patch declares extra commit trailers, such as Co-authored-by, that forkctl
+      writes into its commit and check verifies.
+    blocked_by: []
+    acceptance:
+      - patch create and patch edit take --trailer, and the commit carries each declared trailer after Drop-When.
+      - check fails on a missing or extra value for a declared trailer key and ignores undeclared keys.
+    plan: openspec/changes/patch-trailers/proposal.md
+    notes:
+      - Asked by the operator on 2026-11-22 so that a downstream patch can credit the co-author of the upstream code it carries.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
