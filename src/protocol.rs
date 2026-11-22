@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::manifest::{
-    BaseTarget, Check, Contracts, Manifest, Patch, PatchLayer, PublishMode, RequiredText,
+    BaseTarget, Check, Contracts, Manifest, Patch, PatchLayer, PublishMode, RequiredText, Trailer,
 };
 use crate::state::{ActivePatchState, OperationState};
 
@@ -216,6 +216,9 @@ pub(crate) struct PatchCreateArgs {
     pub purpose: String,
     pub upstream_status: String,
     pub drop_when: String,
+    /// Extra commit trailers, written after `Drop-When` in this order.
+    #[serde(default)]
+    pub trailers: Vec<Trailer>,
     pub scope: Vec<String>,
     #[serde(default)]
     pub checks: Vec<Check>,
@@ -229,6 +232,7 @@ impl From<PatchCreateArgs> for Patch {
             purpose: value.purpose,
             upstream_status: value.upstream_status,
             drop_when: value.drop_when,
+            trailers: value.trailers,
             scope: value.scope,
             checks: value.checks,
         }
@@ -260,6 +264,9 @@ pub(crate) struct PatchEditArgs {
     pub upstream_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drop_when: Option<String>,
+    /// Replacement trailer list; an empty list removes every trailer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trailers: Option<Vec<Trailer>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<ScopeEdit>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

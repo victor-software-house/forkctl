@@ -2581,6 +2581,177 @@ fn check_glob_naming_an_undeclared_check_is_rejected() {
 }
 
 #[test]
+fn check_verifies_declared_trailers() {
+    let fixture = Fixture::new();
+    let ada = "Co-authored-by: Ada <ada@example.com>";
+    let grace = "Co-authored-by: Grace <grace@example.com>";
+    // A tooling patch has no export, so a rewritten message changes nothing
+    // check compares besides the trailers.
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "credited",
+        "--layer",
+        "tooling",
+        "--purpose",
+        "Carry upstream code.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream merges the code.",
+        "--scope",
+        "credited.txt",
+        "--trailer",
+        "Co-authored-by=Ada <ada@example.com>",
+        "--trailer",
+        "Co-authored-by=Grace <grace@example.com>",
+    ]);
+    fs::write(fixture.repo.join("credited.txt"), "downstream\n").unwrap();
+    git_ok(&fixture.repo, ["add", "credited.txt"]);
+    fixture.forkctl_ok(&["patch", "refresh"]);
+    fixture.forkctl_ok(&["patch", "finish"]);
+    fixture.forkctl_ok(&["check"]);
+
+    let commit = capture(&fixture.repo, "stg", &["id", "credited"]);
+    let message = git_capture_dynamic(&fixture.repo, &["log", "-1", "--format=%B", &commit]);
+    let managed = [
+        "credited",
+        "",
+        "Downstream-Reason: Carry upstream code.",
+        "Upstream-Status: not-submitted",
+        "Drop-When: Upstream merges the code.",
+    ];
+    assert_eq!(
+        message.lines().collect::<Vec<_>>(),
+        [managed.as_slice(), &[ada, grace]].concat()
+    );
+    let ledger = fs::read_to_string(fixture.repo.join("PATCHES.md")).unwrap();
+    assert!(
+        ledger.contains("| `credited` | `Co-authored-by` | `Grace <grace@example.com>` |"),
+        "ledger lacks the trailer row:\n{ledger}"
+    );
+    let show = fixture.forkctl_ok(&["--format", "json", "patch", "show", "credited"]);
+    let show: serde_json::Value = serde_json::from_str(&show).unwrap();
+    assert_eq!(
+        show["result"]["patch"]["trailers"][1]["value"],
+        "Grace <grace@example.com>"
+    );
+
+    let linus = "Co-authored-by: Linus <linus@example.com>";
+    for (case, trailers) in [("missing", vec![ada]), ("extra", vec![ada, grace, linus])] {
+        let rewritten = [managed.as_slice(), trailers.as_slice()]
+            .concat()
+            .join("\n");
+        stg_ok_dynamic(
+            &fixture.repo,
+            &["edit", "credited", "--message", &rewritten],
+        );
+        let failed = fixture.forkctl(&["--format", "json", "check"]);
+        assert!(!failed.status.success(), "{case} co-author passed check");
+        let failed: serde_json::Value = serde_json::from_slice(&failed.stdout).unwrap();
+        assert_eq!(failed["error"]["code"], "check_failed", "{case}: {failed}");
+        let reason = failed["error"]["message"].as_str().unwrap();
+        assert!(
+            reason.contains("trailer Co-authored-by"),
+            "{case}: {reason}"
+        );
+        stg_ok_dynamic(&fixture.repo, &["undo"]);
+        fixture.forkctl_ok(&["check"]);
+    }
+
+    let signed = [
+        managed.as_slice(),
+        &[ada, grace, "Signed-off-by: Ada <ada@example.com>"],
+    ]
+    .concat()
+    .join("\n");
+    stg_ok_dynamic(&fixture.repo, &["edit", "credited", "--message", &signed]);
+    fixture.forkctl_ok(&["check"]);
+}
+
+#[test]
+fn patch_edit_replaces_and_clears_trailers() {
+    let fixture = Fixture::new();
+    create_source_patch(&fixture, "source-change", "source.txt", "downstream\n");
+    let refused = fixture.forkctl(&[
+        "--format",
+        "json",
+        "patch",
+        "edit",
+        "source-change",
+        "--trailer",
+        "drop-when=never",
+    ]);
+    assert!(!refused.status.success());
+    let refused: serde_json::Value = serde_json::from_slice(&refused.stdout).unwrap();
+    assert_eq!(refused["error"]["code"], "invalid_request", "{refused}");
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "edit",
+        "source-change",
+        "--trailer",
+        "Co-authored-by=Ada <ada@example.com>",
+        "--trailer",
+        "Co-authored-by=Grace <grace@example.com>",
+    ]);
+    assert_eq!(
+        manifest_trailers(&fixture),
+        serde_json::json!([
+            {"key": "Co-authored-by", "value": "Ada <ada@example.com>"},
+            {"key": "Co-authored-by", "value": "Grace <grace@example.com>"},
+        ])
+    );
+    assert_eq!(
+        co_authors(&fixture, "source-change"),
+        ["Ada <ada@example.com>", "Grace <grace@example.com>"]
+    );
+    fixture.forkctl_ok(&["check"]);
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "edit",
+        "source-change",
+        "--trailer",
+        "Co-authored-by=Linus <linus@example.com>",
+    ]);
+    assert_eq!(
+        manifest_trailers(&fixture),
+        serde_json::json!([{"key": "Co-authored-by", "value": "Linus <linus@example.com>"}])
+    );
+    assert_eq!(
+        co_authors(&fixture, "source-change"),
+        ["Linus <linus@example.com>"]
+    );
+    fixture.forkctl_ok(&["check"]);
+
+    fixture.forkctl_ok(&["patch", "edit", "source-change", "--clear-trailers"]);
+    assert!(manifest_trailers(&fixture).is_null());
+    assert_eq!(co_authors(&fixture, "source-change"), Vec::<String>::new());
+    fixture.forkctl_ok(&["check"]);
+}
+
+fn manifest_trailers(fixture: &Fixture) -> serde_json::Value {
+    read_manifest_value(&fixture.repo.join("patches/fork.yaml"))["patches"][0]["trailers"].clone()
+}
+
+fn co_authors(fixture: &Fixture, patch: &str) -> Vec<String> {
+    let commit = capture(&fixture.repo, "stg", &["id", patch]);
+    git_capture_dynamic(
+        &fixture.repo,
+        &[
+            "log",
+            "-1",
+            "--format=%(trailers:key=Co-authored-by,valueonly)",
+            &commit,
+        ],
+    )
+    .lines()
+    .map(str::to_string)
+    .collect()
+}
+
+#[test]
 fn fixture_processes_use_private_home_git_config_and_templates() {
     let fixture = Fixture::new();
     let sandbox = fixture.repo.parent().unwrap().join(".forkctl-test-env");

@@ -100,6 +100,34 @@ mod tests {
     }
 
     #[test]
+    fn yaml_and_json_round_trip_trailers() {
+        let source = EXAMPLE.replacen(
+            "    drop_when: Upstream provides the required behavior.\n",
+            "    drop_when: Upstream provides the required behavior.\n    trailers:\n      - key: Co-authored-by\n        value: Ada <ada@example.com>\n",
+            1,
+        );
+        let manifest = ManifestFormat::Yaml
+            .parse(source.as_bytes(), Path::new("fork.yaml"))
+            .unwrap();
+        let trailer = &manifest.patches[0].trailers[0];
+        assert_eq!(
+            (trailer.key.as_str(), trailer.value.as_str()),
+            ("Co-authored-by", "Ada <ada@example.com>")
+        );
+        assert_eq!(manifest.patches[1].trailers, Vec::new());
+        for format in [ManifestFormat::Yaml, ManifestFormat::Json] {
+            let bytes = format.serialize(&manifest).unwrap();
+            let read = format.parse(&bytes, Path::new("fork")).unwrap();
+            assert_eq!(
+                serde_json::to_value(&read).unwrap(),
+                serde_json::to_value(&manifest).unwrap()
+            );
+        }
+        let json = serde_json::to_value(&manifest).unwrap();
+        assert!(json["patches"][1].get("trailers").is_none(), "{json}");
+    }
+
+    #[test]
     fn rejects_ambiguous_yaml_features() {
         let path = Path::new("fork.yaml");
         let schema = format!("schema: {SCHEMA}\n");

@@ -18,6 +18,7 @@ Forkctl is a Rust policy CLI for explicit audited StGit downstream patch stacks.
 
 - Patch intent is explicit; forkctl never routes changes by filename inference.
 - One clone has at most one active patch.
+- A patch commit carries its three managed trailers, then the patch's declared `trailers` in manifest order. `check` compares only the keys a patch declares, so a trailer a hook or signing tool adds under another key never fails it. `PATCHES.md` gains its `Trailers` section only when a patch declares one, so ledgers without trailers keep their bytes.
 - `check` is the sole validation command: full repository by default, staged index with `-s`.
 - `patch refresh` captures staged by default and owns StGit targeting plus all generated bookkeeping.
 - Checks never stage or mutate.

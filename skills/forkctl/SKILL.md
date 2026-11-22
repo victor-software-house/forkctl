@@ -116,6 +116,16 @@ Rules:
 
 Inspect or update declared intent with `patch show`, `patch list`, and `patch edit`; consult command help for exact metadata and scope flags.
 
+A patch that carries another author's code credits them with a declared commit trailer:
+
+```sh
+mise run fork patch edit PATCH --trailer 'Co-authored-by=Name <email>'
+```
+
+- `--trailer KEY=VALUE` is repeatable on `patch create` and `patch edit`; trailers follow `Drop-When` in the order given.
+- On `patch edit` it replaces the whole list; `--clear-trailers` removes it.
+- `check` compares the commit's values for each declared key with the manifest's and ignores keys the patch never declares.
+
 A patch may declare checks that `check` runs after its structural validation, so they gate refresh, finish, rebase, and both hooks:
 
 ```sh

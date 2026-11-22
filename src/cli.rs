@@ -6,7 +6,7 @@ use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use ctl_core::{DryRunArgs, EnvPrefix, OutputArgs};
 
 use crate::completion::CandidateType;
-use crate::manifest::{Check, CheckStage, PatchLayer, PublishMode, RequiredText};
+use crate::manifest::{Check, CheckStage, PatchLayer, PublishMode, RequiredText, Trailer};
 use crate::protocol::{
     ApiRequest, CaptureSource, CheckArgs, CheckEdit, CheckScope, ContractEditArgs, EmptyArgs,
     ExecutionMode, InitArgs, OperationAbortArgs, PatchCreateArgs, PatchEditArgs, PatchName,
@@ -212,6 +212,10 @@ pub(crate) struct PatchCreateCliArgs {
     /// Objective condition for removing this patch.
     #[arg(short = 'd', long, help_heading = "Patch metadata")]
     pub drop_when: String,
+    /// Extra commit trailer as KEY=VALUE, such as
+    /// `Co-authored-by=Name <email>`; repeatable, kept in order.
+    #[arg(long = "trailer", help_heading = "Patch metadata", value_parser = parse_trailer)]
+    pub trailers: Vec<Trailer>,
     /// Persistent ownership glob; repeatable.
     #[arg(short = 's', long, required = true, help_heading = "Ownership")]
     pub scope: Vec<String>,
@@ -253,6 +257,13 @@ pub(crate) struct PatchEditCliArgs {
     /// Objective condition for removing this patch.
     #[arg(short = 'd', long, help_heading = "Patch metadata")]
     pub drop_when: Option<String>,
+    /// Replace the complete trailer list with KEY=VALUE trailers, such as
+    /// `Co-authored-by=Name <email>`; repeatable, kept in order.
+    #[arg(long = "trailer", help_heading = "Patch metadata", value_parser = parse_trailer)]
+    pub trailers: Vec<Trailer>,
+    /// Remove every extra commit trailer.
+    #[arg(long, help_heading = "Patch metadata", conflicts_with = "trailers")]
+    pub clear_trailers: bool,
     /// Replace complete ownership scope; repeatable.
     #[arg(short = 's', long, help_heading = "Ownership", conflicts_with_all = ["add_scope", "remove_scope"])]
     pub set_scope: Vec<String>,
@@ -532,13 +543,18 @@ fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
                 || args.purpose.is_some()
                 || args.upstream_status.is_some()
                 || args.drop_when.is_some()
+                || !args.trailers.is_empty()
+                || args.clear_trailers
                 || !args.set_scope.is_empty()
                 || !args.add_scope.is_empty()
                 || !args.remove_scope.is_empty()
                 || args.clear_checks
                 || !declared.is_empty(),
-            "patch edit requires at least one metadata, scope, or check change"
+            "patch edit requires at least one metadata, trailer, scope, or check change"
         );
+        // --clear-trailers conflicts with --trailer, so it always sets an
+        // empty list.
+        let trailers = (args.clear_trailers || !args.trailers.is_empty()).then_some(args.trailers);
         let checks = if args.clear_checks {
             Some(CheckEdit::Set { checks: declared })
         } else if declared.is_empty() {
@@ -565,6 +581,7 @@ fn patch_edit_action(args: PatchEditCliArgs) -> Result<CliAction> {
                 purpose: args.purpose,
                 upstream_status: args.upstream_status,
                 drop_when: args.drop_when,
+                trailers,
                 scope,
                 checks,
             })),
@@ -584,6 +601,7 @@ fn patch_action(command: PatchCommand) -> Result<CliAction> {
                 purpose: args.purpose,
                 upstream_status: args.upstream_status,
                 drop_when: args.drop_when,
+                trailers: args.trailers,
                 scope: args.scope,
                 checks: declared_checks(args.checks, args.check_globs, args.check_stages)?,
             })),
@@ -682,6 +700,16 @@ fn parse_check(value: &str) -> result::Result<Check, String> {
         glob: Vec::new(),
         at: CheckStage::default(),
     })
+}
+
+fn parse_trailer(value: &str) -> result::Result<Trailer, String> {
+    match value.split_once('=') {
+        Some((key, value)) if !key.is_empty() && !value.is_empty() => Ok(Trailer {
+            key: key.to_string(),
+            value: value.to_string(),
+        }),
+        _ => Err("expected KEY=VALUE".into()),
+    }
 }
 
 fn parse_named_value(value: &str) -> result::Result<(String, String), String> {

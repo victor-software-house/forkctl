@@ -444,6 +444,17 @@ fn append_patch_show(document: Document, result: &PatchShowResult) -> Document {
             .row("purpose", result.patch.purpose.clone())
             .row("upstream status", result.patch.upstream_status.clone())
             .row("drop when", result.patch.drop_when.clone())
+            .row(
+                "trailers",
+                display_list(
+                    &result
+                        .patch
+                        .trailers
+                        .iter()
+                        .map(|trailer| format!("{}: {}", trailer.key, trailer.value))
+                        .collect::<Vec<_>>(),
+                ),
+            )
             .row("scope", display_list(&result.patch.scope))
             .row(
                 "commit",

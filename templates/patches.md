@@ -27,6 +27,15 @@ Base: `{{ target_selector }}` (`{{ base_sha }}`)
 {% else -%}
 | None | — | — | — | — |
 {% endfor %}
+{% if !trailers.is_empty() -%}
+## Trailers
+
+| Patch | Trailer | Value |
+|:--|:--|:--|
+{% for trailer in trailers -%}
+| `{{ trailer.patch }}` | `{{ trailer.key }}` | `{{ trailer.value }}` |
+{% endfor %}
+{% endif -%}
 ## History
 
 | Event | Patch | Former commit | Target | Purpose |

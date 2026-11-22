@@ -154,9 +154,28 @@ pub(crate) struct Patch {
     pub purpose: String,
     pub upstream_status: String,
     pub drop_when: String,
+    /// Extra commit trailers, written after `Drop-When` in this order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trailers: Vec<Trailer>,
     pub scope: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<Check>,
+}
+
+/// The trailer keys forkctl writes from a patch's own metadata.
+pub(crate) const MANAGED_TRAILER_KEYS: [&str; 3] =
+    ["Downstream-Reason", "Upstream-Status", "Drop-When"];
+
+/// One extra `Key: value` trailer of a patch commit, such as
+/// `Co-authored-by`.
+///
+/// A key may repeat with different values, so a patch can credit several
+/// co-authors.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, schemars::JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Trailer {
+    pub key: String,
+    pub value: String,
 }
 
 /// One command that must succeed for the declaring patch to still hold.
@@ -692,6 +711,41 @@ impl Patch {
             );
         }
         self.validate_checks()?;
+        self.validate_trailers()?;
+        Ok(())
+    }
+
+    fn validate_trailers(&self) -> Result<()> {
+        let mut pairs = HashSet::new();
+        for trailer in &self.trailers {
+            ensure!(
+                valid_trailer_key(&trailer.key),
+                "invalid trailer key in patch {}: {:?}; use ASCII letters, digits, and hyphens, starting with a letter",
+                self.name,
+                trailer.key
+            );
+            ensure!(
+                !MANAGED_TRAILER_KEYS
+                    .iter()
+                    .any(|managed| managed.eq_ignore_ascii_case(&trailer.key)),
+                "trailer {} in patch {} is written from the patch metadata",
+                trailer.key,
+                self.name
+            );
+            ensure!(
+                valid_metadata(&trailer.value),
+                "trailer {} in patch {} must declare a one-line value",
+                trailer.key,
+                self.name
+            );
+            ensure!(
+                pairs.insert((trailer.key.to_ascii_lowercase(), trailer.value.as_str())),
+                "duplicate trailer {}: {} in patch {}",
+                trailer.key,
+                trailer.value,
+                self.name
+            );
+        }
         Ok(())
     }
 
@@ -746,11 +800,48 @@ impl Patch {
             .any(|pattern| scope_matches(pattern, path))
     }
 
+    /// The managed trailers, each key with the value its commit must carry.
+    pub(crate) fn managed_trailers(&self) -> [(&'static str, &str); 3] {
+        let [reason, status, drop] = MANAGED_TRAILER_KEYS;
+        [
+            (reason, self.purpose.as_str()),
+            (status, self.upstream_status.as_str()),
+            (drop, self.drop_when.as_str()),
+        ]
+    }
+
+    /// Each declared trailer key, in first-declared order and spelling, with
+    /// its values in manifest order.
+    ///
+    /// Keys are grouped without regard to ASCII case, as Git matches them.
+    pub(crate) fn trailer_values(&self) -> Vec<(&str, Vec<&str>)> {
+        let mut groups: Vec<(&str, Vec<&str>)> = Vec::new();
+        for trailer in &self.trailers {
+            if let Some((_, values)) = groups
+                .iter_mut()
+                .find(|(key, _)| key.eq_ignore_ascii_case(&trailer.key))
+            {
+                values.push(&trailer.value);
+            } else {
+                groups.push((&trailer.key, vec![&trailer.value]));
+            }
+        }
+        groups
+    }
+
     pub(crate) fn message(&self) -> String {
-        format!(
-            "{}\n\nDownstream-Reason: {}\nUpstream-Status: {}\nDrop-When: {}",
-            self.name, self.purpose, self.upstream_status, self.drop_when
-        )
+        let trailers = self
+            .managed_trailers()
+            .into_iter()
+            .chain(
+                self.trailers
+                    .iter()
+                    .map(|trailer| (trailer.key.as_str(), trailer.value.as_str())),
+            )
+            .map(|(key, value)| format!("{key}: {value}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("{}\n\n{trailers}", self.name)
     }
 }
 
@@ -781,6 +872,15 @@ fn valid_patch_name(value: &str) -> bool {
         && !value.starts_with('-')
         && !value.contains(['/', '\\'])
         && !value.chars().any(char::is_whitespace)
+}
+
+/// A Git trailer token: ASCII letters, digits, and hyphens, starting with a
+/// letter.
+fn valid_trailer_key(value: &str) -> bool {
+    value.starts_with(|first: char| first.is_ascii_alphabetic())
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
 }
 
 fn valid_metadata(value: &str) -> bool {
@@ -865,6 +965,7 @@ mod tests {
                 purpose: "Own downstream tooling.".into(),
                 upstream_status: "downstream-only".into(),
                 drop_when: "The fork is retired.".into(),
+                trailers: Vec::new(),
                 scope: vec![
                     "fork.yaml".into(),
                     "PATCHES.md".into(),
@@ -922,8 +1023,94 @@ mod tests {
             purpose: "Change source.".into(),
             upstream_status: "not-submitted".into(),
             drop_when: "Upstream changes.".into(),
+            trailers: Vec::new(),
             scope: vec!["src/**".into()],
             checks: Vec::new(),
         }
+    }
+
+    fn trailer(key: &str, value: &str) -> Trailer {
+        Trailer {
+            key: key.into(),
+            value: value.into(),
+        }
+    }
+
+    #[test]
+    fn message_appends_trailers_after_drop_when() {
+        let mut patch = source_patch();
+        let managed = [
+            "source",
+            "",
+            "Downstream-Reason: Change source.",
+            "Upstream-Status: not-submitted",
+            "Drop-When: Upstream changes.",
+        ];
+        assert_eq!(patch.message().lines().collect::<Vec<_>>(), managed);
+        assert!(!patch.message().ends_with('\n'));
+        patch.trailers = vec![
+            trailer("Co-authored-by", "Ada <ada@example.com>"),
+            trailer("Reviewed-by", "Grace <grace@example.com>"),
+            trailer("Co-authored-by", "Linus <linus@example.com>"),
+        ];
+        patch.validate().unwrap();
+        assert_eq!(
+            patch.message().lines().collect::<Vec<_>>(),
+            [
+                managed.as_slice(),
+                &[
+                    "Co-authored-by: Ada <ada@example.com>",
+                    "Reviewed-by: Grace <grace@example.com>",
+                    "Co-authored-by: Linus <linus@example.com>",
+                ],
+            ]
+            .concat()
+        );
+        assert_eq!(
+            patch.trailer_values(),
+            [
+                (
+                    "Co-authored-by",
+                    vec!["Ada <ada@example.com>", "Linus <linus@example.com>"]
+                ),
+                ("Reviewed-by", vec!["Grace <grace@example.com>"]),
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_trailers() {
+        let ada = "Ada <ada@example.com>";
+        for trailers in [
+            vec![trailer("drop-when", "never")],
+            vec![trailer("DOWNSTREAM-REASON", "other")],
+            vec![trailer("Upstream-Status", "submitted")],
+            vec![trailer("Co authored by", ada)],
+            vec![trailer("Co-authored-by:", ada)],
+            vec![trailer("1-author", ada)],
+            vec![trailer("-author", ada)],
+            vec![trailer("", ada)],
+            vec![trailer("Co-authored-by", "")],
+            vec![trailer("Co-authored-by", " ")],
+            vec![trailer("Co-authored-by", "Ada\nGrace")],
+            vec![
+                trailer("Co-authored-by", ada),
+                trailer("Co-authored-by", ada),
+            ],
+            vec![
+                trailer("Co-authored-by", ada),
+                trailer("co-authored-by", ada),
+            ],
+        ] {
+            let mut patch = source_patch();
+            patch.trailers.clone_from(&trailers);
+            assert!(patch.validate().is_err(), "accepted {trailers:?}");
+        }
+        let mut patch = source_patch();
+        patch.trailers = vec![
+            trailer("Co-authored-by", ada),
+            trailer("Co-authored-by", "Grace <grace@example.com>"),
+        ];
+        patch.validate().unwrap();
     }
 }

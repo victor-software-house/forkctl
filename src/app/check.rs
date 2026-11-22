@@ -283,24 +283,37 @@ impl App {
     }
 
     fn check_patch_commit(&self, patch: &Patch, commit: &str) -> Result<()> {
-        for (key, expected) in [
-            ("Downstream-Reason", patch.purpose.as_str()),
-            ("Upstream-Status", patch.upstream_status.as_str()),
-            ("Drop-When", patch.drop_when.as_str()),
-        ] {
-            let format = format!("%(trailers:key={key},valueonly,unfold=true)");
-            let actual = capture(
-                &self.repo,
-                "git",
-                ["log", "-1", &format!("--format={format}"), commit],
-            )?;
+        for (key, expected) in patch.managed_trailers() {
+            let actual = self.commit_trailer(commit, key)?;
             ensure_check!(
                 actual == expected,
                 "patch {} trailer {key} is {actual:?}, expected {expected:?}",
                 patch.name
             );
         }
+        // Only the keys the patch declares are compared, so a trailer a hook
+        // or signing tool adds under another key never fails the check.
+        for (key, expected) in patch.trailer_values() {
+            let actual = self.commit_trailer(commit, key)?;
+            let actual = actual.lines().collect::<Vec<_>>();
+            ensure_check!(
+                actual == expected,
+                "patch {} trailer {key} values are {actual:?}, expected {expected:?}",
+                patch.name
+            );
+        }
         Ok(())
+    }
+
+    /// Every value of trailer `key` in `commit`, one per line; Git matches
+    /// the key without regard to case.
+    fn commit_trailer(&self, commit: &str, key: &str) -> Result<String> {
+        let format = format!("%(trailers:key={key},valueonly,unfold=true)");
+        capture(
+            &self.repo,
+            "git",
+            ["log", "-1", &format!("--format={format}"), commit],
+        )
     }
 
     fn check_required_text(&self) -> Result<()> {

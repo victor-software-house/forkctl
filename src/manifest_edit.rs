@@ -259,7 +259,7 @@ fn refused(path: &Path, what: &str, error: &yamled::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{RecoveryEvidence, TargetType};
+    use crate::manifest::{RecoveryEvidence, TargetType, Trailer};
 
     const EXAMPLE: &str = include_str!("../examples/fork.yaml");
 
@@ -379,6 +379,28 @@ mod tests {
                 1
             )
         );
+    }
+
+    #[test]
+    fn replacing_a_patch_writes_and_removes_its_trailers() {
+        let source = commented();
+        let plain = parse(&source).patches[0].clone();
+        let mut credited = plain.clone();
+        credited.trailers = vec![Trailer {
+            key: "Co-authored-by".into(),
+            value: "Ada <ada@example.com>".into(),
+        }];
+        let text = edit(&source, &[ManifestEdit::ReplacePatch(credited.clone())]);
+        assert_comments_kept(&text);
+        assert_eq!(parse(&text).patches[0].trailers, credited.trailers);
+        assert!(
+            text.contains(
+                "    trailers:\n      - key: Co-authored-by\n        value: Ada <ada@example.com>\n"
+            ),
+            "{text}"
+        );
+        let restored = edit(&text, &[ManifestEdit::ReplacePatch(plain)]);
+        assert_eq!(restored, source);
     }
 
     #[test]
