@@ -196,6 +196,9 @@ impl App {
         if let Some(value) = args.drop_when {
             patch.drop_when = value;
         }
+        if let Some(trailers) = args.trailers {
+            patch.trailers = trailers;
+        }
         if let Some(scope) = args.scope {
             match scope {
                 ScopeEdit::Set { patterns } => patch.scope = patterns,

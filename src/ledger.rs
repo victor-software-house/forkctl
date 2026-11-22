@@ -11,6 +11,7 @@ struct LedgerTemplate<'a> {
     patches: Vec<PatchRow>,
     disabled: Vec<DisabledRow>,
     checks: Vec<CheckRow>,
+    trailers: Vec<TrailerRow>,
     history: Vec<HistoryRow>,
 }
 
@@ -28,6 +29,12 @@ struct CheckRow {
     stage: &'static str,
     glob: String,
     run: String,
+}
+
+struct TrailerRow {
+    patch: String,
+    key: String,
+    value: String,
 }
 
 struct HistoryRow {
@@ -96,6 +103,17 @@ pub(crate) fn render(manifest: &Manifest) -> Result<String> {
             })
             .collect(),
         checks,
+        trailers: manifest
+            .patches
+            .iter()
+            .flat_map(|patch| {
+                patch.trailers.iter().map(|trailer| TrailerRow {
+                    patch: escape(&patch.name),
+                    key: escape(&trailer.key),
+                    value: escape(&trailer.value),
+                })
+            })
+            .collect(),
         history,
     }
     .render()
@@ -173,4 +191,55 @@ fn escape(value: &str) -> String {
         .replace('\\', "\\\\")
         .replace('|', "\\|")
         .replace('`', "\\`")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::render;
+    use crate::manifest::Trailer;
+    use crate::manifest_codec::ManifestFormat;
+
+    const EXAMPLE: &str = include_str!("../examples/fork.yaml");
+
+    #[test]
+    fn ledger_lists_trailers_only_when_declared() {
+        let mut manifest = ManifestFormat::Yaml
+            .parse(EXAMPLE.as_bytes(), Path::new("fork.yaml"))
+            .unwrap();
+        let plain = render(&manifest).unwrap();
+        let lines = plain.lines().collect::<Vec<_>>();
+        let history = lines.iter().position(|line| *line == "## History").unwrap();
+        assert_eq!(
+            lines[history - 2..history],
+            ["| None | — | — | — | — |", ""]
+        );
+        assert!(!plain.contains("## Trailers"), "{plain}");
+
+        manifest.patches[0].trailers = ["Ada <ada@example.com>", "Grace <grace@example.com>"]
+            .map(|value| Trailer {
+                key: "Co-authored-by".into(),
+                value: value.into(),
+            })
+            .to_vec();
+        let declared = render(&manifest).unwrap();
+        let section = declared
+            .lines()
+            .skip_while(|line| *line != "## Trailers")
+            .take_while(|line| *line != "## History")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            section,
+            [
+                "## Trailers",
+                "",
+                "| Patch | Trailer | Value |",
+                "|:--|:--|:--|",
+                "| `downstream-change` | `Co-authored-by` | `Ada <ada@example.com>` |",
+                "| `downstream-change` | `Co-authored-by` | `Grace <grace@example.com>` |",
+                "",
+            ]
+        );
+    }
 }

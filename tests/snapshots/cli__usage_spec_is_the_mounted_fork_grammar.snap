@@ -115,6 +115,9 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         flag "-d --drop-when" help="Objective condition for removing this patch" required=#true help_heading="Patch metadata" {
             arg <DROP_WHEN>
         }
+        flag --trailer help="Extra commit trailer as KEY=VALUE, such as `Co-authored-by=Name <email>`; repeatable, kept in order" var=#true help_heading="Patch metadata" {
+            arg <TRAILERS>… var=#true
+        }
         flag "-s --scope" help="Persistent ownership glob; repeatable" required=#true var=#true help_heading=Ownership {
             arg <SCOPE>… var=#true
         }
@@ -150,6 +153,10 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         flag "-d --drop-when" help="Objective condition for removing this patch" help_heading="Patch metadata" {
             arg <DROP_WHEN>
         }
+        flag --trailer help="Replace the complete trailer list with KEY=VALUE trailers, such as `Co-authored-by=Name <email>`; repeatable, kept in order" var=#true help_heading="Patch metadata" {
+            arg <TRAILERS>… var=#true
+        }
+        flag --clear-trailers help="Remove every extra commit trailer" conflicts=--trailer help_heading="Patch metadata"
         flag "-s --set-scope" help="Replace complete ownership scope; repeatable" var=#true help_heading=Ownership {
             conflicts "--add-scope" "--remove-scope"
             arg <SET_SCOPE>… var=#true
