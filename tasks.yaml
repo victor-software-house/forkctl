@@ -6,7 +6,18 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-041
+    title: Pin mr-boxington-action to the VSH fork release
+    scope: .github/workflows
+    outcome: >-
+      CI and release-macos run victor-software-house/mr-boxington-action
+      v1.7.4-vsh.1, which skips a cache save that another job reserved instead of failing the step.
+    blocked_by: []
+    acceptance:
+      - Both mr-boxington steps pin the fork release commit 535e3459742146fa60f90ac2752e9e524c92e0f7.
+    links:
+      - https://github.com/victor-software-house/forkctl/actions/runs/45005936115/job/137157860699
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
