@@ -162,6 +162,29 @@ url = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9
 url_api = "https://api.github.com/repos/nextest-rs/nextest/releases/assets/501885637"
 provenance = "github-attestations"
 
+[[tools."github:obi1kenobi/cargo-semver-checks"]]
+version = "0.51.0"
+backend = "github:obi1kenobi/cargo-semver-checks"
+specifiers = ["0.51.0"]
+
+[tools."github:obi1kenobi/cargo-semver-checks"."platforms.linux-arm64"]
+checksum = "sha256:58531fa492d237c71b97d113a6d2a36209d96105956569cd0406aa66226ac928"
+checksum_source = "mise-versions"
+url = "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.51.0/cargo-semver-checks-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/obi1kenobi/cargo-semver-checks/releases/assets/608677275"
+
+[tools."github:obi1kenobi/cargo-semver-checks"."platforms.linux-x64"]
+checksum = "sha256:cacadafaa5cd27ae6d05a74a103266917ebab4c5e43c898360e177d4fbf06a65"
+checksum_source = "mise-versions"
+url = "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.51.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/obi1kenobi/cargo-semver-checks/releases/assets/608677290"
+
+[tools."github:obi1kenobi/cargo-semver-checks"."platforms.macos-arm64"]
+checksum = "sha256:3cec5da41eee9a3336d75ad43d1f30a5c9680818f4ba209024786f452cabab5b"
+checksum_source = "mise-versions"
+url = "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.51.0/cargo-semver-checks-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/obi1kenobi/cargo-semver-checks/releases/assets/608677274"
+
 [[tools."github:victor-software-house/qctl"]]
 version = "0.6.0"
 backend = "github:victor-software-house/qctl"

@@ -51,7 +51,7 @@ platforms:
 - linux-arm64
 - macos-arm64
 project: rust-crate
-published: false
+published: true
 repository_visibility: public
 rust_nightly: nightly-2026-11-01
 rust_version: 1.100.0

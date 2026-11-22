@@ -30,6 +30,7 @@ rust = [
 mr-boxington = "1.30.0"
 "github:EmbarkStudios/cargo-deny" = "0.20.2"
 "github:bnjbvr/cargo-machete" = "0.9.2"
+"github:obi1kenobi/cargo-semver-checks" = "0.51.0"
 jq = "1.8.2"
 # forkctl's own tools.
 "cargo:stgit" = { version = "2.6.1", depends = ["rust"] }
@@ -68,6 +69,7 @@ depends = [
   "test",
   "test:doc",
   "doc",
+  "check:docs",
   "deny",
   "deps",
   "check:versions",

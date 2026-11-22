@@ -61,7 +61,7 @@ jobs:
     with:
       mise-version: 2026.11.6
       advisories: true
-      semver: false
+      semver: true
       timeout-minutes: 8
       build-runner: '["ubuntu-26.04"]'
       read-only-runner: '["ubuntu-26.04"]'
