@@ -121,26 +121,26 @@ url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.21.0/carg
 url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/755174277"
 
 [[tools."github:Fission-AI/OpenSpec"]]
-version = "2.1.0"
+version = "2.2.0"
 backend = "github:Fission-AI/OpenSpec"
-specifiers = ["2.1.0"]
+specifiers = ["2.2.0"]
 
 [tools."github:Fission-AI/OpenSpec"."platforms.linux-arm64"]
-checksum = "sha256:2b5ec79c62e76de3d2a15ebb6c5839bbae44b0f8302ccb128109143dd3ecbb1a"
-url = "https://github.com/Fission-AI/OpenSpec/releases/download/v2.1.0/openspec-linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/Fission-AI/OpenSpec/releases/assets/757134594"
+checksum = "sha256:a3d3f4398579358816a4e6e6306a4dac998f81fa5b3292edaa1a478d4acdd0d7"
+url = "https://github.com/Fission-AI/OpenSpec/releases/download/v2.2.0/openspec-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/Fission-AI/OpenSpec/releases/assets/788665299"
 provenance = "github-attestations"
 
 [tools."github:Fission-AI/OpenSpec"."platforms.linux-x64"]
-checksum = "sha256:af110e142e282ff6fa366c6bd15e6e1758f56df5a1cb8f9396cdfa220a0f394f"
-url = "https://github.com/Fission-AI/OpenSpec/releases/download/v2.1.0/openspec-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/Fission-AI/OpenSpec/releases/assets/757134677"
+checksum = "sha256:f91f0bc22ecd51279178bf91aaf6149ceba5b95dae9cc46f80f91fb14633e594"
+url = "https://github.com/Fission-AI/OpenSpec/releases/download/v2.2.0/openspec-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/Fission-AI/OpenSpec/releases/assets/788665487"
 provenance = "github-attestations"
 
 [tools."github:Fission-AI/OpenSpec"."platforms.macos-arm64"]
-checksum = "sha256:f985131c8b565356a8f4995d53ce819d1b79bdad1242561534eb57754f6bae9b"
-url = "https://github.com/Fission-AI/OpenSpec/releases/download/v2.1.0/openspec-darwin-arm64.tar.gz"
-url_api = "https://api.github.com/repos/Fission-AI/OpenSpec/releases/assets/757134591"
+checksum = "sha256:d46a773862f31c317f221e52045767fd132c87cf839b800e6728e975b2a5842a"
+url = "https://github.com/Fission-AI/OpenSpec/releases/download/v2.2.0/openspec-darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/Fission-AI/OpenSpec/releases/assets/788665295"
 provenance = "github-attestations"
 
 [[tools."github:bnjbvr/cargo-machete"]]

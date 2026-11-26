@@ -56,6 +56,8 @@ RUST_NIGHTLY = "nightly-2026-11-01"
 CARGO_REGISTRY_GLOBAL_MIN_PUBLISH_AGE = "3 days"
 # The crates.io logins whose crates `mise run update:own` takes past the cooldown.
 CARGO_TRUSTED_OWNERS = "any-victor"
+# specs:budget reads the word budget of each file kind from here.
+OPENSPEC_BUDGETS = "proposal=600 design=2500 tasks=1500 note=60 spec=1200 research=2500"
 
 # The one gate, composed from the pieces this repository keeps. deny:advisories
 # and semver need the network, so they run as their own CI steps.
@@ -87,10 +89,13 @@ includes = [
   "git::https://github.com/victor-software-house/qctl.git//tasks/q?ref=5927d79c3689854aaef93a55d94df6ec8bd6a584",
   # The ver task the release workflow and check:versions run; it pins the verctl above.
   "git::https://github.com/victor-software-house/verctl.git//tasks/ver?ref=v0.8.6-rc.5",
-  # The shared Rust tasks, at actions main, 2026-11-22.
-  "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=925b514c52d2cb2f9b9d09a074dbab5c96a4f302",
-  # template:check, template:off, and template:on, at actions main, 2026-11-22.
-  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=925b514c52d2cb2f9b9d09a074dbab5c96a4f302",
+  # specs:budget, from the tasks-specs package at its digest.
+  """oci::ghcr.io/victor-software-house/tasks-specs@sha256:\
+    9dbe200899e239236d98a88416e1c78fe60e7d06343bc40fa52665e8f7102f0e""",
+  # The shared Rust tasks, at actions main, 2026-11-26.
+  "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=e9cf7ef0da4f4a9a7a6f978f5dd54be0d0d539bc",
+  # template:check, template:off, and template:on, at actions main, 2026-11-26.
+  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=e9cf7ef0da4f4a9a7a6f978f5dd54be0d0d539bc",
 ]
 
 # The one task here: the last include wins over mise-tasks/, so only an inline
