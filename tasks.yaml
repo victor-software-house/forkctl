@@ -6,7 +6,23 @@ style:
   timezone: "-03:00"
   section_order: [queue, horizon, archive]
 active: null
-queue: []
+queue:
+  - id: FRK-042
+    title: Build on ctl-core 0.8 and take a command from an input document
+    scope: >-
+      Cargo.toml, Cargo.lock, src/main.rs, src/presentation.rs, tests,
+      skills/forkctl, src/instructions.md
+    outcome: >-
+      forkctl builds on ctl-core 0.8.0-rc.2 with every 0.8 break migrated and its
+      JSON protocol unchanged, and every command takes its arguments from --input.
+    blocked_by: []
+    acceptance:
+      - Cargo.toml pins ctl-core =0.8.0-rc.2 with input-document and input-json, vsh-serde-saphyr =0.0.6 and yamled =0.0.14, and Cargo.lock holds one serde-saphyr.
+      - Every JSON response, success or error, is the one document on stdout, in api call and under --format json.
+      - forkctl patch create --input patch.yaml --dry-run --format json writes the plan its flags would, proven by a golden test.
+    plan: openspec/changes/ctl-core-0-8/proposal.md
+    notes:
+      - 2026-11-27, ctl-core 0.8.0-rc.2 published; ctl-core row CTC-043 asks qctl, verctl and forkctl each to accept an input document for at least one command, with a golden test.
 horizon:
   - id: FRK-009
     title: Install StGit without compiling it
