@@ -145,9 +145,11 @@ clap = { version = "=4.6.6", default-features = false, features = [
   "suggestions",
 ] }
 clap_complete = { version = "=4.6.8", features = ["unstable-dynamic"] }
-ctl-core = { version = "=0.7.0", default-features = false, features = [
+ctl-core = { version = "=0.8.0-rc.2", default-features = false, features = [
   "app",
   "input",
+  "input-document",
+  "input-json",
   "usage",
 ] }
 globset = { version = "=0.4.19", default-features = false }
@@ -160,15 +162,15 @@ tempfile = "=3.27.0"
 usage-lib = { version = "=7.3.0", default-features = false, features = [
   "clap",
 ] }
-# serde-saphyr 2.1.1 with two patches, under its own library name, the
+# serde-saphyr 2.1.1 with six patches, under its own library name, the
 # release ctl-core and yamled take, so forkctl links one serde-saphyr.
-serde-saphyr = { package = "vsh-serde-saphyr", version = "=0.0.3", default-features = false, features = [
+serde-saphyr = { package = "vsh-serde-saphyr", version = "=0.0.6", default-features = false, features = [
   "serialize",
 ] }
-yamled = "=0.0.12"
+yamled = "=0.0.14"
 
 [dev-dependencies]
-ctl-core = { version = "=0.7.0", default-features = false, features = [
+ctl-core = { version = "=0.8.0-rc.2", default-features = false, features = [
   "surface",
 ] }
 insta = { version = "=1.48.0", features = ["json", "filters"] }
