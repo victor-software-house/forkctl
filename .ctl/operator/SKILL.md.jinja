@@ -94,6 +94,25 @@ Rules:
 - Never manually edit generated exports or the generated ledger. Change patch intent through forkctl and let refresh regenerate them.
 - Never stash operator work to satisfy a clean-state requirement.
 
+Every command also takes its arguments from a document, so a long `patch create` need not be typed as flags:
+
+- `--input FILE`, or `--input -` for stdin with `--input-format NAME`, also read from `FORKCTL_INPUT` and `FORKCTL_INPUT_FORMAT`; a `.yaml`, `.yml` or `.json` file is read by its extension.
+- Keys are long option names and positional ids, and a repeatable option takes a list.
+- The command line wins over the environment, the environment over the document, and the document over the default; a key that loses is dropped.
+
+```yaml
+name: tls-fix
+layer: source
+purpose: Keep the downstream TLS fix.
+upstream-status: not-submitted
+drop-when: Upstream takes the change.
+scope:
+  - src/tls/**
+  - tests/tls/**
+```
+
+`mise run fork patch create --input patch.yaml` then runs as the flags would.
+
 Inspect or update declared intent with `patch show`, `patch list`, and `patch edit`; consult command help for exact metadata and scope flags.
 
 A patch that carries another author's code credits them with a declared commit trailer:
@@ -205,7 +224,7 @@ Forkctl does not administer GitHub rulesets or bypass permissions.
 
 ## Use the typed API for automation
 
-Pretty output is for operators. Automation uses JSON output or the local one-request API:
+Pretty output is for operators. Piped output defaults to `tsv`, so pass `--format pretty` or set `FORKCTL_FORMAT=pretty` to read the table in a pipe. Automation uses JSON output or the local one-request API:
 
 ```sh
 mise run fork status --format json
@@ -214,9 +233,9 @@ printf '%s' '{"protocol_version":2,"mode":"execute","request":{"command":"check"
   | mise run fork api call
 ```
 
-JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say, and a parse error under `--format json` is a JSON error even when the bad argument comes first. Keep stdout as exactly one JSON document and treat schema-derived command names, arguments, results, notices, error codes, and details as authoritative. Do not parse pretty tables or error prose.
+JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say, and a parse error under `--format json` is a JSON error on stderr even when the bad argument comes first. Every response, success or error, is the one JSON document on stdout under `--format json` and in `api call`. Keep stdout as exactly one JSON document and treat schema-derived command names, arguments, results, notices, error codes, and details as authoritative. Do not parse pretty tables or error prose.
 
-Use API `mode: "plan"` or CLI `-n` / `--dry-run` / `--preview` for mutation planning; read-only commands reject plan mode. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
+Use API `mode: "plan"` or CLI `-n` / `--dry-run` / `--preview` for mutation planning; read-only commands reject plan mode. `--no-color` forces colorless human output, and `--quiet` suppresses successful output in `pretty` and in the piped default; it conflicts with `--format json`.
 
 Every long option also reads `FORKCTL_<LONG>`, such as `FORKCTL_FORMAT=json` or `FORKCTL_MANIFEST`. A flag on the command line wins over its variable, and an empty variable counts as unset. Help shows each variable beside its flag.
 

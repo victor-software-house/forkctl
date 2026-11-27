@@ -274,39 +274,51 @@ dependencies = [
 
 [[package]]
 name = "ctl-core"
-version = "0.7.0"
+version = "0.8.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8457d318c5b8137c3e8a8676a8e4e1a7d94a9dca667071de8932f82489e27e99"
+checksum = "6e96e840f8a1c843345d4f6aac961ad97126b8f7081094fc06e3ae6761eab922"
 dependencies = [
  "anyhow",
  "clap",
+ "ctl-input",
  "ctl-layout",
  "ctl-term",
  "ctl-text",
  "document-features",
+ "erased-serde",
  "garde",
  "indoc",
  "minijinja",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "ctl-input"
+version = "0.8.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "434d528e568f8a953aea69fdc7c8fc648789e69928a2689f221cb4d499c8d5d0"
+dependencies = [
+ "document-features",
+ "garde",
+ "serde",
  "vsh-serde-saphyr",
- "yamled",
 ]
 
 [[package]]
 name = "ctl-layout"
-version = "0.7.0"
+version = "0.8.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e16e2b5355daf722d92f7ad96b14b3431c01e3c592e8eafc2f06850ba2d31413"
+checksum = "3224624f0e2d085d063e76a630ca418a2a6efd66deefbbd96d7fe4cc66b66c77"
 dependencies = [
  "ctl-text",
 ]
 
 [[package]]
 name = "ctl-term"
-version = "0.7.0"
+version = "0.8.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a24d887c4a19f6fe820fac34898b18dfb279d8f0fa6a935fb25798691dcad50"
+checksum = "68a396dc1dcf43e1f430c7d15e832b0efd769318479ec5c3fa3eb0dca099495f"
 dependencies = [
  "anstyle",
  "ctl-text",
@@ -315,9 +327,9 @@ dependencies = [
 
 [[package]]
 name = "ctl-text"
-version = "0.7.0"
+version = "0.8.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f116e352b4700d0d7a145d52a4f56d729bae4c7e03a08049ab082aaf6871b389"
+checksum = "507cd17b5dfd30850b40e8558905dea0eb05294bd415bc314a14fa4a8f5a5e0a"
 dependencies = [
  "anstyle",
  "unicode-bidi",
@@ -375,6 +387,17 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "erased-serde"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e59b668157f32d3459d4bd634861a06ffa2503a461ca5f0916b9f0252605e66"
+dependencies = [
+ "serde",
+ "serde_core",
+ "typeid",
+]
 
 [[package]]
 name = "errno"
@@ -914,6 +937,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typeid"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -971,9 +1000,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "vsh-serde-saphyr"
-version = "0.0.3"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5515ffe30379241c0d7d0e3a50c6b5eb3409f6f08cd37b992858b6fa7092d9c3"
+checksum = "8f128724dc325d437cb731cd187a6d6e009830cee57f98a3028c16da871cf649"
 dependencies = [
  "annotate-snippets",
  "base64",
@@ -1021,9 +1050,9 @@ dependencies = [
 
 [[package]]
 name = "yamled"
-version = "0.0.12"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "506b199d71e3c44d04290caa90bd6b4cccd6db78a8f186ba322d909aebae38bc"
+checksum = "a72f0d534e9ad418db7408ffa313f787b2ed57fd80cbfb76b7c8e8c8ec7d34d0"
 dependencies = [
  "granit-parser",
  "serde",

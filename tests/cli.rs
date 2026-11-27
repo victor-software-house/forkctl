@@ -41,18 +41,18 @@ fn pretty_output_respects_terminal_width() {
 
     let fixture = Fixture::new();
     let table = forkctl()
-        .env("COLUMNS", "40")
-        .args(["--color", "never", "patch", "list"])
+        .env("COLUMNS", "60")
+        .args(["--color", "never", "--format", "pretty", "patch", "list"])
         .current_dir(&fixture.repo)
         .output()
         .unwrap();
     assert!(table.status.success());
-    assert!(max_line_width(&table.stdout) <= 40);
+    assert!(max_line_width(&table.stdout) <= 60);
 
     let directory = tempfile::tempdir().unwrap();
     let error = forkctl()
         .env("COLUMNS", "40")
-        .args(["--color", "never", "status"])
+        .args(["--color", "never", "--format", "pretty", "status"])
         .current_dir(directory.path())
         .output()
         .unwrap();
@@ -356,20 +356,23 @@ fn direct_completion_includes_local_refs_and_remotes() {
 
 /// Agent shells force colour through `CLICOLOR_FORCE`, `FORCE_COLOR`, and
 /// `COLORTERM`. JSON output, a JSON error, and a parse error under
-/// `--format json` stay plain whatever they say, so `jq` never sees an ESC.
+/// `--format json` stay plain whatever they say, so `jq` never sees an ESC. A
+/// response is the one document on stdout; a parse error is ctl-core's
+/// envelope on stderr.
 #[test]
 fn json_output_holds_no_escape_byte_under_forced_colour() {
     let fixture = Fixture::new();
-    let cases: [(&[&str], bool); 4] = [
-        (&["status", "--format", "json"], true),
+    let cases: [(&[&str], bool, bool); 4] = [
+        (&["status", "--format", "json"], true, true),
         (
             &["patch", "select", "missing-patch", "--format", "json"],
             false,
+            true,
         ),
-        (&["status", "--bogus", "--format", "json"], false),
-        (&["--format=json", "nosuchverb"], false),
+        (&["status", "--bogus", "--format", "json"], false, false),
+        (&["--format=json", "nosuchverb"], false, false),
     ];
-    for (args, succeeds) in cases {
+    for (args, succeeds, on_stdout) in cases {
         let output = support::forkctl_command(&fixture.repo)
             .args(args)
             .env("CLICOLOR_FORCE", "1")
@@ -384,11 +387,129 @@ fn json_output_holds_no_escape_byte_under_forced_colour() {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
-            .unwrap_or_else(|error| panic!("{args:?}: stdout is not JSON: {error}"));
+        let (document, other) = if on_stdout {
+            (&output.stdout, &output.stderr)
+        } else {
+            (&output.stderr, &output.stdout)
+        };
+        assert!(other.is_empty(), "{args:?}: the other stream is not empty");
+        let value: serde_json::Value = serde_json::from_slice(document)
+            .unwrap_or_else(|error| panic!("{args:?}: the document is not JSON: {error}"));
         assert_eq!(output.status.success(), succeeds, "{args:?}: {value}");
         assert_eq!(value["error"].is_object(), !succeeds, "{args:?}: {value}");
     }
+}
+
+/// ctl-core writes a result whose outcome is an error to stderr. A response
+/// under `--format json` is still the one document on stdout.
+#[test]
+fn a_failed_request_under_json_is_one_document_on_stdout() {
+    let fixture = Fixture::new();
+    let output = fixture.forkctl(&["patch", "show", "missing", "--format", "json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stderr, b"");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["status"], "error");
+    assert_eq!(response["command"], "patch.show");
+}
+
+/// `api call` always answers on stdout, including a request it refuses.
+#[test]
+fn an_unsupported_protocol_version_is_one_error_response_on_stdout() {
+    let directory = tempfile::tempdir().unwrap();
+    let invocation = serde_json::json!({
+        "protocol_version": 1,
+        "mode": "execute",
+        "request": {"command":"status","arguments":{}}
+    });
+    let mut child = forkctl()
+        .args(["api", "call"])
+        .current_dir(directory.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(serde_json::to_string(&invocation).unwrap().as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stderr, b"");
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["error"]["code"], "unsupported_protocol");
+}
+
+/// Every command takes its arguments from `--input`. A document sets the
+/// same plan as the flags it stands for.
+#[test]
+fn patch_create_reads_its_arguments_from_an_input_document() {
+    let fixture = Fixture::new();
+    let flags = fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "--dry-run",
+        "--format",
+        "json",
+        "document-patch",
+        "--layer",
+        "source",
+        "--purpose",
+        "Show that a document sets the arguments of a command.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream takes the change.",
+        "--scope",
+        "src/**",
+        "--scope",
+        "tests/**",
+    ]);
+    let document = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata/input/patch.yaml");
+    let from_document = fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "--dry-run",
+        "--format",
+        "json",
+        "--input",
+        document.to_str().unwrap(),
+    ]);
+    assert_eq!(from_document, flags);
+    insta::with_settings!({
+        filters => vec![(r#""[^"]*/consumer/"#, r#""<repository>/"#)],
+        omit_expression => true,
+    }, {
+        insta::assert_snapshot!(from_document);
+    });
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "--format",
+        "json",
+        "--input",
+        document.to_str().unwrap(),
+    ]);
+    let show = fixture.forkctl_ok(&["patch", "show", "document-patch", "--format", "json"]);
+    let show: serde_json::Value = serde_json::from_str(&show).unwrap();
+    let patch = &show["result"]["patch"];
+    assert_eq!(patch["name"], "document-patch", "{show}");
+    assert_eq!(patch["layer"], "source", "{show}");
+    assert_eq!(
+        patch["purpose"], "Show that a document sets the arguments of a command.",
+        "{show}"
+    );
+    assert_eq!(patch["upstream_status"], "not-submitted", "{show}");
+    assert_eq!(patch["drop_when"], "Upstream takes the change.", "{show}");
+    assert_eq!(
+        patch["scope"],
+        serde_json::json!(["src/**", "tests/**"]),
+        "{show}"
+    );
 }
 
 #[test]
@@ -602,7 +723,6 @@ fn old_command_and_aliases_are_rejected() {
     for args in [
         vec!["verify"],
         vec!["new", "x"],
-        vec!["--json", "status"],
         vec!["init", "--required-text", "missing-separator"],
     ] {
         let output = forkctl().args(args).output().unwrap();

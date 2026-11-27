@@ -12,11 +12,14 @@ usage "Usage: fork [OPTIONS] [COMMAND]"
 flag "-m --manifest" help="Manifest path; defaults to `patches/fork.yaml`" global=#true help_heading=Output {
     arg <MANIFEST>
 }
-flag "-f --format" help="Output representation" global=#true help_heading=Output default=pretty {
+flag "-f --format" help="Output representation" global=#true help_heading=Output {
     arg <FORMAT> {
         choices {
             choice pretty help="Human text, optionally coloured"
             choice json help="Machine JSON. Never contains ANSI"
+            choice tsv help="Tab-separated lines, one record per line"
+            choice csv help="Comma-separated values (RFC 4180)"
+            choice markdown help="Markdown tables and text"
         }
     }
 }
@@ -31,8 +34,19 @@ flag "-c --color" help="Pretty-output colour policy. JSON never contains ANSI" g
 }
 flag --no-color help="Force colourless pretty output. Wins over `--color`" global=#true help_heading=Output
 flag "-q --quiet" help="Suppress successful pretty output" global=#true help_heading=Output
+flag --stream help="Write each record when the command produces it" global=#true help_heading=Output
+flag --json help="Shorthand for `--format json`" global=#true help_heading=Output
+flag --input help="Fill this command's arguments from a document; `-` reads stdin" global=#true help_heading=Input {
+    arg <FILE>
+}
+flag --input-format help="The document's format, which stdin needs; a file's extension names it otherwise" global=#true help_heading=Input {
+    arg <NAME> {
+        choices yaml json
+    }
+}
 complete manifest type=path
-cmd init display_order=5 args_override_self=#false help="Bootstrap a new contract or hydrate a fresh clone" unknown_flags=error {
+complete file type=path
+cmd init display_order=7 args_override_self=#false help="Bootstrap a new contract or hydrate a fresh clone" unknown_flags=error {
     flag --upstream-remote help="Fetch-only upstream remote name" help_heading=Repository {
         arg <UPSTREAM_REMOTE>
     }
@@ -86,15 +100,15 @@ cmd init display_order=5 args_override_self=#false help="Bootstrap a new contrac
     complete upstream_remote run="mise run --quiet fork -- __candidates remote" descriptions=#true
     complete downstream_remote run="mise run --quiet fork -- __candidates remote" descriptions=#true
 }
-cmd status display_order=6 args_override_self=#false help="Inspect repository, patch, worktree, check, and operation state" unknown_flags=error
-cmd check display_order=7 args_override_self=#false help="Check the complete repository or the staged index" unknown_flags=error {
+cmd status display_order=8 args_override_self=#false help="Inspect repository, patch, worktree, check, and operation state" unknown_flags=error
+cmd check display_order=9 args_override_self=#false help="Check the complete repository or the staged index" unknown_flags=error {
     flag "-s --staged" help="Check the staged index against an explicit or active patch" help_heading="Check scope"
     flag "-p --patch" help="Patch used by staged check; defaults to the active patch" help_heading="Check scope" {
         arg <PATCH>
     }
     complete patch run="mise run --quiet fork -- __candidates patch" descriptions=#true
 }
-cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Create, inspect, select, edit, refresh, or finish patches" unknown_flags=error {
+cmd patch display_order=10 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Create, inspect, select, edit, refresh, or finish patches" unknown_flags=error {
     cmd list display_order=0 args_override_self=#false help="List the declared series and active patch" unknown_flags=error
     cmd show display_order=1 args_override_self=#false help="Show one patch; defaults to the active patch" unknown_flags=error {
         arg "[NAME]" help="Patch name; defaults to the active patch" required=#false
@@ -218,14 +232,14 @@ cmd patch display_order=8 subcommand_required=#true arg_required_else_help=#true
         arg <NAME> help="Disabled patch name"
     }
 }
-cmd rebase display_order=9 args_override_self=#false help="Replay the declared stack onto an exact upstream target" unknown_flags=error {
+cmd rebase display_order=11 args_override_self=#false help="Replay the declared stack onto an exact upstream target" unknown_flags=error {
     flag "-o --onto" help="Full upstream branch/tag ref or commit SHA" required=#true help_heading=Target {
         arg <ONTO>
     }
     flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
     complete onto run="mise run --quiet fork -- __candidates ref" descriptions=#true
 }
-cmd contract display_order=10 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Edit declarative repository contracts" unknown_flags=error {
+cmd contract display_order=12 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Edit declarative repository contracts" unknown_flags=error {
     cmd edit display_order=0 args_override_self=#false help="Append contracts or clear and replace the complete contract set" unknown_flags=error {
         flag --clear help="Clear all existing contracts before adding the supplied values" help_heading=Contracts
         flag "-a --allow-base" help="Add an allowed base-drift ownership glob; repeatable" var=#true help_heading=Contracts {
@@ -247,10 +261,10 @@ cmd contract display_order=10 subcommand_required=#true arg_required_else_help=#
         group contract_change "--clear" "--allow-base" "--required-text" "--publish-mode" required=#true multiple=#true
     }
 }
-cmd upgrade display_order=11 args_override_self=#false help="Rewrite a manifest from forkctl 0.0.48 or earlier as this release's schema, and refresh the bookkeeping patch" unknown_flags=error {
+cmd upgrade display_order=13 args_override_self=#false help="Rewrite a manifest from forkctl 0.0.48 or earlier as this release's schema, and refresh the bookkeeping patch" unknown_flags=error {
     flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
 }
-cmd publish display_order=12 args_override_self=#false help="Publish the managed branch using the repository default, or an explicit mode" unknown_flags=error {
+cmd publish display_order=14 args_override_self=#false help="Publish the managed branch using the repository default, or an explicit mode" unknown_flags=error {
     flag --rewrite help="Exact-lease rewrite. Overrides the repository default" help_heading=Mode
     flag --append help="Keep the previous tip as an ancestor and fast-forward" help_heading=Mode
     flag --propose help="Push a leased net-tree proposal branch and open or update its draft PR with `gh`" help_heading=Mode
@@ -269,7 +283,7 @@ cmd publish display_order=12 args_override_self=#false help="Publish the managed
     }
     flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
 }
-cmd operation display_order=13 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Inspect, continue, or abort the current operation" unknown_flags=error {
+cmd operation display_order=15 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Inspect, continue, or abort the current operation" unknown_flags=error {
     cmd status display_order=0 args_override_self=#false help="Show the current operation and exact next actions" unknown_flags=error
     cmd continue display_order=1 args_override_self=#false help="Resume after operator conflict resolution" unknown_flags=error {
         flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
@@ -279,13 +293,13 @@ cmd operation display_order=13 subcommand_required=#true arg_required_else_help=
         flag "-n --dry-run --preview" help="Validate and print the plan. Write nothing" help_heading=Execution
     }
 }
-cmd instructions display_order=14 args_override_self=#false help="Print the generated operator and repository contract" unknown_flags=error
-cmd completion display_order=15 args_override_self=#false help="Generate shell completion registration" unknown_flags=error {
+cmd instructions display_order=16 args_override_self=#false help="Print the generated operator and repository contract" unknown_flags=error
+cmd completion display_order=17 args_override_self=#false help="Generate shell completion registration" unknown_flags=error {
     arg <SHELL> help="Shell whose registration script should be emitted" {
         choices bash elvish fish nu powershell zsh
     }
 }
-cmd api display_order=16 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Use the versioned local JSON API" unknown_flags=error {
+cmd api display_order=18 subcommand_required=#true arg_required_else_help=#true args_override_self=#false help="Use the versioned local JSON API" unknown_flags=error {
     cmd schema display_order=0 args_override_self=#false help="Emit JSON Schema 2020-12" unknown_flags=error {
         flag "-d --document" help="Schema document to emit" default=bundle {
             arg <DOCUMENT> {
@@ -295,7 +309,7 @@ cmd api display_order=16 subcommand_required=#true arg_required_else_help=#true 
     }
     cmd call display_order=1 args_override_self=#false help="Read one invocation from stdin and emit one response" unknown_flags=error
 }
-cmd __candidates hide=#true display_order=17 args_override_self=#false unknown_flags=error {
+cmd __candidates hide=#true display_order=19 args_override_self=#false unknown_flags=error {
     arg <TYPE> {
         choices patch ref remote
     }

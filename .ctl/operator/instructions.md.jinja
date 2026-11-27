@@ -112,13 +112,27 @@ Checks never stage or rewrite. StGit refresh invokes the consumer's pre-commit h
 ## Protocol
 
 - ctl-core owns help, pretty/JSON/colorless rendering, streams, terminal width, styling, and tables; the versioned forkctl response remains the one data model.
-- `--format pretty|json` selects human or complete versioned output. `--no-color` forces colorless human output, and `--quiet` suppresses successful human output only.
+- `--format NAME` selects the output and `--json` is `--format json`. With neither, a terminal gets `pretty` and a pipe gets `tsv`, so pass `--format pretty` or set `FORKCTL_FORMAT=pretty` to read the table in a pipe. `--no-color` forces colorless human output, and `--quiet` suppresses successful output in `pretty` and in the piped default; it conflicts with `--format json`.
 - Every long option reads `FORKCTL_<LONG>`, such as `FORKCTL_FORMAT=json` or `FORKCTL_MANIFEST`. A flag on the command line wins over its variable, and an empty variable counts as unset.
+- Every command takes its arguments from a document: `--input FILE`, or `--input -` for stdin with `--input-format NAME`, also read from `FORKCTL_INPUT` and `FORKCTL_INPUT_FORMAT`. A `.yaml`, `.yml` or `.json` file is read by its extension. Keys are long option names and positional ids, a repeatable option takes a list, and each value passes the argument's own parser. The command line wins over the environment, the environment over the document, and the document over the default; a key that loses is dropped. This `patch.yaml` holds the arguments of `mise run fork patch create --input patch.yaml`:
+
+```yaml
+name: tls-fix
+layer: source
+purpose: Keep the downstream TLS fix.
+upstream-status: not-submitted
+drop-when: Upstream takes the change.
+scope:
+  - src/tls/**
+  - tests/tls/**
+```
+
 - `api call` reads one typed invocation and emits one JSON response.
+- Every response, success or error, is the one JSON document on stdout under `--format json` and in `api call`.
 - `api schema -d bundle|manifest|invocation|response|active-state|operation` emits JSON Schema 2020-12.
 - `--usage-spec=fork` emits the mounted mise grammar from the Clap tree.
 - `completion SHELL` supports bash, elvish, fish, Nushell, PowerShell, and zsh.
-- JSON stdout never contains subprocess or human output, and JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say. A parse error under `--format json` is a JSON error even when the bad argument comes first.
+- JSON stdout never contains subprocess or human output, and JSON is never coloured, whatever `CLICOLOR_FORCE` or `FORCE_COLOR` say. A parse error under `--format json` is a JSON error on stderr, even when the bad argument comes first.
 
 ## Safety
 

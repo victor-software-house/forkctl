@@ -1,0 +1,24 @@
+---
+source: tests/cli.rs
+---
+{
+  "status": "success",
+  "protocol_version": 2,
+  "command": "patch.create",
+  "mode": "plan",
+  "result": {
+    "type": "plan",
+    "command": "patch.create",
+    "reads": [
+      "<repository>/patches/fork.yaml"
+    ],
+    "writes": [
+      "<repository>/.git/forkctl/active.json"
+    ],
+    "hooks": [],
+    "ref_updates": [],
+    "paths": [],
+    "requires_confirmation": false
+  },
+  "notices": []
+}

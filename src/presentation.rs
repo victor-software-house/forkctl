@@ -14,16 +14,24 @@ pub(crate) enum Report {
     Response {
         response: Box<ApiResponse>,
         update_notice: Option<String>,
+        /// The run writes JSON, so an error response is still the one document
+        /// on stdout. ctl-core writes an error outcome to stderr instead.
+        on_stdout: bool,
     },
     Json(serde_json::Value),
     Text(String),
 }
 
 impl Report {
-    pub(crate) fn response(response: ApiResponse, update_notice: Option<String>) -> Self {
+    pub(crate) fn response(
+        response: ApiResponse,
+        update_notice: Option<String>,
+        on_stdout: bool,
+    ) -> Self {
         Self::Response {
             response: Box::new(response),
             update_notice,
+            on_stdout,
         }
     }
 
@@ -55,6 +63,7 @@ impl Present for Report {
             Self::Response {
                 response,
                 update_notice,
+                ..
             } => present_response(response, update_notice.as_deref()),
             Self::Json(value) => Document::new().verbatim(value.to_string()),
             Self::Text(value) => Document::new().verbatim(value.clone()),
@@ -63,11 +72,11 @@ impl Present for Report {
 
     fn outcome(&self) -> Outcome {
         match self {
-            Self::Response { response, .. }
-                if matches!(response.as_ref(), ApiResponse::Error { .. }) =>
-            {
-                Outcome::Error
-            }
+            Self::Response {
+                response,
+                on_stdout: false,
+                ..
+            } if matches!(response.as_ref(), ApiResponse::Error { .. }) => Outcome::Error,
             Self::Response { .. } | Self::Json(_) | Self::Text(_) => Outcome::Success,
         }
     }
@@ -88,8 +97,13 @@ impl Present for Report {
             {
                 2
             }
+            Self::Response { response, .. }
+                if matches!(response.as_ref(), ApiResponse::Error { .. }) =>
+            {
+                Outcome::Error.default_exit_code()
+            }
             Self::Response { .. } | Self::Json(_) | Self::Text(_) => {
-                self.outcome().default_exit_code()
+                Outcome::Success.default_exit_code()
             }
         }
     }

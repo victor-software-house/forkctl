@@ -39,7 +39,7 @@ use anyhow::{Context, Result};
 use app::App;
 use clap::CommandFactory;
 use cli::{Cli, CliAction, CompletionShell};
-use ctl_core::{App as Chassis, ColorMode, OutputFormat, View};
+use ctl_core::{App as Chassis, ColorMode, FormatName, View, format};
 use error::{AppError, AppResult};
 use presentation::Report;
 use protocol::{
@@ -81,9 +81,9 @@ fn complete_from_environment(args: &[OsString]) -> Option<ExitCode> {
 
 fn select_view(cli: &Cli) -> View {
     match &cli.command {
-        Some(cli::Command::Api { .. }) => View::new(OutputFormat::Json, ColorMode::Never),
+        Some(cli::Command::Api { .. }) => View::new(&format::JSON, ColorMode::Never),
         Some(cli::Command::Completion { .. } | cli::Command::Candidates { .. }) => {
-            View::new(OutputFormat::Pretty, ColorMode::Never)
+            View::new(&format::PRETTY, ColorMode::Never)
         }
         _ => cli.output.view(),
     }
@@ -91,18 +91,20 @@ fn select_view(cli: &Cli) -> View {
 
 fn execute_cli(cli: Cli) -> Result<Report> {
     let manifest = cli.manifest.as_ref().map(|path| path.display().to_string());
-    let format = cli.output.format;
+    let written = select_view(&cli).format();
+    let pretty = written == FormatName::PRETTY;
+    let json = written == FormatName::JSON;
     let quiet = cli.output.quiet;
     let action = cli.into_action();
     Ok(match action {
         Ok(CliAction::ApiSchema(document)) => Report::json(protocol::schema_document(document)?),
-        Ok(CliAction::ApiCall) => Report::response(run_api_call(manifest.as_deref()), None),
+        Ok(CliAction::ApiCall) => Report::response(run_api_call(manifest.as_deref()), None, json),
         Ok(CliAction::Completion(shell)) => Report::text(completion_text(shell)?),
         Ok(CliAction::Candidates(candidate_type)) => {
             Report::text(completion::candidate_lines(candidate_type).join("\n"))
         }
         Ok(CliAction::Request { request, mode }) => {
-            if format == OutputFormat::Pretty {
+            if pretty {
                 process::set_stream_operator_output(true);
             }
             let command = request.command();
@@ -111,17 +113,14 @@ fn execute_cli(cli: Cli) -> Result<Report> {
                 |outcome| ApiResponse::success(command, mode, outcome),
             );
             let update_notice = matches!(response, ApiResponse::Success { .. })
-                .then(|| {
-                    (format == OutputFormat::Pretty && !quiet)
-                        .then(update::available_notice)
-                        .flatten()
-                })
+                .then(|| (pretty && !quiet).then(update::available_notice).flatten())
                 .flatten();
-            Report::response(response, update_notice)
+            Report::response(response, update_notice, json)
         }
         Err(error) => Report::response(
             ApiResponse::error("cli", ExecutionMode::Execute, request_error(&error)),
             None,
+            json,
         ),
     })
 }
