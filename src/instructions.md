@@ -9,8 +9,9 @@ mise run fork status
 mise run fork operation status
 ```
 
-Never `mise run fork --`. The `--` in `#USAGE mount` is mise's
-completion bootstrap.
+Never `mise run fork --`.
+
+The `--` in `#USAGE mount` is mise's completion bootstrap.
 
 ## Commands
 

@@ -1802,7 +1802,7 @@ fn pretty_publish_streams_pre_push_output_and_json_does_not() {
         fs::set_permissions(&hook, permissions).unwrap();
     }
 
-    let pretty = fixture.forkctl(&["publish"]);
+    let pretty = fixture.forkctl(&["--format", "pretty", "publish"]);
     assert!(
         pretty.status.success(),
         "pretty publish failed:\nstdout: {}\nstderr: {}",

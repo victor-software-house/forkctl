@@ -3,7 +3,7 @@ use std::result;
 
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
-use ctl_core::{DryRunArgs, EnvPrefix, OutputArgs};
+use ctl_core::{DryRunArgs, EnvPrefix, FormatName, OutputArgs};
 
 use crate::completion::CandidateType;
 use crate::manifest::{Check, CheckStage, PatchLayer, PublishMode, RequiredText, Trailer};
@@ -528,7 +528,7 @@ impl Cli {
             Command::Candidates { candidate_type } => CliAction::Candidates(candidate_type),
         };
         ensure!(
-            !(self.output.quiet && self.output.format.is_json()),
+            !(self.output.quiet && self.output.view().format() == FormatName::JSON),
             "--quiet conflicts with --format json"
         );
         Ok(action)
