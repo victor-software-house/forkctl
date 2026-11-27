@@ -485,6 +485,31 @@ fn patch_create_reads_its_arguments_from_an_input_document() {
     }, {
         insta::assert_snapshot!(from_document);
     });
+
+    fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "--format",
+        "json",
+        "--input",
+        document.to_str().unwrap(),
+    ]);
+    let show = fixture.forkctl_ok(&["patch", "show", "document-patch", "--format", "json"]);
+    let show: serde_json::Value = serde_json::from_str(&show).unwrap();
+    let patch = &show["result"]["patch"];
+    assert_eq!(patch["name"], "document-patch", "{show}");
+    assert_eq!(patch["layer"], "source", "{show}");
+    assert_eq!(
+        patch["purpose"], "Show that a document sets the arguments of a command.",
+        "{show}"
+    );
+    assert_eq!(patch["upstream_status"], "not-submitted", "{show}");
+    assert_eq!(patch["drop_when"], "Upstream takes the change.", "{show}");
+    assert_eq!(
+        patch["scope"],
+        serde_json::json!(["src/**", "tests/**"]),
+        "{show}"
+    );
 }
 
 #[test]
