@@ -443,6 +443,50 @@ fn an_unsupported_protocol_version_is_one_error_response_on_stdout() {
     assert_eq!(response["error"]["code"], "unsupported_protocol");
 }
 
+/// Every command takes its arguments from `--input`. A document sets the
+/// same plan as the flags it stands for.
+#[test]
+fn patch_create_reads_its_arguments_from_an_input_document() {
+    let fixture = Fixture::new();
+    let flags = fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "--dry-run",
+        "--format",
+        "json",
+        "document-patch",
+        "--layer",
+        "source",
+        "--purpose",
+        "Show that a document sets the arguments of a command.",
+        "--upstream-status",
+        "not-submitted",
+        "--drop-when",
+        "Upstream takes the change.",
+        "--scope",
+        "src/**",
+        "--scope",
+        "tests/**",
+    ]);
+    let document = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testdata/input/patch.yaml");
+    let from_document = fixture.forkctl_ok(&[
+        "patch",
+        "create",
+        "--dry-run",
+        "--format",
+        "json",
+        "--input",
+        document.to_str().unwrap(),
+    ]);
+    assert_eq!(from_document, flags);
+    insta::with_settings!({
+        filters => vec![(r#""[^"]*/consumer/"#, r#""<repository>/"#)],
+        omit_expression => true,
+    }, {
+        insta::assert_snapshot!(from_document);
+    });
+}
+
 #[test]
 fn api_domain_errors_are_typed_at_the_boundary() {
     let fixture = Fixture::new();

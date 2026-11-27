@@ -1,0 +1,8 @@
+name: document-patch
+layer: source
+purpose: Show that a document sets the arguments of a command.
+upstream-status: not-submitted
+drop-when: Upstream takes the change.
+scope:
+  - src/**
+  - tests/**
